@@ -1,15 +1,2 @@
 [
-  {
-    "id": "off-7791866000381",
-    "name": "Ketchup Natura",
-    "barcode": "7791866000381",
-    "imageUrl": "https://images.openfoodfacts.org/images/products/779/186/600/0381/front_es.18.200.jpg",
-    "nutritionPer100g": {
-      "calories": 116.7,
-      "protein": 0,
-      "saturatedFat": 0,
-      "fiber": 0
-    },
-    "gramsPerUnit": 12
-  }
 ]
