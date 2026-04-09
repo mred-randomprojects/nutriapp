@@ -29,19 +29,19 @@ export function AddEntryDialog({
   profileId,
   date,
 }: AddEntryDialogProps) {
-  const { data, addLogEntry } = appData;
+  const { allFoods, addLogEntry } = appData;
   const [selectedFoodId, setSelectedFoodId] = useState<FoodId | null>(null);
   const [inputMode, setInputMode] = useState<InputMode>("grams");
   const [amount, setAmount] = useState("");
   const [search, setSearch] = useState("");
 
-  const filteredFoods = data.foods.filter((f) =>
+  const filteredFoods = allFoods.filter((f) =>
     f.name.toLowerCase().includes(search.toLowerCase()),
   );
 
   const selectedFood =
     selectedFoodId != null
-      ? data.foods.find((f) => f.id === selectedFoodId)
+      ? allFoods.find((f) => f.id === selectedFoodId)
       : undefined;
 
   function parseNum(s: string): number {
@@ -76,7 +76,7 @@ export function AddEntryDialog({
   }
 
   function selectFood(foodId: FoodId) {
-    const food = data.foods.find((f) => f.id === foodId);
+    const food = allFoods.find((f) => f.id === foodId);
     setSelectedFoodId(foodId);
     setInputMode(food?.gramsPerUnit != null ? "units" : "grams");
     setAmount("");

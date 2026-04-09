@@ -3,7 +3,9 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
+import { Badge } from "./ui/badge";
 import type { FoodId } from "../types";
+import { isBuiltinFood } from "../data/builtinFoods";
 
 interface FoodListProps {
   appData: AppDataHandle;
@@ -11,7 +13,7 @@ interface FoodListProps {
 
 export function FoodList({ appData }: FoodListProps) {
   const navigate = useNavigate();
-  const { data, deleteFood } = appData;
+  const { allFoods, deleteFood } = appData;
 
   return (
     <div className="p-4">
@@ -23,7 +25,7 @@ export function FoodList({ appData }: FoodListProps) {
         </Button>
       </div>
 
-      {data.foods.length === 0 && (
+      {allFoods.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
             <p>No foods yet. Add your first food to get started.</p>
@@ -32,56 +34,68 @@ export function FoodList({ appData }: FoodListProps) {
       )}
 
       <div className="space-y-2">
-        {data.foods.map((food) => (
-          <Card key={food.id}>
-            <CardContent className="flex items-center gap-3 p-3">
-              {food.imageUrl != null ? (
-                <img
-                  src={food.imageUrl}
-                  alt={food.name}
-                  className="h-12 w-12 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-lg">
-                  🍽️
+        {allFoods.map((food) => {
+          const builtin = isBuiltinFood(food.id);
+          return (
+            <Card key={food.id}>
+              <CardContent className="flex items-center gap-3 p-3">
+                {food.imageUrl != null ? (
+                  <img
+                    src={food.imageUrl}
+                    alt={food.name}
+                    className="h-12 w-12 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary text-lg">
+                    🍽️
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate font-medium">{food.name}</p>
+                    {builtin && (
+                      <Badge variant="secondary" className="shrink-0 text-[10px]">
+                        built-in
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {food.nutritionPer100g.calories} kcal ·{" "}
+                    {food.nutritionPer100g.protein}g protein · per 100g
+                    {food.gramsPerUnit != null &&
+                      ` · ${food.gramsPerUnit}g/unit`}
+                  </p>
                 </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{food.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {food.nutritionPer100g.calories} kcal ·{" "}
-                  {food.nutritionPer100g.protein}g protein · per 100g
-                  {food.gramsPerUnit != null &&
-                    ` · ${food.gramsPerUnit}g/unit`}
-                </p>
-              </div>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => navigate(`/foods/${food.id}/edit`)}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `Delete "${food.name}"? This will also remove it from all logs.`,
-                      )
-                    ) {
-                      deleteFood(food.id as FoodId);
-                    }
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                {!builtin && (
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => navigate(`/foods/${food.id}/edit`)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete "${food.name}"? This will also remove it from all logs.`,
+                          )
+                        ) {
+                          deleteFood(food.id as FoodId);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

@@ -35,19 +35,32 @@ export interface Food {
 
 /**
  * A single log entry — always stores the total grams consumed.
+ * The optional `type` field is used as a discriminant for DayLogItem union.
  */
 export interface LogEntry {
+  type?: undefined;
   id: LogEntryId;
   foodId: FoodId;
   grams: number;
 }
 
 /**
- * All log entries for a specific date within a profile.
+ * A visual separator/header in the daily log (e.g. "Breakfast", "Lunch").
+ */
+export interface SectionSeparator {
+  type: "separator";
+  id: LogEntryId;
+  label: string;
+}
+
+export type DayLogItem = LogEntry | SectionSeparator;
+
+/**
+ * All log items for a specific date within a profile.
  */
 export interface DayLog {
   date: string;
-  entries: LogEntry[];
+  entries: DayLogItem[];
 }
 
 /**

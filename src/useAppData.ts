@@ -8,13 +8,17 @@ import type {
   DayLog,
   LogEntry,
   LogEntryId,
+  SectionSeparator,
 } from "./types";
 import { generateId } from "./types";
 import { loadAppData, saveAppData, StorageQuotaError } from "./storage";
+import { builtinFoods } from "./data/builtinFoods";
 
 /**
  * Central hook that owns all app state and persists to localStorage.
  * Every mutation returns a new AppData (immutable updates).
+ * Built-in foods (from the bundle) are merged with user-defined foods
+ * (from localStorage). Only user foods are persisted/editable.
  */
 export function useAppData() {
   const [data, setData] = useState<AppData>(loadAppData);
@@ -34,9 +38,14 @@ export function useAppData() {
     }
   }, []);
 
-  const foodsMap = useMemo(
-    () => new Map(data.foods.map((f) => [f.id, f])),
+  const allFoods = useMemo(
+    () => [...builtinFoods, ...data.foods],
     [data.foods],
+  );
+
+  const foodsMap = useMemo(
+    () => new Map(allFoods.map((f) => [f.id, f])),
+    [allFoods],
   );
 
   const activeProfile = useMemo(
@@ -83,7 +92,9 @@ export function useAppData() {
           ...p,
           dayLogs: p.dayLogs.map((dl) => ({
             ...dl,
-            entries: dl.entries.filter((e) => e.foodId !== foodId),
+            entries: dl.entries.filter(
+              (e) => e.type === "separator" || e.foodId !== foodId,
+            ),
           })),
         })),
       });
@@ -150,17 +161,8 @@ export function useAppData() {
 
   // --- Day log entries ---
 
-  const addLogEntry = useCallback(
-    (
-      profileId: ProfileId,
-      date: string,
-      entry: Omit<LogEntry, "id">,
-    ) => {
-      const newEntry: LogEntry = {
-        ...entry,
-        id: generateId() as LogEntryId,
-      };
-
+  const appendToDayLog = useCallback(
+    (profileId: ProfileId, date: string, item: LogEntry | SectionSeparator) => {
       persist({
         ...data,
         profiles: data.profiles.map((p) => {
@@ -171,17 +173,44 @@ export function useAppData() {
               ...p,
               dayLogs: p.dayLogs.map((dl) =>
                 dl.date === date
-                  ? { ...dl, entries: [...dl.entries, newEntry] }
+                  ? { ...dl, entries: [...dl.entries, item] }
                   : dl,
               ),
             };
           }
-          const newDayLog: DayLog = { date, entries: [newEntry] };
+          const newDayLog: DayLog = { date, entries: [item] };
           return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
         }),
       });
     },
     [data, persist],
+  );
+
+  const addLogEntry = useCallback(
+    (
+      profileId: ProfileId,
+      date: string,
+      entry: Omit<LogEntry, "id">,
+    ) => {
+      const newEntry: LogEntry = {
+        ...entry,
+        id: generateId() as LogEntryId,
+      };
+      appendToDayLog(profileId, date, newEntry);
+    },
+    [appendToDayLog],
+  );
+
+  const addSeparator = useCallback(
+    (profileId: ProfileId, date: string, label: string) => {
+      const separator: SectionSeparator = {
+        type: "separator",
+        id: generateId() as LogEntryId,
+        label,
+      };
+      appendToDayLog(profileId, date, separator);
+    },
+    [appendToDayLog],
   );
 
   const removeLogEntry = useCallback(
@@ -239,6 +268,7 @@ export function useAppData() {
 
   return {
     data,
+    allFoods,
     storageError,
     foodsMap,
     activeProfile,
@@ -250,6 +280,7 @@ export function useAppData() {
     deleteProfile,
     renameProfile,
     addLogEntry,
+    addSeparator,
     removeLogEntry,
     updateLogEntry,
     setStorageError,

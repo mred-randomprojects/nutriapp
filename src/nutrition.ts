@@ -1,4 +1,4 @@
-import type { Food, LogEntry, NutritionPer100g } from "./types";
+import type { DayLogItem, Food, LogEntry, NutritionPer100g } from "./types";
 
 /**
  * Calculates the total nutrition for a single log entry.
@@ -18,10 +18,10 @@ export function nutritionForEntry(
 }
 
 /**
- * Sums up nutrition values from multiple entries.
+ * Sums up nutrition values from all food entries, skipping separators.
  */
 export function sumNutrition(
-  entries: LogEntry[],
+  items: ReadonlyArray<DayLogItem>,
   foodsMap: Map<string, Food>,
 ): NutritionPer100g {
   const totals: NutritionPer100g = {
@@ -31,10 +31,11 @@ export function sumNutrition(
     fiber: 0,
   };
 
-  for (const entry of entries) {
-    const food = foodsMap.get(entry.foodId);
+  for (const item of items) {
+    if (item.type === "separator") continue;
+    const food = foodsMap.get(item.foodId);
     if (food == null) continue;
-    const entryNutrition = nutritionForEntry(entry, food);
+    const entryNutrition = nutritionForEntry(item, food);
     totals.calories += entryNutrition.calories;
     totals.protein += entryNutrition.protein;
     totals.saturatedFat += entryNutrition.saturatedFat;

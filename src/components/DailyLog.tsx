@@ -1,6 +1,12 @@
 import { useState, useMemo } from "react";
 import { format, addDays, subDays } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { AppDataHandle } from "../appDataType";
 import type { LogEntryId, ProfileId } from "../types";
@@ -8,7 +14,10 @@ import { nutritionForEntry, sumNutrition } from "../nutrition";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
 import { AddEntryDialog } from "./AddEntryDialog";
+
+const SEPARATOR_PRESETS = ["Breakfast", "Lunch", "Merienda", "Dinner", "Snack"];
 
 interface DailyLogProps {
   appData: AppDataHandle;
@@ -24,9 +33,12 @@ function isToday(date: Date): boolean {
 
 export function DailyLog({ appData }: DailyLogProps) {
   const navigate = useNavigate();
-  const { activeProfile, foodsMap, data, removeLogEntry } = appData;
+  const { activeProfile, foodsMap, allFoods, addSeparator, removeLogEntry } =
+    appData;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
+  const [customLabel, setCustomLabel] = useState("");
 
   const dateStr = formatDate(selectedDate);
 
@@ -59,7 +71,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     );
   }
 
-  if (data.foods.length === 0) {
+  if (allFoods.length === 0) {
     return (
       <div className="p-4">
         <Card>
@@ -144,10 +156,70 @@ export function DailyLog({ appData }: DailyLogProps) {
       {/* Entries list */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-semibold">Entries</h2>
-        <Button size="sm" onClick={() => setAddDialogOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Add Entry
-        </Button>
+        <div className="flex gap-2">
+          <div className="relative">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSectionMenuOpen(!sectionMenuOpen)}
+            >
+              Section
+              <ChevronDown className="ml-1 h-3.5 w-3.5" />
+            </Button>
+            {sectionMenuOpen && (
+              <div className="absolute right-0 z-10 mt-1 w-52 rounded-lg border bg-popover p-2 shadow-lg">
+                {SEPARATOR_PRESETS.map((label) => (
+                  <button
+                    key={label}
+                    className="w-full rounded px-3 py-1.5 text-left text-sm hover:bg-accent"
+                    onClick={() => {
+                      addSeparator(
+                        activeProfile.id as ProfileId,
+                        dateStr,
+                        label,
+                      );
+                      setSectionMenuOpen(false);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <div className="mt-1 border-t pt-1">
+                  <form
+                    className="flex gap-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const trimmed = customLabel.trim();
+                      if (trimmed.length === 0) return;
+                      addSeparator(
+                        activeProfile.id as ProfileId,
+                        dateStr,
+                        trimmed,
+                      );
+                      setCustomLabel("");
+                      setSectionMenuOpen(false);
+                    }}
+                  >
+                    <Input
+                      value={customLabel}
+                      onChange={(e) => setCustomLabel(e.target.value)}
+                      placeholder="Custom…"
+                      className="h-7 text-sm"
+                      autoFocus
+                    />
+                    <Button type="submit" size="sm" className="h-7 px-2">
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+          <Button size="sm" onClick={() => setAddDialogOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add Entry
+          </Button>
+        </div>
       </div>
 
       {(dayLog == null || dayLog.entries.length === 0) && (
@@ -159,18 +231,47 @@ export function DailyLog({ appData }: DailyLogProps) {
       )}
 
       <div className="space-y-2">
-        {dayLog?.entries.map((entry) => {
-          const food = foodsMap.get(entry.foodId);
+        {dayLog?.entries.map((item) => {
+          if (item.type === "separator") {
+            return (
+              <div
+                key={item.id}
+                className="flex items-center gap-2 pt-2 first:pt-0"
+              >
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {item.label}
+                </span>
+                <div className="h-px flex-1 bg-border" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() =>
+                    removeLogEntry(
+                      activeProfile.id as ProfileId,
+                      dateStr,
+                      item.id as LogEntryId,
+                    )
+                  }
+                >
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
+            );
+          }
+
+          const food = foodsMap.get(item.foodId);
           if (food == null) return null;
-          const entryNutrition = nutritionForEntry(entry, food);
+          const entryNutrition = nutritionForEntry(item, food);
 
           const subtitle =
-            food.gramsPerUnit != null && entry.grams % food.gramsPerUnit === 0
-              ? `${entry.grams / food.gramsPerUnit} unit${entry.grams / food.gramsPerUnit !== 1 ? "s" : ""} (${entry.grams}g)`
-              : `${entry.grams}g`;
+            food.gramsPerUnit != null && item.grams % food.gramsPerUnit === 0
+              ? `${item.grams / food.gramsPerUnit} unit${item.grams / food.gramsPerUnit !== 1 ? "s" : ""} (${item.grams}g)`
+              : `${item.grams}g`;
 
           return (
-            <Card key={entry.id}>
+            <Card key={item.id}>
               <CardContent className="flex items-center gap-3 p-3">
                 {food.imageUrl != null ? (
                   <img
@@ -203,7 +304,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                     removeLogEntry(
                       activeProfile.id as ProfileId,
                       dateStr,
-                      entry.id as LogEntryId,
+                      item.id as LogEntryId,
                     )
                   }
                 >
