@@ -162,8 +162,12 @@ export function DailyLog({ appData }: DailyLogProps) {
         {dayLog?.entries.map((entry) => {
           const food = foodsMap.get(entry.foodId);
           if (food == null) return null;
-          const serving = food.servings[entry.servingIndex];
           const entryNutrition = nutritionForEntry(entry, food);
+
+          const subtitle =
+            food.gramsPerUnit != null && entry.grams % food.gramsPerUnit === 0
+              ? `${entry.grams / food.gramsPerUnit} unit${entry.grams / food.gramsPerUnit !== 1 ? "s" : ""} (${entry.grams}g)`
+              : `${entry.grams}g`;
 
           return (
             <Card key={entry.id}>
@@ -181,9 +185,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{food.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {entry.quantity} × {serving?.label ?? "?"}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{subtitle}</p>
                 </div>
                 <div className="text-right text-xs">
                   <p className="font-medium text-primary">

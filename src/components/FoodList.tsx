@@ -51,6 +51,8 @@ export function FoodList({ appData }: FoodListProps) {
                 <p className="text-xs text-muted-foreground">
                   {food.nutritionPer100g.calories} kcal ·{" "}
                   {food.nutritionPer100g.protein}g protein · per 100g
+                  {food.gramsPerUnit != null &&
+                    ` · ${food.gramsPerUnit}g/unit`}
                 </p>
               </div>
               <div className="flex gap-1">

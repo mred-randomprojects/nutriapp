@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus, X } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
-import type { NutritionPer100g, Serving } from "../types";
+import type { NutritionPer100g } from "../types";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -36,12 +36,9 @@ export function FoodForm({ appData }: FoodFormProps) {
     existing != null ? String(existing.nutritionPer100g.fiber) : "",
   );
 
-  const [servings, setServings] = useState<Serving[]>(
-    existing?.servings ?? [{ label: "100g", grams: 100 }],
+  const [gramsPerUnit, setGramsPerUnit] = useState(
+    existing?.gramsPerUnit != null ? String(existing.gramsPerUnit) : "",
   );
-
-  const [newServingLabel, setNewServingLabel] = useState("");
-  const [newServingGrams, setNewServingGrams] = useState("");
 
   function parseNum(s: string): number {
     const n = parseFloat(s);
@@ -66,42 +63,24 @@ export function FoodForm({ appData }: FoodFormProps) {
     if (name.trim().length === 0) return;
 
     const nutritionPer100g = normalizeToHundredGrams();
-    const validServings =
-      servings.length > 0
-        ? servings
-        : [{ label: "100g", grams: 100 }];
+    const parsedGramsPerUnit = parseNum(gramsPerUnit);
 
     if (existing != null) {
       appData.updateFood(existing.id, {
         name: name.trim(),
         imageUrl: imageUrl.trim().length > 0 ? imageUrl.trim() : null,
         nutritionPer100g,
-        servings: validServings,
+        gramsPerUnit: parsedGramsPerUnit > 0 ? parsedGramsPerUnit : null,
       });
     } else {
       appData.addFood({
         name: name.trim(),
         imageUrl: imageUrl.trim().length > 0 ? imageUrl.trim() : null,
         nutritionPer100g,
-        servings: validServings,
+        gramsPerUnit: parsedGramsPerUnit > 0 ? parsedGramsPerUnit : null,
       });
     }
     navigate("/foods");
-  }
-
-  function addServing() {
-    const grams = parseNum(newServingGrams);
-    if (newServingLabel.trim().length === 0 || grams <= 0) return;
-    setServings([
-      ...servings,
-      { label: newServingLabel.trim(), grams },
-    ]);
-    setNewServingLabel("");
-    setNewServingGrams("");
-  }
-
-  function removeServing(index: number) {
-    setServings(servings.filter((_, i) => i !== index));
   }
 
   return (
@@ -173,7 +152,8 @@ export function FoodForm({ appData }: FoodFormProps) {
                 min={1}
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Enter nutritional values for this many grams. Will be normalized to per 100g.
+                Enter nutritional values for this many grams. Will be normalized
+                to per 100g internally.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -227,46 +207,24 @@ export function FoodForm({ appData }: FoodFormProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Servings</CardTitle>
+            <CardTitle>Unit Size (optional)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {servings.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="flex-1 text-sm">
-                  {s.label} ({s.grams}g)
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeServing(i)}
-                >
-                  <X className="h-4 w-4 text-destructive" />
-                </Button>
-              </div>
-            ))}
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <Label htmlFor="servingLabel">Label</Label>
-                <Input
-                  id="servingLabel"
-                  value={newServingLabel}
-                  onChange={(e) => setNewServingLabel(e.target.value)}
-                  placeholder="e.g. 1 unit"
-                />
-              </div>
-              <div className="w-24">
-                <Label htmlFor="servingGrams">Grams</Label>
-                <Input
-                  id="servingGrams"
-                  type="number"
-                  value={newServingGrams}
-                  onChange={(e) => setNewServingGrams(e.target.value)}
-                  min={1}
-                />
-              </div>
-              <Button variant="secondary" size="icon" onClick={addServing}>
-                <Plus className="h-4 w-4" />
-              </Button>
+            <div>
+              <Label htmlFor="gramsPerUnit">Grams per unit</Label>
+              <Input
+                id="gramsPerUnit"
+                type="number"
+                value={gramsPerUnit}
+                onChange={(e) => setGramsPerUnit(e.target.value)}
+                min={1}
+                placeholder="e.g. 40"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                If this food is consumed by unit (e.g. 1 alfajor = 40g), enter
+                the weight of one unit. Leave empty for gram-only foods like
+                chicken breast.
+              </p>
             </div>
           </CardContent>
         </Card>

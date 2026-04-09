@@ -20,33 +20,26 @@ export interface NutritionPer100g {
 }
 
 /**
- * A serving definition for a food (e.g. "1 unit" = 35g, "100g" = 100g).
- */
-export interface Serving {
-  label: string;
-  grams: number;
-}
-
-/**
  * A food item in the database.
+ * If gramsPerUnit is set, the food can be logged by unit count (e.g. 1 alfajor = 40g).
+ * All foods can always be logged by grams directly.
  */
 export interface Food {
   id: FoodId;
   name: string;
   imageUrl: string | null;
   nutritionPer100g: NutritionPer100g;
-  servings: Serving[];
+  gramsPerUnit: number | null;
   createdAt: string;
 }
 
 /**
- * A single log entry: "I ate X servings of food Y".
+ * A single log entry — always stores the total grams consumed.
  */
 export interface LogEntry {
   id: LogEntryId;
   foodId: FoodId;
-  servingIndex: number;
-  quantity: number;
+  grams: number;
 }
 
 /**

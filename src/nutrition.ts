@@ -7,12 +7,7 @@ export function nutritionForEntry(
   entry: LogEntry,
   food: Food,
 ): NutritionPer100g {
-  const serving = food.servings[entry.servingIndex];
-  if (serving == null) {
-    return { calories: 0, protein: 0, saturatedFat: 0, fiber: 0 };
-  }
-  const totalGrams = serving.grams * entry.quantity;
-  const factor = totalGrams / 100;
+  const factor = entry.grams / 100;
   return {
     calories: Math.round(food.nutritionPer100g.calories * factor * 10) / 10,
     protein: Math.round(food.nutritionPer100g.protein * factor * 10) / 10,
