@@ -1,0 +1,25 @@
+src/index.css
+  b766e4e68a816dfe 41-48
+index.html
+  b766e4e68a816dfe 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "ee760c1d042634d5b641c305574380a5bde0db4c",
+  "prompts": {
+    "b766e4e68a816dfe": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "13818d64-8e40-4c87-a8e4-c59f1d88b615",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 1,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    }
+  }
+}
