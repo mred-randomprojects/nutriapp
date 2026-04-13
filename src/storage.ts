@@ -1,6 +1,8 @@
 import type { AppData, ProfileId } from "./types";
 
 const STORAGE_KEY = "nutriapp-data";
+const BACKUP_KEY = "nutriapp-data-backup";
+const CORRUPT_RECOVERY_KEY = "nutriapp-data-corrupt-recovery";
 
 export class StorageQuotaError extends Error {
   constructor() {
@@ -33,9 +35,10 @@ const DEFAULT_APP_DATA: AppData = {
 };
 
 export function loadAppData(): AppData {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw == null) return { ...DEFAULT_APP_DATA };
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw == null) return { ...DEFAULT_APP_DATA };
     const parsed = JSON.parse(raw) as AppData;
     return {
       foods: parsed.foods ?? [],
@@ -43,11 +46,41 @@ export function loadAppData(): AppData {
       activeProfileId: parsed.activeProfileId ?? null,
     };
   } catch {
+    // Data exists but is corrupt — stash the raw string so it can be recovered
+    // manually via devtools, then fall back to the backup if available.
+    try {
+      localStorage.setItem(CORRUPT_RECOVERY_KEY, raw);
+    } catch {
+      // Best-effort; quota may be full.
+    }
+
+    const backup = localStorage.getItem(BACKUP_KEY);
+    if (backup != null) {
+      try {
+        const parsed = JSON.parse(backup) as AppData;
+        return {
+          foods: parsed.foods ?? [],
+          profiles: parsed.profiles ?? [],
+          activeProfileId: parsed.activeProfileId ?? null,
+        };
+      } catch {
+        // Backup also corrupt — nothing we can do.
+      }
+    }
+
     return { ...DEFAULT_APP_DATA };
   }
 }
 
 export function saveAppData(data: AppData): void {
+  const previous = localStorage.getItem(STORAGE_KEY);
+  if (previous != null) {
+    try {
+      localStorage.setItem(BACKUP_KEY, previous);
+    } catch {
+      // Best-effort; if quota is tight we still want the primary write to succeed.
+    }
+  }
   safeSetItem(STORAGE_KEY, JSON.stringify(data));
 }
 
