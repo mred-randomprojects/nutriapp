@@ -1,0 +1,25 @@
+src/components/DailyLog.tsx
+  b766e4e68a816dfe 9,12-27,29,51-272,275-283,289-295,304-320,504-538,540-541,543-562,564-569
+src/useAppData.ts
+  b766e4e68a816dfe 11,240-257,304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "fe193ce8b7fe1bad80bae99e0d805392d3a76c3b",
+  "prompts": {
+    "b766e4e68a816dfe": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "13818d64-8e40-4c87-a8e4-c59f1d88b615",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 373,
+      "total_deletions": 101,
+      "accepted_lines": 357,
+      "overriden_lines": 0
+    }
+  }
+}
