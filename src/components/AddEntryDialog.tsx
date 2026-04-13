@@ -195,8 +195,7 @@ export function AddEntryDialog({
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                min={0.1}
-                step={inputMode === "grams" ? 1 : 0.5}
+                step="any"
                 placeholder={inputMode === "grams" ? "e.g. 120" : "e.g. 2"}
                 autoFocus
               />

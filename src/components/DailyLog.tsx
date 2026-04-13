@@ -219,8 +219,7 @@ function FoodEntryCard({ item, food, onRemove, onUpdateGrams }: FoodEntryCardPro
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
               className="h-8 text-sm"
-              min={0.1}
-              step={inputMode === "grams" ? 1 : 0.5}
+              step="any"
               autoFocus
             />
             <span className="shrink-0 text-xs text-muted-foreground">
