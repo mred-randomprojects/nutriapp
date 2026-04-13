@@ -8,6 +8,7 @@ import type {
   DayLog,
   LogEntry,
   LogEntryId,
+  DayLogItem,
   SectionSeparator,
 } from "./types";
 import { generateId } from "./types";
@@ -236,6 +237,24 @@ export function useAppData() {
     [data, persist],
   );
 
+  const reorderLogEntries = useCallback(
+    (profileId: ProfileId, date: string, newEntries: ReadonlyArray<DayLogItem>) => {
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          return {
+            ...p,
+            dayLogs: p.dayLogs.map((dl) =>
+              dl.date === date ? { ...dl, entries: [...newEntries] } : dl,
+            ),
+          };
+        }),
+      });
+    },
+    [data, persist],
+  );
+
   const updateLogEntry = useCallback(
     (
       profileId: ProfileId,
@@ -282,6 +301,7 @@ export function useAppData() {
     addLogEntry,
     addSeparator,
     removeLogEntry,
+    reorderLogEntries,
     updateLogEntry,
     setStorageError,
   };
