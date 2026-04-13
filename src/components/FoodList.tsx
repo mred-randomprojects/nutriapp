@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
@@ -37,7 +37,11 @@ export function FoodList({ appData }: FoodListProps) {
         {allFoods.map((food) => {
           const builtin = isBuiltinFood(food.id);
           return (
-            <Card key={food.id}>
+            <Card
+              key={food.id}
+              className="cursor-pointer transition-colors hover:bg-accent/50"
+              onClick={() => navigate(`/foods/${food.id}/edit`)}
+            >
               <CardContent className="flex items-center gap-3 p-3">
                 {food.imageUrl != null ? (
                   <img
@@ -67,30 +71,22 @@ export function FoodList({ appData }: FoodListProps) {
                   </p>
                 </div>
                 {!builtin && (
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => navigate(`/foods/${food.id}/edit`)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete "${food.name}"? This will also remove it from all logs.`,
-                          )
-                        ) {
-                          deleteFood(food.id as FoodId);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        window.confirm(
+                          `Delete "${food.name}"? This will also remove it from all logs.`,
+                        )
+                      ) {
+                        deleteFood(food.id as FoodId);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                 )}
               </CardContent>
             </Card>

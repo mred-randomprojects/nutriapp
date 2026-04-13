@@ -1,0 +1,210 @@
+[
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000001",
+    "name": "Leche La Serenísima 1%",
+    "barcode": "7790742357106",
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/074/235/7106/front_es.4.400.jpg",
+    "nutritionPer100g": {
+      "calories": 40,
+      "protein": 3.0,
+      "saturatedFat": 0.6,
+      "fiber": 0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000002",
+    "name": "Ketchup Natura",
+    "barcode": "7791866000381",
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/186/600/0381/front_es.18.400.jpg",
+    "nutritionPer100g": {
+      "calories": 125,
+      "protein": 0,
+      "saturatedFat": 0,
+      "fiber": 0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000003",
+    "name": "Queso Rallado La Serenísima (Reggianito)",
+    "barcode": "7790742127907",
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/074/212/7907/front_es.14.400.jpg",
+    "nutritionPer100g": {
+      "calories": 390,
+      "protein": 38,
+      "saturatedFat": 15,
+      "fiber": 0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000004",
+    "name": "Queso Rallado La Quesera",
+    "barcode": "7792882000201",
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/288/200/0201/front_es.37.400.jpg",
+    "nutritionPer100g": {
+      "calories": 390,
+      "protein": 10,
+      "saturatedFat": 12,
+      "fiber": 0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000005",
+    "name": "Yogur Danone Descremado Vainilla",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/813/687/0064/front_es.4.400.jpg",
+    "nutritionPer100g": {
+      "calories": 40.5,
+      "protein": 4.4,
+      "saturatedFat": 0,
+      "fiber": 0
+    },
+    "gramsPerUnit": 190
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000006",
+    "name": "Yogur Danone Proteínas",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/133/700/6812/front_es.3.400.jpg",
+    "nutritionPer100g": {
+      "calories": 82.1,
+      "protein": 6.3,
+      "saturatedFat": 1.4,
+      "fiber": 0
+    },
+    "gramsPerUnit": 140
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000007",
+    "name": "Manteca",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/008/001/0862/front_es.14.400.jpg",
+    "nutritionPer100g": {
+      "calories": 750,
+      "protein": 0,
+      "saturatedFat": 50,
+      "fiber": 0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000008",
+    "name": "Queso Cremette Tonadita",
+    "barcode": "7798060853096",
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/806/085/3096/front_en.11.400.jpg",
+    "nutritionPer100g": {
+      "calories": 150,
+      "protein": 5.7,
+      "saturatedFat": 5.7,
+      "fiber": 0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000009",
+    "name": "Bife de Cuadril (estimado)",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/405/648/910/6647/front_en.3.400.jpg",
+    "nutritionPer100g": {
+      "calories": 135,
+      "protein": 21,
+      "saturatedFat": 2.0,
+      "fiber": 0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-00000000000a",
+    "name": "Pechuga de Pollo (estimado)",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/841/078/333/7231/front_es.6.400.jpg",
+    "nutritionPer100g": {
+      "calories": 120,
+      "protein": 22.5,
+      "saturatedFat": 0.6,
+      "fiber": 0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-00000000000b",
+    "name": "Pan Multicereal Cormillot",
+    "barcode": "7791708001484",
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/170/800/1484/front_en.4.400.jpg",
+    "nutritionPer100g": {
+      "calories": 246,
+      "protein": 4.2,
+      "saturatedFat": 2.0,
+      "fiber": 5.0
+    },
+    "gramsPerUnit": 25
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-00000000000c",
+    "name": "Pan Don Yeyo 100% Grano Entero",
+    "barcode": "7795293601869",
+    "imageUrl": "https://images.openfoodfacts.org/images/products/779/529/360/1869/front_es.4.400.jpg",
+    "nutritionPer100g": {
+      "calories": 240,
+      "protein": 9.0,
+      "saturatedFat": 0.8,
+      "fiber": 10.6
+    },
+    "gramsPerUnit": 33
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-00000000000d",
+    "name": "Palta / Aguacate (estimado)",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/842/973/653/2159/front_es.3.400.jpg",
+    "nutritionPer100g": {
+      "calories": 160,
+      "protein": 2.0,
+      "saturatedFat": 2.1,
+      "fiber": 6.7
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-00000000000e",
+    "name": "Huevo (estimado)",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/841/358/419/9008/front_es.8.400.jpg",
+    "nutritionPer100g": {
+      "calories": 143,
+      "protein": 12.6,
+      "saturatedFat": 3.1,
+      "fiber": 0
+    },
+    "gramsPerUnit": 50
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-00000000000f",
+    "name": "Semillas de Girasol Menoyo",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/750/046/309/6723/front_es.4.400.jpg",
+    "nutritionPer100g": {
+      "calories": 606,
+      "protein": 23,
+      "saturatedFat": 5.0,
+      "fiber": 9.0
+    },
+    "gramsPerUnit": null
+  },
+  {
+    "id": "b0000001-aaaa-4000-8000-000000000010",
+    "name": "Mix Frutos Secos (Zyma)",
+    "barcode": null,
+    "imageUrl": "https://images.openfoodfacts.org/images/products/000/002/004/7238/front_en.608.400.jpg",
+    "nutritionPer100g": {
+      "calories": 444,
+      "protein": 14,
+      "saturatedFat": 3.2,
+      "fiber": 7.6
+    },
+    "gramsPerUnit": null
+  }
+]

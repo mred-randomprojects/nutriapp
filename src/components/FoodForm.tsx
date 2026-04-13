@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
-import type { NutritionPer100g } from "../types";
+import type { FoodId, NutritionPer100g } from "../types";
+import { isBuiltinFood } from "../data/builtinFoods";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -16,8 +17,9 @@ export function FoodForm({ appData }: FoodFormProps) {
   const navigate = useNavigate();
   const { foodId } = useParams<{ foodId: string }>();
   const existing = foodId != null
-    ? appData.data.foods.find((f) => f.id === foodId)
+    ? appData.allFoods.find((f) => f.id === foodId)
     : undefined;
+  const readonly = existing != null && isBuiltinFood(existing.id as FoodId);
 
   const [name, setName] = useState(existing?.name ?? "");
   const [imageUrl, setImageUrl] = useState(existing?.imageUrl ?? "");
@@ -94,9 +96,24 @@ export function FoodForm({ appData }: FoodFormProps) {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-xl font-bold">
-          {existing != null ? "Edit Food" : "Add Food"}
+          {readonly
+            ? existing.name
+            : existing != null
+              ? "Edit Food"
+              : "Add Food"}
         </h1>
       </div>
+
+      {existing?.imageUrl != null && (
+        <img
+          src={existing.imageUrl}
+          alt={existing.name}
+          className="mx-auto h-48 w-48 rounded-xl object-contain"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
+        />
+      )}
 
       <div className="space-y-4">
         <Card>
@@ -111,27 +128,30 @@ export function FoodForm({ appData }: FoodFormProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Chicken Breast"
+                readOnly={readonly}
               />
             </div>
-            <div>
-              <Label htmlFor="imageUrl">Image URL (optional)</Label>
-              <Input
-                id="imageUrl"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://..."
-              />
-              {imageUrl.trim().length > 0 && (
-                <img
-                  src={imageUrl}
-                  alt="Preview"
-                  className="mt-2 h-20 w-20 rounded-lg object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                  }}
+            {!readonly && (
+              <div>
+                <Label htmlFor="imageUrl">Image URL (optional)</Label>
+                <Input
+                  id="imageUrl"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://..."
                 />
-              )}
-            </div>
+                {imageUrl.trim().length > 0 && (
+                  <img
+                    src={imageUrl}
+                    alt="Preview"
+                    className="mt-2 h-20 w-20 rounded-lg object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -140,22 +160,24 @@ export function FoodForm({ appData }: FoodFormProps) {
             <CardTitle>Nutrition</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div>
-              <Label htmlFor="refGrams">
-                Reference amount (grams)
-              </Label>
-              <Input
-                id="refGrams"
-                type="number"
-                value={refGrams}
-                onChange={(e) => setRefGrams(e.target.value)}
-                min={1}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Enter nutritional values for this many grams. Will be normalized
-                to per 100g internally.
-              </p>
-            </div>
+            {!readonly && (
+              <div>
+                <Label htmlFor="refGrams">
+                  Reference amount (grams)
+                </Label>
+                <Input
+                  id="refGrams"
+                  type="number"
+                  value={refGrams}
+                  onChange={(e) => setRefGrams(e.target.value)}
+                  min={1}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Enter nutritional values for this many grams. Will be
+                  normalized to per 100g internally.
+                </p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="calories">Calories (kcal)</Label>
@@ -166,6 +188,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                   onChange={(e) => setCalories(e.target.value)}
                   min={0}
                   step={0.1}
+                  readOnly={readonly}
                 />
               </div>
               <div>
@@ -177,6 +200,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                   onChange={(e) => setProtein(e.target.value)}
                   min={0}
                   step={0.1}
+                  readOnly={readonly}
                 />
               </div>
               <div>
@@ -188,6 +212,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                   onChange={(e) => setSaturatedFat(e.target.value)}
                   min={0}
                   step={0.1}
+                  readOnly={readonly}
                 />
               </div>
               <div>
@@ -199,39 +224,57 @@ export function FoodForm({ appData }: FoodFormProps) {
                   onChange={(e) => setFiber(e.target.value)}
                   min={0}
                   step={0.1}
+                  readOnly={readonly}
                 />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Unit Size (optional)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <Label htmlFor="gramsPerUnit">Grams per unit</Label>
-              <Input
-                id="gramsPerUnit"
-                type="number"
-                value={gramsPerUnit}
-                onChange={(e) => setGramsPerUnit(e.target.value)}
-                min={1}
-                placeholder="e.g. 40"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                If this food is consumed by unit (e.g. 1 alfajor = 40g), enter
-                the weight of one unit. Leave empty for gram-only foods like
-                chicken breast.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        {readonly ? (
+          existing.gramsPerUnit != null && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Unit Size</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  {existing.gramsPerUnit}g per unit
+                </p>
+              </CardContent>
+            </Card>
+          )
+        ) : (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Unit Size (optional)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label htmlFor="gramsPerUnit">Grams per unit</Label>
+                  <Input
+                    id="gramsPerUnit"
+                    type="number"
+                    value={gramsPerUnit}
+                    onChange={(e) => setGramsPerUnit(e.target.value)}
+                    min={1}
+                    placeholder="e.g. 40"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    If this food is consumed by unit (e.g. 1 alfajor = 40g),
+                    enter the weight of one unit. Leave empty for gram-only
+                    foods like chicken breast.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
 
-        <Button className="w-full" size="lg" onClick={handleSubmit}>
-          {existing != null ? "Save Changes" : "Add Food"}
-        </Button>
+            <Button className="w-full" size="lg" onClick={handleSubmit}>
+              {existing != null ? "Save Changes" : "Add Food"}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
