@@ -14,6 +14,7 @@ import type {
 import { generateId } from "./types";
 import { loadAppData, saveAppData, StorageQuotaError } from "./storage";
 import { builtinFoods } from "./data/builtinFoods";
+import { buildResolvedFoodsMap } from "./nutrition";
 
 /**
  * Central hook that owns all app state and persists to localStorage.
@@ -39,14 +40,19 @@ export function useAppData() {
     }
   }, []);
 
-  const allFoods = useMemo(
+  const rawFoods = useMemo(
     () => [...builtinFoods, ...data.foods],
     [data.foods],
   );
 
   const foodsMap = useMemo(
-    () => new Map(allFoods.map((f) => [f.id, f])),
-    [allFoods],
+    () => buildResolvedFoodsMap(rawFoods),
+    [rawFoods],
+  );
+
+  const allFoods = useMemo(
+    () => rawFoods.map((f) => foodsMap.get(f.id) ?? f),
+    [rawFoods, foodsMap],
   );
 
   const activeProfile = useMemo(
@@ -88,7 +94,19 @@ export function useAppData() {
     (foodId: FoodId) => {
       persist({
         ...data,
-        foods: data.foods.filter((f) => f.id !== foodId),
+        foods: data.foods
+          .filter((f) => f.id !== foodId)
+          .map((f) => {
+            if (f.ingredients == null) return f;
+            const filtered = f.ingredients.filter(
+              (ing) => ing.foodId !== foodId,
+            );
+            if (filtered.length === f.ingredients.length) return f;
+            return {
+              ...f,
+              ingredients: filtered.length > 0 ? filtered : null,
+            };
+          }),
         profiles: data.profiles.map((p) => ({
           ...p,
           dayLogs: p.dayLogs.map((dl) => ({

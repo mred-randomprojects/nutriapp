@@ -19,10 +19,17 @@ export interface NutritionPer100g {
   fiber: number;
 }
 
+export interface ComboIngredient {
+  foodId: FoodId;
+  grams: number;
+}
+
 /**
  * A food item in the database.
  * If gramsPerUnit is set, the food can be logged by unit count (e.g. 1 alfajor = 40g).
  * All foods can always be logged by grams directly.
+ * If ingredients is non-null, the food is a combo whose nutrition is computed
+ * dynamically from its ingredients.
  */
 export interface Food {
   id: FoodId;
@@ -30,6 +37,7 @@ export interface Food {
   imageUrl: string | null;
   nutritionPer100g: NutritionPer100g;
   gramsPerUnit: number | null;
+  ingredients: ReadonlyArray<ComboIngredient> | null;
   createdAt: string;
 }
 
