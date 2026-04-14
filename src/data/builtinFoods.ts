@@ -22,6 +22,7 @@ export const builtinFoods: Food[] = (rawFoods as RawBuiltinFood[]).map(
     imageUrl: raw.imageUrl,
     nutritionPer100g: raw.nutritionPer100g,
     gramsPerUnit: raw.gramsPerUnit,
+    ingredients: null,
     createdAt: "builtin",
   }),
 );
