@@ -1,13 +1,43 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAppData } from "./useAppData";
+import { AuthProvider, useAuth } from "./auth";
 import { NavBar } from "./components/NavBar";
 import { FoodList } from "./components/FoodList";
 import { FoodForm } from "./components/FoodForm";
 import { DailyLog } from "./components/DailyLog";
 import { ProfileManager } from "./components/ProfileManager";
 import { StorageUsage } from "./components/StorageUsage";
+import { AccountPage } from "./components/AccountPage";
+import { LoginPage } from "./components/LoginPage";
+import { Loader2 } from "lucide-react";
 
 export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
+}
+
+function AuthGate() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (user == null) {
+    return <LoginPage />;
+  }
+
+  return <AuthenticatedApp />;
+}
+
+function AuthenticatedApp() {
   const appData = useAppData();
 
   return (
@@ -34,6 +64,7 @@ export default function App() {
           path="/profiles"
           element={<ProfileManager appData={appData} />}
         />
+        <Route path="/account" element={<AccountPage />} />
       </Routes>
 
       {appData.storageError != null && (

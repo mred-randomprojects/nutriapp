@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type {
   AppData,
   Food,
@@ -13,32 +13,86 @@ import type {
 } from "./types";
 import { generateId } from "./types";
 import { loadAppData, saveAppData, StorageQuotaError } from "./storage";
+import { loadCloudData, saveCloudData } from "./cloudStorage";
+import { mergeAppData } from "./mergeAppData";
+import { useAuth } from "./auth";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
 
 /**
- * Central hook that owns all app state and persists to localStorage.
+ * Central hook that owns all app state and persists to both
+ * localStorage (immediate, offline-capable) and Firestore (async, cloud sync).
  * Every mutation returns a new AppData (immutable updates).
  * Built-in foods (from the bundle) are merged with user-defined foods
  * (from localStorage). Only user foods are persisted/editable.
  */
 export function useAppData() {
+  const { user } = useAuth();
   const [data, setData] = useState<AppData>(loadAppData);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [cloudSynced, setCloudSynced] = useState(false);
+  const cloudSaveInFlight = useRef(false);
 
-  const persist = useCallback((next: AppData) => {
-    try {
-      saveAppData(next);
-      setData(next);
-      setStorageError(null);
-    } catch (e) {
-      if (e instanceof StorageQuotaError) {
-        setStorageError(e.message);
-      } else {
-        throw e;
+  useEffect(() => {
+    if (user == null || cloudSynced) return;
+
+    let cancelled = false;
+    loadCloudData(user.uid)
+      .then((cloudData) => {
+        if (cancelled) return;
+        const local = loadAppData();
+        if (cloudData != null) {
+          const merged = mergeAppData(local, cloudData);
+          setData(merged);
+          saveAppData(merged);
+          // Push merged result back so both sides are in sync.
+          saveCloudData(user.uid, merged).catch(() => {});
+        } else {
+          // First time: upload existing localStorage data to the cloud.
+          saveCloudData(user.uid, local).catch(() => {
+            // Best-effort on initial upload; next persist() will retry.
+          });
+        }
+        setCloudSynced(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Offline or error — keep using localStorage data.
+        setCloudSynced(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, cloudSynced]);
+
+  const persist = useCallback(
+    (next: AppData) => {
+      try {
+        saveAppData(next);
+        setData(next);
+        setStorageError(null);
+      } catch (e) {
+        if (e instanceof StorageQuotaError) {
+          setStorageError(e.message);
+        } else {
+          throw e;
+        }
       }
-    }
-  }, []);
+
+      if (user != null && !cloudSaveInFlight.current) {
+        cloudSaveInFlight.current = true;
+        saveCloudData(user.uid, next)
+          .catch(() => {
+            // Silently fail — localStorage is the primary store; cloud is best-effort.
+          })
+          .finally(() => {
+            cloudSaveInFlight.current = false;
+          });
+      }
+    },
+    [user],
+  );
 
   const rawFoods = useMemo(
     () => [...builtinFoods, ...data.foods],
