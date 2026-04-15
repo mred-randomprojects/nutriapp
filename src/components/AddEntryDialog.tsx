@@ -50,20 +50,32 @@ export function AddEntryDialog({
   }
 
   const parsedAmount = parseNum(amount);
+  const isUnitBased = selectedFood?.nutritionPerUnit != null;
 
   const totalGrams =
-    inputMode === "grams"
-      ? parsedAmount
-      : parsedAmount * (selectedFood?.gramsPerUnit ?? 0);
+    isUnitBased
+      ? 0
+      : inputMode === "grams"
+        ? parsedAmount
+        : parsedAmount * (selectedFood?.gramsPerUnit ?? 0);
 
   const factor = totalGrams / 100;
 
   function handleAdd() {
-    if (selectedFoodId == null || totalGrams <= 0) return;
-    addLogEntry(profileId, date, {
-      foodId: selectedFoodId,
-      grams: totalGrams,
-    });
+    if (selectedFoodId == null || parsedAmount <= 0) return;
+    if (isUnitBased) {
+      addLogEntry(profileId, date, {
+        foodId: selectedFoodId,
+        grams: 0,
+        units: parsedAmount,
+      });
+    } else {
+      if (totalGrams <= 0) return;
+      addLogEntry(profileId, date, {
+        foodId: selectedFoodId,
+        grams: totalGrams,
+      });
+    }
     resetAndClose();
   }
 
@@ -78,7 +90,8 @@ export function AddEntryDialog({
   function selectFood(foodId: FoodId) {
     const food = allFoods.find((f) => f.id === foodId);
     setSelectedFoodId(foodId);
-    setInputMode(food?.gramsPerUnit != null ? "units" : "grams");
+    const foodIsUnitBased = food?.nutritionPerUnit != null;
+    setInputMode(foodIsUnitBased || food?.gramsPerUnit != null ? "units" : "grams");
     setAmount("");
   }
 
@@ -121,8 +134,11 @@ export function AddEntryDialog({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{food.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {food.nutritionPer100g.calories} kcal/100g
-                      {food.gramsPerUnit != null &&
+                      {food.nutritionPerUnit != null
+                        ? `${food.nutritionPerUnit.calories} kcal/unit`
+                        : `${food.nutritionPer100g.calories} kcal/100g`}
+                      {food.nutritionPerUnit == null &&
+                        food.gramsPerUnit != null &&
                         ` · ${food.gramsPerUnit}g/unit`}
                     </p>
                   </div>
@@ -160,30 +176,35 @@ export function AddEntryDialog({
               </div>
             </div>
 
-            {/* Mode toggle — only shown if food has gramsPerUnit */}
-            {selectedFood.gramsPerUnit != null && (
-              <div className="flex gap-2">
-                <button
-                  className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-                    inputMode === "grams"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-input hover:bg-accent"
-                  }`}
-                  onClick={() => setInputMode("grams")}
-                >
-                  Grams
-                </button>
-                <button
-                  className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-                    inputMode === "units"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-input hover:bg-accent"
-                  }`}
-                  onClick={() => setInputMode("units")}
-                >
-                  Units ({selectedFood.gramsPerUnit}g each)
-                </button>
-              </div>
+            {isUnitBased ? (
+              <p className="text-xs text-muted-foreground">
+                This food can only be logged by unit count (weight unknown).
+              </p>
+            ) : (
+              selectedFood.gramsPerUnit != null && (
+                <div className="flex gap-2">
+                  <button
+                    className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                      inputMode === "grams"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-input hover:bg-accent"
+                    }`}
+                    onClick={() => setInputMode("grams")}
+                  >
+                    Grams
+                  </button>
+                  <button
+                    className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                      inputMode === "units"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-input hover:bg-accent"
+                    }`}
+                    onClick={() => setInputMode("units")}
+                  >
+                    Units ({selectedFood.gramsPerUnit}g each)
+                  </button>
+                </div>
+              )
             )}
 
             <div>
@@ -199,58 +220,57 @@ export function AddEntryDialog({
                 placeholder={inputMode === "grams" ? "e.g. 120" : "e.g. 2"}
                 autoFocus
               />
-              {inputMode === "units" && parsedAmount > 0 && (
+              {inputMode === "units" && !isUnitBased && parsedAmount > 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   = {totalGrams}g
                 </p>
               )}
             </div>
 
-            {totalGrams > 0 && (
+            {((isUnitBased && parsedAmount > 0) || totalGrams > 0) && (
               <div className="rounded-lg bg-secondary/50 p-3 text-sm">
                 <p className="mb-1 text-xs text-muted-foreground">
-                  Preview ({totalGrams}g)
+                  Preview ({isUnitBased
+                    ? `${parsedAmount} unit${parsedAmount !== 1 ? "s" : ""}`
+                    : `${totalGrams}g`})
                 </p>
                 <div className="grid grid-cols-4 gap-2 text-center">
-                  <div>
-                    <p className="font-medium text-primary">
-                      {Math.round(
-                        selectedFood.nutritionPer100g.calories * factor,
-                      )}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">kcal</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">
-                      {Math.round(
-                        selectedFood.nutritionPer100g.protein * factor * 10,
-                      ) / 10}
-                      g
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">Protein</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">
-                      {Math.round(
-                        selectedFood.nutritionPer100g.saturatedFat *
-                          factor *
-                          10,
-                      ) / 10}
-                      g
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      Sat. Fat
-                    </p>
-                  </div>
-                  <div>
-                    <p className="font-medium">
-                      {Math.round(
-                        selectedFood.nutritionPer100g.fiber * factor * 10,
-                      ) / 10}
-                      g
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">Fiber</p>
-                  </div>
+                  {(() => {
+                    const n = isUnitBased && selectedFood.nutritionPerUnit != null
+                      ? selectedFood.nutritionPerUnit
+                      : selectedFood.nutritionPer100g;
+                    const m = isUnitBased ? parsedAmount : factor;
+                    return (
+                      <>
+                        <div>
+                          <p className="font-medium text-primary">
+                            {Math.round(n.calories * m)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">kcal</p>
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {Math.round(n.protein * m * 10) / 10}g
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">Protein</p>
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {Math.round(n.saturatedFat * m * 10) / 10}g
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Sat. Fat
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {Math.round(n.fiber * m * 10) / 10}g
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">Fiber</p>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             )}
