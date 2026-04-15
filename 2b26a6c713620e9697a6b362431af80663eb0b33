@@ -1,0 +1,43 @@
+src/auth.tsx
+  82a2060effc0e722 1-62
+src/vite-env.d.ts
+  82a2060effc0e722 2-14
+src/App.tsx
+  82a2060effc0e722 3,10-12,15-40,67
+.github/workflows/deploy.yml
+  82a2060effc0e722 35-41
+src/components/LoginPage.tsx
+  82a2060effc0e722 1-86
+src/mergeAppData.ts
+  82a2060effc0e722 1-93
+src/components/AccountPage.tsx
+  82a2060effc0e722 1-55
+src/components/NavBar.tsx
+  82a2060effc0e722 2,9
+src/cloudStorage.ts
+  82a2060effc0e722 1-30
+src/firebase.ts
+  82a2060effc0e722 1-17
+src/useAppData.ts
+  82a2060effc0e722 1,16-18,23-24,30,33-34,36-80,82-91,93-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "2b26a6c713620e9697a6b362431af80663eb0b33",
+  "prompts": {
+    "82a2060effc0e722": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "8abec7c0-49e0-435f-9241-f14f9719a14b",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 473,
+      "total_deletions": 24,
+      "accepted_lines": 464,
+      "overriden_lines": 0
+    }
+  }
+}
