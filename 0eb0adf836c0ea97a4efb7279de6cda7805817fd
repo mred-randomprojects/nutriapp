@@ -1,0 +1,36 @@
+README.md
+  82a2060effc0e722 1-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "0eb0adf836c0ea97a4efb7279de6cda7805817fd",
+  "prompts": {
+    "82a2060effc0e722": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "8abec7c0-49e0-435f-9241-f14f9719a14b",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 124,
+      "total_deletions": 0,
+      "accepted_lines": 124,
+      "overriden_lines": 0
+    },
+    "dc4f6c2f0986c0e6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "506b3e9f-5789-45e5-8d6d-799fc1a02f7c",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 163,
+      "total_deletions": 18,
+      "accepted_lines": 2,
+      "overriden_lines": 16
+    }
+  }
+}
