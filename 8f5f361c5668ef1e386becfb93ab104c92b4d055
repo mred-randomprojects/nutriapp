@@ -1,0 +1,48 @@
+src/types.ts
+  42c45fbe43a04573 13,15,22-25,38-39,46,61
+src/components/FoodForm.tsx
+  42c45fbe43a04573 5,113-118,120-121,123,126,129,132,171-179,207,259,268-280,287,472-473,553-599,654-668,671,673-689
+src/components/AddEntryDialog.tsx
+  42c45fbe43a04573 53,56-60,65-78,93-94,137-141,179-207,223,230,233-235,238-273
+src/nutrition.ts
+  42c45fbe43a04573 1,5-6,11-21,38-39,174
+src/components/FoodList.tsx
+  42c45fbe43a04573 70-74,77-80,88,94
+src/components/DailyLog.tsx
+  42c45fbe43a04573 95,98,103,106-109,113-115,120,122-123,139-150,199,567,572
+src/data/builtinFoods.ts
+  42c45fbe43a04573 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "8f5f361c5668ef1e386becfb93ab104c92b4d055",
+  "prompts": {
+    "42c45fbe43a04573": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f3d22b94-d8ec-4e11-9592-1cecd94fa21b",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 286,
+      "total_deletions": 157,
+      "accepted_lines": 286,
+      "overriden_lines": 0
+    },
+    "dc4f6c2f0986c0e6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "506b3e9f-5789-45e5-8d6d-799fc1a02f7c",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 18,
+      "overriden_lines": 0
+    }
+  }
+}
