@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
 import type { FoodId } from "../types";
 import { isBuiltinFood } from "../data/builtinFoods";
 
@@ -14,6 +16,11 @@ interface FoodListProps {
 export function FoodList({ appData }: FoodListProps) {
   const navigate = useNavigate();
   const { allFoods, deleteFood } = appData;
+  const [search, setSearch] = useState("");
+
+  const filteredFoods = allFoods.filter((f) =>
+    f.name.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
     <div className="p-4">
@@ -25,6 +32,15 @@ export function FoodList({ appData }: FoodListProps) {
         </Button>
       </div>
 
+      {allFoods.length > 0 && (
+        <Input
+          placeholder="Search foods..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="mb-4"
+        />
+      )}
+
       {allFoods.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
@@ -33,8 +49,16 @@ export function FoodList({ appData }: FoodListProps) {
         </Card>
       )}
 
+      {filteredFoods.length === 0 && allFoods.length > 0 && (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            No foods match &ldquo;{search}&rdquo;
+          </CardContent>
+        </Card>
+      )}
+
       <div className="space-y-2">
-        {allFoods.map((food) => {
+        {filteredFoods.map((food) => {
           const builtin = isBuiltinFood(food.id);
           return (
             <Card
