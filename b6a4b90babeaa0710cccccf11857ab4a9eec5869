@@ -1,0 +1,21 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "b6a4b90babeaa0710cccccf11857ab4a9eec5869",
+  "prompts": {
+    "dc4f6c2f0986c0e6": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "506b3e9f-5789-45e5-8d6d-799fc1a02f7c",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 18,
+      "overriden_lines": 0
+    }
+  }
+}
