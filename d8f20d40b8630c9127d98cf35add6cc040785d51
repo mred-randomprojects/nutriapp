@@ -1,0 +1,23 @@
+src/components/FoodList.tsx
+  42c45fbe43a04573 1,8,19,21-23,35-42,52-59,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "d8f20d40b8630c9127d98cf35add6cc040785d51",
+  "prompts": {
+    "42c45fbe43a04573": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "f3d22b94-d8ec-4e11-9592-1cecd94fa21b",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 25,
+      "total_deletions": 1,
+      "accepted_lines": 25,
+      "overriden_lines": 0
+    }
+  }
+}
