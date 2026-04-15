@@ -92,28 +92,35 @@ interface FoodEntryCardProps {
   item: LogEntry;
   food: Food;
   onRemove: () => void;
-  onUpdateGrams: (grams: number) => void;
+  onUpdate: (updates: { grams?: number; units?: number }) => void;
 }
 
-function FoodEntryCard({ item, food, onRemove, onUpdateGrams }: FoodEntryCardProps) {
+function FoodEntryCard({ item, food, onRemove, onUpdate }: FoodEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
 
+  const isUnitBased = food.nutritionPerUnit != null;
   const entryNutrition = nutritionForEntry(item, food);
   const gramsPerUnit = food.gramsPerUnit;
-  const unitCount =
-    gramsPerUnit != null && item.grams % gramsPerUnit === 0
+
+  const unitCount = isUnitBased
+    ? item.units
+    : gramsPerUnit != null && item.grams % gramsPerUnit === 0
       ? item.grams / gramsPerUnit
       : null;
 
-  const subtitle =
-    unitCount != null
+  const subtitle = isUnitBased
+    ? `${item.units ?? 0} unit${(item.units ?? 0) !== 1 ? "s" : ""}`
+    : unitCount != null
       ? `${unitCount} unit${unitCount !== 1 ? "s" : ""} (${item.grams}g)`
       : `${item.grams}g`;
 
   function startEditing() {
-    if (unitCount != null && gramsPerUnit != null) {
+    if (isUnitBased) {
+      setInputMode("units");
+      setEditValue(String(item.units ?? 0));
+    } else if (unitCount != null && gramsPerUnit != null) {
       setInputMode("units");
       setEditValue(String(unitCount));
     } else {
@@ -129,12 +136,18 @@ function FoodEntryCard({ item, food, onRemove, onUpdateGrams }: FoodEntryCardPro
       setIsEditing(false);
       return;
     }
-    const newGrams =
-      inputMode === "units" && gramsPerUnit != null
-        ? parsed * gramsPerUnit
-        : parsed;
-    if (newGrams !== item.grams) {
-      onUpdateGrams(newGrams);
+    if (isUnitBased) {
+      if (parsed !== (item.units ?? 0)) {
+        onUpdate({ grams: 0, units: parsed });
+      }
+    } else {
+      const newGrams =
+        inputMode === "units" && gramsPerUnit != null
+          ? parsed * gramsPerUnit
+          : parsed;
+      if (newGrams !== item.grams) {
+        onUpdate({ grams: newGrams });
+      }
     }
     setIsEditing(false);
   }
@@ -183,7 +196,7 @@ function FoodEntryCard({ item, food, onRemove, onUpdateGrams }: FoodEntryCardPro
               <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
           </div>
-          {gramsPerUnit != null && (
+          {!isUnitBased && gramsPerUnit != null && (
             <div className="mt-2 flex gap-2">
               <button
                 className={`flex-1 rounded-lg border px-3 py-1 text-xs transition-colors ${
@@ -551,12 +564,12 @@ export function DailyLog({ appData }: DailyLogProps) {
                         item.id as LogEntryId,
                       )
                     }
-                    onUpdateGrams={(grams) =>
+                    onUpdate={(updates) =>
                       updateLogEntry(
                         activeProfile.id as ProfileId,
                         dateStr,
                         item.id as LogEntryId,
-                        { grams },
+                        updates,
                       )
                     }
                   />

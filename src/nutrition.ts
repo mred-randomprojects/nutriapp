@@ -1,12 +1,24 @@
-import type { ComboIngredient, DayLogItem, Food, LogEntry, NutritionPer100g } from "./types";
+import type { ComboIngredient, DayLogItem, Food, LogEntry, NutritionPer100g, NutritionValues } from "./types";
 
 /**
  * Calculates the total nutrition for a single log entry.
+ * For unit-based entries (entry.units is set and food.nutritionPerUnit exists),
+ * nutrition = units * nutritionPerUnit. Otherwise, nutrition = grams / 100 * nutritionPer100g.
  */
 export function nutritionForEntry(
   entry: LogEntry,
   food: Food,
-): NutritionPer100g {
+): NutritionValues {
+  if (entry.units != null && food.nutritionPerUnit != null) {
+    const u = entry.units;
+    return {
+      calories: Math.round(food.nutritionPerUnit.calories * u * 10) / 10,
+      protein: Math.round(food.nutritionPerUnit.protein * u * 10) / 10,
+      saturatedFat:
+        Math.round(food.nutritionPerUnit.saturatedFat * u * 10) / 10,
+      fiber: Math.round(food.nutritionPerUnit.fiber * u * 10) / 10,
+    };
+  }
   const factor = entry.grams / 100;
   return {
     calories: Math.round(food.nutritionPer100g.calories * factor * 10) / 10,
@@ -23,8 +35,8 @@ export function nutritionForEntry(
 export function sumNutrition(
   items: ReadonlyArray<DayLogItem>,
   foodsMap: Map<string, Food>,
-): NutritionPer100g {
-  const totals: NutritionPer100g = {
+): NutritionValues {
+  const totals: NutritionValues = {
     calories: 0,
     protein: 0,
     saturatedFat: 0,
@@ -159,6 +171,7 @@ export function buildResolvedFoodsMap(
         map.set(food.id, {
           ...food,
           nutritionPer100g: nutrition,
+          nutritionPerUnit: null,
           gramsPerUnit: totalGrams > 0 ? totalGrams : null,
         });
       } else {

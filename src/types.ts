@@ -10,14 +10,19 @@ export function generateId(): string {
 }
 
 /**
- * Nutritional values for a food, always stored per 100g internally.
+ * Base shape for nutritional values (calories, protein, saturated fat, fiber).
  */
-export interface NutritionPer100g {
+export interface NutritionValues {
   calories: number;
   protein: number;
   saturatedFat: number;
   fiber: number;
 }
+
+/**
+ * Nutritional values for a food, always stored per 100g internally.
+ */
+export type NutritionPer100g = NutritionValues;
 
 export interface ComboIngredient {
   foodId: FoodId;
@@ -30,12 +35,15 @@ export interface ComboIngredient {
  * All foods can always be logged by grams directly.
  * If ingredients is non-null, the food is a combo whose nutrition is computed
  * dynamically from its ingredients.
+ * If nutritionPerUnit is set, the food is "unit-based" — its weight is unknown
+ * and it can only be logged by unit count.
  */
 export interface Food {
   id: FoodId;
   name: string;
   imageUrl: string | null;
   nutritionPer100g: NutritionPer100g;
+  nutritionPerUnit: NutritionValues | null;
   gramsPerUnit: number | null;
   ingredients: ReadonlyArray<ComboIngredient> | null;
   createdAt: string;
@@ -50,6 +58,7 @@ export interface LogEntry {
   id: LogEntryId;
   foodId: FoodId;
   grams: number;
+  units?: number;
 }
 
 /**

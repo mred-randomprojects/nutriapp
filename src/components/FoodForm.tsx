@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
-import type { ComboIngredient, Food, FoodId, NutritionPer100g } from "../types";
+import type { ComboIngredient, Food, FoodId, NutritionPer100g, NutritionValues } from "../types";
 import { isBuiltinFood } from "../data/builtinFoods";
 import {
   computeComboNutritionPer100g,
@@ -110,18 +110,26 @@ export function FoodForm({ appData }: FoodFormProps) {
   const [name, setName] = useState(existing?.name ?? "");
   const [imageUrl, setImageUrl] = useState(existing?.imageUrl ?? "");
 
+  type ReferenceType = "grams" | "unit";
+  const existingIsUnitBased = existing?.nutritionPerUnit != null;
+  const [referenceType, setReferenceType] = useState<ReferenceType>(
+    existingIsUnitBased ? "unit" : "grams",
+  );
+
   const [refGrams, setRefGrams] = useState("100");
+  const nutritionSource =
+    existingIsUnitBased ? existing.nutritionPerUnit : existing?.nutritionPer100g;
   const [calories, setCalories] = useState(
-    existing != null ? String(existing.nutritionPer100g.calories) : "",
+    nutritionSource != null ? String(nutritionSource.calories) : "",
   );
   const [protein, setProtein] = useState(
-    existing != null ? String(existing.nutritionPer100g.protein) : "",
+    nutritionSource != null ? String(nutritionSource.protein) : "",
   );
   const [saturatedFat, setSaturatedFat] = useState(
-    existing != null ? String(existing.nutritionPer100g.saturatedFat) : "",
+    nutritionSource != null ? String(nutritionSource.saturatedFat) : "",
   );
   const [fiber, setFiber] = useState(
-    existing != null ? String(existing.nutritionPer100g.fiber) : "",
+    nutritionSource != null ? String(nutritionSource.fiber) : "",
   );
 
   const [gramsPerUnit, setGramsPerUnit] = useState(
@@ -160,6 +168,15 @@ export function FoodForm({ appData }: FoodFormProps) {
     };
   }
 
+  function buildNutritionPerUnit(): NutritionValues {
+    return {
+      calories: Math.round(parseNum(calories) * 100) / 100,
+      protein: Math.round(parseNum(protein) * 100) / 100,
+      saturatedFat: Math.round(parseNum(saturatedFat) * 100) / 100,
+      fiber: Math.round(parseNum(fiber) * 100) / 100,
+    };
+  }
+
   const forbiddenIngredientIds = useMemo(() => {
     const forbidden = new Set<string>();
     for (const ing of ingredients) {
@@ -187,6 +204,7 @@ export function FoodForm({ appData }: FoodFormProps) {
     if (!showIngredientPicker) return [];
     return appData.allFoods.filter((f) => {
       if (forbiddenIngredientIds.has(f.id)) return false;
+      if (f.nutritionPerUnit != null) return false;
       if (ingredientSearch.length === 0) return true;
       return f.name.toLowerCase().includes(ingredientSearch.toLowerCase());
     });
@@ -238,8 +256,22 @@ export function FoodForm({ appData }: FoodFormProps) {
       const payload = {
         ...base,
         nutritionPer100g,
+        nutritionPerUnit: null,
         gramsPerUnit: totalGrams > 0 ? totalGrams : null,
         ingredients: [...ingredients],
+      };
+      if (existing != null) {
+        appData.updateFood(existing.id, payload);
+      } else {
+        appData.addFood(payload);
+      }
+    } else if (referenceType === "unit") {
+      const payload = {
+        ...base,
+        nutritionPer100g: { calories: 0, protein: 0, saturatedFat: 0, fiber: 0 },
+        nutritionPerUnit: buildNutritionPerUnit(),
+        gramsPerUnit: null,
+        ingredients: null,
       };
       if (existing != null) {
         appData.updateFood(existing.id, payload);
@@ -252,6 +284,7 @@ export function FoodForm({ appData }: FoodFormProps) {
       const payload = {
         ...base,
         nutritionPer100g,
+        nutritionPerUnit: null,
         gramsPerUnit: parsedGramsPerUnit > 0 ? parsedGramsPerUnit : null,
         ingredients: null,
       };
@@ -436,7 +469,8 @@ export function FoodForm({ appData }: FoodFormProps) {
                         ))}
                         {availableFoods.length === 0 && (
                           <p className="py-2 text-center text-xs text-muted-foreground">
-                            No matching foods found
+                            No matching foods found. Unit-based foods cannot be
+                            used as combo ingredients yet.
                           </p>
                         )}
                       </div>
@@ -516,22 +550,53 @@ export function FoodForm({ appData }: FoodFormProps) {
               </CardHeader>
               <CardContent className="space-y-3">
                 {!readonly && (
-                  <div>
-                    <Label htmlFor="refGrams">
-                      Reference amount (grams)
-                    </Label>
-                    <Input
-                      id="refGrams"
-                      type="number"
-                      value={refGrams}
-                      onChange={(e) => setRefGrams(e.target.value)}
-                      min={1}
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Enter nutritional values for this many grams. Will be
-                      normalized to per 100g internally.
-                    </p>
-                  </div>
+                  <>
+                    <div className="flex gap-2">
+                      <button
+                        className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                          referenceType === "grams"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-input hover:bg-accent"
+                        }`}
+                        onClick={() => setReferenceType("grams")}
+                      >
+                        Per grams
+                      </button>
+                      <button
+                        className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                          referenceType === "unit"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-input hover:bg-accent"
+                        }`}
+                        onClick={() => setReferenceType("unit")}
+                      >
+                        Per unit
+                      </button>
+                    </div>
+                    {referenceType === "grams" ? (
+                      <div>
+                        <Label htmlFor="refGrams">
+                          Reference amount (grams)
+                        </Label>
+                        <Input
+                          id="refGrams"
+                          type="number"
+                          value={refGrams}
+                          onChange={(e) => setRefGrams(e.target.value)}
+                          min={1}
+                        />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Enter nutritional values for this many grams. Will be
+                          normalized to per 100g internally.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Enter nutritional values for 1 unit. Weight is unknown —
+                        this food can only be logged by unit count.
+                      </p>
+                    )}
+                  </>
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -586,43 +651,45 @@ export function FoodForm({ appData }: FoodFormProps) {
               </CardContent>
             </Card>
 
-            {readonly ? (
-              existing.gramsPerUnit != null && (
+            {referenceType === "grams" && (
+              readonly ? (
+                existing.gramsPerUnit != null && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Unit Size</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">
+                        {existing.gramsPerUnit}g per unit
+                      </p>
+                    </CardContent>
+                  </Card>
+                )
+              ) : (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Unit Size</CardTitle>
+                    <CardTitle>Unit Size (optional)</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      {existing.gramsPerUnit}g per unit
-                    </p>
+                  <CardContent className="space-y-3">
+                    <div>
+                      <Label htmlFor="gramsPerUnit">Grams per unit</Label>
+                      <Input
+                        id="gramsPerUnit"
+                        type="number"
+                        value={gramsPerUnit}
+                        onChange={(e) => setGramsPerUnit(e.target.value)}
+                        min={1}
+                        placeholder="e.g. 40"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        If this food is consumed by unit (e.g. 1 alfajor = 40g),
+                        enter the weight of one unit. Leave empty for gram-only
+                        foods like chicken breast.
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               )
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Unit Size (optional)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <Label htmlFor="gramsPerUnit">Grams per unit</Label>
-                    <Input
-                      id="gramsPerUnit"
-                      type="number"
-                      value={gramsPerUnit}
-                      onChange={(e) => setGramsPerUnit(e.target.value)}
-                      min={1}
-                      placeholder="e.g. 40"
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      If this food is consumed by unit (e.g. 1 alfajor = 40g),
-                      enter the weight of one unit. Leave empty for gram-only
-                      foods like chicken breast.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
             )}
           </>
         )}

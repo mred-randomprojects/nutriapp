@@ -67,11 +67,17 @@ export function FoodList({ appData }: FoodListProps) {
                         combo
                       </Badge>
                     )}
+                    {food.nutritionPerUnit != null && (
+                      <Badge variant="secondary" className="shrink-0 text-[10px]">
+                        unit-based
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {food.nutritionPer100g.calories} kcal ·{" "}
-                    {food.nutritionPer100g.protein}g protein
-                    {food.ingredients != null ? (
+                    {food.nutritionPerUnit != null
+                      ? `${food.nutritionPerUnit.calories} kcal · ${food.nutritionPerUnit.protein}g protein · per unit`
+                      : `${food.nutritionPer100g.calories} kcal · ${food.nutritionPer100g.protein}g protein`}
+                    {food.nutritionPerUnit == null && food.ingredients != null ? (
                       <>
                         {" · "}
                         {food.ingredients.length} ingredient
@@ -79,13 +85,13 @@ export function FoodList({ appData }: FoodListProps) {
                         {food.gramsPerUnit != null &&
                           ` · ${food.gramsPerUnit}g/serving`}
                       </>
-                    ) : (
+                    ) : food.nutritionPerUnit == null ? (
                       <>
                         {" · per 100g"}
                         {food.gramsPerUnit != null &&
                           ` · ${food.gramsPerUnit}g/unit`}
                       </>
-                    )}
+                    ) : null}
                   </p>
                 </div>
                 {!builtin && (
