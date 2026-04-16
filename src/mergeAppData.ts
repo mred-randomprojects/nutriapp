@@ -71,6 +71,7 @@ function mergeDayLogs(
     if (localLog == null) return cloudLog;
     return {
       ...cloudLog,
+      weightKg: cloudLog.weightKg ?? localLog.weightKg,
       entries: mergeEntries(localLog.entries, cloudLog.entries),
     };
   });

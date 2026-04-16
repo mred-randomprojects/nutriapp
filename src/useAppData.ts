@@ -350,6 +350,29 @@ export function useAppData() {
     [data, persist],
   );
 
+  const updateDayLogWeight = useCallback(
+    (profileId: ProfileId, date: string, weightKg: number | undefined) => {
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          const existingDay = p.dayLogs.find((dl) => dl.date === date);
+          if (existingDay != null) {
+            return {
+              ...p,
+              dayLogs: p.dayLogs.map((dl) =>
+                dl.date === date ? { ...dl, weightKg } : dl,
+              ),
+            };
+          }
+          const newDayLog: DayLog = { date, entries: [], weightKg };
+          return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
+        }),
+      });
+    },
+    [data, persist],
+  );
+
   const updateLogEntry = useCallback(
     (
       profileId: ProfileId,
@@ -399,6 +422,7 @@ export function useAppData() {
     removeLogEntry,
     reorderLogEntries,
     updateLogEntry,
+    updateDayLogWeight,
     setStorageError,
   };
 }

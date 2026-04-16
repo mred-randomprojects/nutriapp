@@ -10,6 +10,7 @@ import {
   Lock,
   LockOpen,
   AlertTriangle,
+  Weight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -115,21 +116,32 @@ function BudgetBar({ actual, budget }: BudgetBarProps) {
 interface MetricCellProps {
   actual: number;
   budget: number | null;
+  dailyGoal: number | null;
   unit: string;
   label: string;
   highlight?: boolean;
 }
 
-function MetricCell({ actual, budget, unit, label, highlight }: MetricCellProps) {
+function MetricCell({ actual, budget, dailyGoal, unit, label, highlight }: MetricCellProps) {
   const over = budget != null && budget > 0 && actual > budget;
+  const suffix = unit !== "kcal" ? "g" : "";
+  const showDailyGoal =
+    dailyGoal != null &&
+    budget != null &&
+    Math.round(dailyGoal) !== Math.round(budget);
   return (
     <div>
       <p className={`text-lg font-bold ${highlight === true ? "text-primary" : ""} ${over ? "text-red-500" : ""}`}>
-        {Math.round(actual)}{unit !== "kcal" ? "g" : ""}
+        {Math.round(actual)}{suffix}
       </p>
       {budget != null && budget > 0 && (
         <p className="text-[10px] text-muted-foreground">
-          / {Math.round(budget)}{unit !== "kcal" ? "g" : ""}
+          / {Math.round(budget)}{suffix}
+          {showDailyGoal === true && (
+            <span className="opacity-60">
+              {" "}of {Math.round(dailyGoal)}{suffix}
+            </span>
+          )}
         </p>
       )}
       <p className="text-[10px] text-muted-foreground">{label}</p>
@@ -172,10 +184,10 @@ function DailyTotalsCard({ totals, goals, schedule, isSelectedDayToday }: DailyT
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-4 gap-2 text-center">
-          <MetricCell actual={totals.calories} budget={budgetCalories} unit="kcal" label="kcal" highlight />
-          <MetricCell actual={totals.protein} budget={budgetProtein} unit="g" label="Protein" />
-          <MetricCell actual={totals.saturatedFat} budget={budgetSatFat} unit="g" label="Sat. Fat" />
-          <MetricCell actual={totals.fiber} budget={budgetFiber} unit="g" label="Fiber" />
+          <MetricCell actual={totals.calories} budget={budgetCalories} dailyGoal={goals?.calories ?? null} unit="kcal" label="kcal" highlight />
+          <MetricCell actual={totals.protein} budget={budgetProtein} dailyGoal={goals?.protein ?? null} unit="g" label="Protein" />
+          <MetricCell actual={totals.saturatedFat} budget={budgetSatFat} dailyGoal={satFatDailyGrams} unit="g" label="Sat. Fat" />
+          <MetricCell actual={totals.fiber} budget={budgetFiber} dailyGoal={goals?.fiber ?? null} unit="g" label="Fiber" />
         </div>
       </CardContent>
     </Card>
@@ -382,6 +394,95 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
   );
 }
 
+interface WeightInputProps {
+  weightKg: number | undefined;
+  isLocked: boolean;
+  onSave: (weightKg: number | undefined) => void;
+}
+
+function WeightInput({ weightKg, isLocked, onSave }: WeightInputProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+
+  function startEditing() {
+    setEditValue(weightKg != null ? String(weightKg) : "");
+    setIsEditing(true);
+  }
+
+  function commitEdit() {
+    const trimmed = editValue.trim();
+    if (trimmed === "") {
+      onSave(undefined);
+    } else {
+      const parsed = parseFloat(trimmed);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        onSave(Math.round(parsed * 10) / 10);
+      }
+    }
+    setIsEditing(false);
+  }
+
+  if (isEditing) {
+    return (
+      <Card className="mb-4">
+        <CardContent className="p-3">
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              commitEdit();
+            }}
+          >
+            <Weight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <Input
+              type="number"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              placeholder="e.g. 75.2"
+              className="h-8 text-sm"
+              step="0.1"
+              min="0"
+              autoFocus
+            />
+            <span className="shrink-0 text-xs text-muted-foreground">kg</span>
+            <Button type="submit" size="sm" className="h-8 shrink-0">
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0"
+              onClick={() => setIsEditing(false)}
+            >
+              Cancel
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card
+      className={`mb-4 transition-colors ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
+      onClick={isLocked ? undefined : startEditing}
+    >
+      <CardContent className="flex items-center gap-2 p-3">
+        <Weight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Weight</span>
+        {weightKg != null ? (
+          <span className="ml-auto text-sm font-medium">{weightKg} kg</span>
+        ) : (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {isLocked ? "—" : "Tap to log"}
+          </span>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function DailyLog({ appData }: DailyLogProps) {
   const navigate = useNavigate();
   const {
@@ -392,6 +493,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     removeLogEntry,
     reorderLogEntries,
     updateLogEntry,
+    updateDayLogWeight,
   } = appData;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -541,6 +643,13 @@ export function DailyLog({ appData }: DailyLogProps) {
         goals={activeProfile.goals ?? null}
         schedule={activeProfile.schedule ?? null}
         isSelectedDayToday={isToday(selectedDate)}
+      />
+
+      {/* Weight */}
+      <WeightInput
+        weightKg={dayLog?.weightKg}
+        isLocked={isLocked}
+        onSave={(w) => updateDayLogWeight(activeProfile.id, dateStr, w)}
       />
 
       {/* Entries list */}

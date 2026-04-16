@@ -78,6 +78,7 @@ export type DayLogItem = LogEntry | SectionSeparator;
 export interface DayLog {
   date: string;
   entries: DayLogItem[];
+  weightKg?: number;
 }
 
 export type SaturatedFatMode = "grams" | "percentage";
