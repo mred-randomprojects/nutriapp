@@ -1,0 +1,37 @@
+src/components/DailyLog.tsx
+  9947c3e2869c913c 106-117,124
+  6ced249deff0e7f4 103,118,138,141,143-145,153,168,207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "46b69035fa8a2263df4fbacdaa18854e3cf10881",
+  "prompts": {
+    "6ced249deff0e7f4": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "5a9a3f8e-582d-4fb1-b7ce-33b6a908aa1e",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 12,
+      "total_deletions": 6,
+      "accepted_lines": 10,
+      "overriden_lines": 0
+    },
+    "9947c3e2869c913c": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "905f27cd-51fb-430e-9dce-f2a672927d2a",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 13,
+      "total_deletions": 3,
+      "accepted_lines": 13,
+      "overriden_lines": 0
+    }
+  }
+}
