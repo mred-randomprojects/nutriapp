@@ -36,32 +36,64 @@ export function useAppData() {
   const [storageError, setStorageError] = useState<string | null>(null);
   const [cloudSynced, setCloudSynced] = useState(false);
   const cloudSaveInFlight = useRef(false);
+  const pendingCloudSave = useRef<AppData | null>(null);
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+
+  const flushCloudSave = useCallback(
+    (uid: string, dataToSave: AppData) => {
+      cloudSaveInFlight.current = true;
+      setCloudSyncing(true);
+      console.log("[cloud-sync] save started");
+      saveCloudData(uid, dataToSave)
+        .then(() => {
+          console.log("[cloud-sync] save succeeded");
+        })
+        .catch((err: unknown) => {
+          console.error("[cloud-sync] save failed:", err);
+        })
+        .finally(() => {
+          const queued = pendingCloudSave.current;
+          pendingCloudSave.current = null;
+          if (queued != null) {
+            console.log("[cloud-sync] flushing queued save");
+            flushCloudSave(uid, queued);
+          } else {
+            cloudSaveInFlight.current = false;
+            setCloudSyncing(false);
+          }
+        });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (user == null || cloudSynced) return;
 
     let cancelled = false;
+    console.log("[cloud-sync] initial load started");
     loadCloudData(user.uid)
       .then((cloudData) => {
         if (cancelled) return;
         const local = loadAppData();
         if (cloudData != null) {
+          console.log("[cloud-sync] cloud data found, merging with local");
           const merged = mergeAppData(local, cloudData);
           setData(merged);
           saveAppData(merged);
-          // Push merged result back so both sides are in sync.
-          saveCloudData(user.uid, merged).catch(() => {});
+          saveCloudData(user.uid, merged)
+            .then(() => console.log("[cloud-sync] initial merge pushed to cloud"))
+            .catch((err: unknown) => console.error("[cloud-sync] initial merge push failed:", err));
         } else {
-          // First time: upload existing localStorage data to the cloud.
-          saveCloudData(user.uid, local).catch(() => {
-            // Best-effort on initial upload; next persist() will retry.
-          });
+          console.log("[cloud-sync] no cloud data, uploading local");
+          saveCloudData(user.uid, local)
+            .then(() => console.log("[cloud-sync] initial upload succeeded"))
+            .catch((err: unknown) => console.error("[cloud-sync] initial upload failed:", err));
         }
         setCloudSynced(true);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        // Offline or error — keep using localStorage data.
+        console.error("[cloud-sync] initial load failed:", err);
         setCloudSynced(true);
       });
 
@@ -84,19 +116,26 @@ export function useAppData() {
         }
       }
 
-      if (user != null && !cloudSaveInFlight.current) {
-        cloudSaveInFlight.current = true;
-        saveCloudData(user.uid, next)
-          .catch(() => {
-            // Silently fail — localStorage is the primary store; cloud is best-effort.
-          })
-          .finally(() => {
-            cloudSaveInFlight.current = false;
-          });
+      if (user != null) {
+        if (cloudSaveInFlight.current) {
+          console.log("[cloud-sync] save in flight, queuing latest state");
+          pendingCloudSave.current = next;
+        } else {
+          flushCloudSave(user.uid, next);
+        }
       }
     },
-    [user],
+    [user, flushCloudSave],
   );
+
+  const forceCloudSync = useCallback(() => {
+    if (user == null) {
+      console.warn("[cloud-sync] force sync skipped: no user");
+      return;
+    }
+    console.log("[cloud-sync] force sync triggered");
+    flushCloudSave(user.uid, data);
+  }, [user, data, flushCloudSave]);
 
   const rawFoods = useMemo(
     () => [...builtinFoods, ...data.foods],
@@ -423,6 +462,8 @@ export function useAppData() {
     storageError,
     foodsMap,
     activeProfile,
+    cloudSyncing,
+    forceCloudSync,
     addFood,
     updateFood,
     deleteFood,
