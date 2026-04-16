@@ -11,6 +11,8 @@ import {
   LockOpen,
   AlertTriangle,
   Weight,
+  MessageSquare,
+  TrendingDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -30,7 +32,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppDataHandle } from "../appDataType";
-import type { DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, ProfileId, WakeSleepSchedule } from "../types";
+import type { DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, ProfileId, WakeSleepSchedule, WeightLossPlan } from "../types";
+import { computeExpectedWeight } from "../calculator";
 import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -202,13 +205,14 @@ interface FoodEntryCardProps {
   food: Food;
   isLocked: boolean;
   onRemove: () => void;
-  onUpdate: (updates: { grams?: number; units?: number }) => void;
+  onUpdate: (updates: { grams?: number; units?: number; notes?: string }) => void;
 }
 
 function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
+  const [editNotes, setEditNotes] = useState("");
 
   const isUnitBased = food.nutritionPerUnit != null;
   const entryNutrition = nutritionForEntry(item, food);
@@ -237,6 +241,7 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
       setInputMode("grams");
       setEditValue(String(item.grams));
     }
+    setEditNotes(item.notes ?? "");
     setIsEditing(true);
   }
 
@@ -246,17 +251,21 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
       setIsEditing(false);
       return;
     }
+    const trimmedNotes = editNotes.trim();
+    const newNotes = trimmedNotes.length > 0 ? trimmedNotes : undefined;
+    const notesChanged = newNotes !== (item.notes ?? undefined);
+
     if (isUnitBased) {
-      if (parsed !== (item.units ?? 0)) {
-        onUpdate({ grams: 0, units: parsed });
+      if (parsed !== (item.units ?? 0) || notesChanged) {
+        onUpdate({ grams: 0, units: parsed, notes: newNotes });
       }
     } else {
       const newGrams =
         inputMode === "units" && gramsPerUnit != null
           ? parsed * gramsPerUnit
           : parsed;
-      if (newGrams !== item.grams) {
-        onUpdate({ grams: newGrams });
+      if (newGrams !== item.grams || notesChanged) {
+        onUpdate({ grams: newGrams, notes: newNotes });
       }
     }
     setIsEditing(false);
@@ -331,26 +340,35 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
             </div>
           )}
           <form
-            className="mt-2 flex items-center gap-2"
+            className="mt-2 flex flex-col gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               commitEdit();
             }}
           >
-            <Input
-              type="number"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              className="h-8 text-sm"
-              step="any"
-              autoFocus
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                className="h-8 text-sm"
+                step="any"
+                autoFocus
+              />
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {inputMode === "grams" ? "g" : "units"}
+              </span>
+              <Button type="submit" size="sm" className="h-8 shrink-0">
+                Save
+              </Button>
+            </div>
+            <textarea
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="Add a note…"
+              className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              rows={2}
             />
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {inputMode === "grams" ? "g" : "units"}
-            </span>
-            <Button type="submit" size="sm" className="h-8 shrink-0">
-              Save
-            </Button>
           </form>
         </CardContent>
       </Card>
@@ -367,6 +385,12 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{food.name}</p>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
+          {item.notes != null && item.notes.length > 0 && (
+            <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground italic">
+              <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
+              <span className="line-clamp-2">{item.notes}</span>
+            </p>
+          )}
         </div>
         <div className="text-right text-xs">
           <p className="font-medium text-primary">
@@ -396,11 +420,12 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
 
 interface WeightInputProps {
   weightKg: number | undefined;
+  expectedWeightKg: number | null;
   isLocked: boolean;
   onSave: (weightKg: number | undefined) => void;
 }
 
-function WeightInput({ weightKg, isLocked, onSave }: WeightInputProps) {
+function WeightInput({ weightKg, expectedWeightKg, isLocked, onSave }: WeightInputProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
 
@@ -463,20 +488,37 @@ function WeightInput({ weightKg, isLocked, onSave }: WeightInputProps) {
     );
   }
 
+  const delta = weightKg != null && expectedWeightKg != null
+    ? weightKg - expectedWeightKg
+    : null;
+
   return (
     <Card
       className={`mb-4 transition-colors ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
       onClick={isLocked ? undefined : startEditing}
     >
-      <CardContent className="flex items-center gap-2 p-3">
-        <Weight className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Weight</span>
-        {weightKg != null ? (
-          <span className="ml-auto text-sm font-medium">{weightKg} kg</span>
-        ) : (
-          <span className="ml-auto text-xs text-muted-foreground">
-            {isLocked ? "—" : "Tap to log"}
-          </span>
+      <CardContent className="p-3">
+        <div className="flex items-center gap-2">
+          <Weight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Weight</span>
+          {weightKg != null ? (
+            <span className="ml-auto text-sm font-medium">{weightKg} kg</span>
+          ) : (
+            <span className="ml-auto text-xs text-muted-foreground">
+              {isLocked ? "—" : "Tap to log"}
+            </span>
+          )}
+        </div>
+        {expectedWeightKg != null && (
+          <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+            <TrendingDown className="h-3 w-3 shrink-0" />
+            <span>Expected: {expectedWeightKg.toFixed(1)} kg</span>
+            {delta != null && (
+              <span className={`ml-auto font-medium ${delta > 0 ? "text-red-500" : "text-emerald-600"}`}>
+                {delta > 0 ? "+" : ""}{delta.toFixed(1)} kg
+              </span>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -648,6 +690,11 @@ export function DailyLog({ appData }: DailyLogProps) {
       {/* Weight */}
       <WeightInput
         weightKg={dayLog?.weightKg}
+        expectedWeightKg={
+          activeProfile.weightLossPlan != null
+            ? computeExpectedWeight(activeProfile.weightLossPlan, dateStr)
+            : null
+        }
         isLocked={isLocked}
         onSave={(w) => updateDayLogWeight(activeProfile.id, dateStr, w)}
       />

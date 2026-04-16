@@ -59,6 +59,7 @@ export interface LogEntry {
   foodId: FoodId;
   grams: number;
   units?: number;
+  notes?: string;
 }
 
 /**
@@ -133,6 +134,17 @@ export interface WakeSleepSchedule {
 }
 
 /**
+ * An active weight loss plan anchored to a start date and weight.
+ * Expected weight for any date is computed linearly from the start.
+ */
+export interface WeightLossPlan {
+  startDate: string;
+  startWeightKg: number;
+  targetWeightKg: number;
+  weeklyLossRateKg: number;
+}
+
+/**
  * A tracking profile / "book" — an independent tracking context.
  */
 export interface Profile {
@@ -143,6 +155,7 @@ export interface Profile {
   goals: NutritionGoals | null;
   schedule: WakeSleepSchedule | null;
   userMetrics: UserMetrics | null;
+  weightLossPlan: WeightLossPlan | null;
 }
 
 /**
