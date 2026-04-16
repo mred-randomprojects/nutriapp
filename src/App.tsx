@@ -9,7 +9,7 @@ import { ProfileManager } from "./components/ProfileManager";
 import { StorageUsage } from "./components/StorageUsage";
 import { AccountPage } from "./components/AccountPage";
 import { LoginPage } from "./components/LoginPage";
-import { Loader2 } from "lucide-react";
+import { CloudUpload, Loader2 } from "lucide-react";
 
 export default function App() {
   return (
@@ -82,6 +82,19 @@ function AuthenticatedApp() {
       <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">
         <StorageUsage />
       </div>
+
+      <button
+        onClick={appData.forceCloudSync}
+        disabled={appData.cloudSyncing}
+        className="fixed bottom-20 right-3 z-40 flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg active:scale-95 disabled:opacity-50"
+      >
+        {appData.cloudSyncing ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <CloudUpload className="h-3.5 w-3.5" />
+        )}
+        Sync to Cloud
+      </button>
 
       <NavBar />
     </div>
