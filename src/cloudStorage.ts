@@ -2,6 +2,22 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import type { AppData } from "./types";
 
+/**
+ * Recursively strips keys whose value is `undefined` so that
+ * Firestore's setDoc never sees an unsupported field value.
+ */
+function stripUndefined(obj: unknown): unknown {
+  if (obj == null || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      clean[key] = stripUndefined(value);
+    }
+  }
+  return clean;
+}
+
 function userDocRef(uid: string) {
   return doc(db, "users", uid, "data", "appData");
 }
@@ -22,9 +38,10 @@ export async function saveCloudData(
   uid: string,
   data: AppData,
 ): Promise<void> {
-  await setDoc(userDocRef(uid), {
+  const payload = stripUndefined({
     foods: data.foods,
     profiles: data.profiles,
     activeProfileId: data.activeProfileId,
-  });
+  }) as Record<string, unknown>;
+  await setDoc(userDocRef(uid), payload);
 }
