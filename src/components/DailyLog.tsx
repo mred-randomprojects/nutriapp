@@ -7,6 +7,8 @@ import {
   Plus,
   Trash2,
   GripVertical,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -50,10 +52,11 @@ function isToday(date: Date): boolean {
 
 interface SortableItemProps {
   item: DayLogItem;
+  isLocked: boolean;
   children: React.ReactNode;
 }
 
-function SortableItem({ item, children }: SortableItemProps) {
+function SortableItem({ item, isLocked, children }: SortableItemProps) {
   const {
     attributes,
     listeners,
@@ -61,7 +64,7 @@ function SortableItem({ item, children }: SortableItemProps) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.id });
+  } = useSortable({ id: item.id, disabled: isLocked });
 
   return (
     <div
@@ -72,14 +75,16 @@ function SortableItem({ item, children }: SortableItemProps) {
         transition: transition ?? undefined,
       }}
     >
-      <button
-        className="touch-none p-1 text-muted-foreground"
-        aria-label="Drag to reorder"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="h-4 w-4" />
-      </button>
+      {!isLocked && (
+        <button
+          className="touch-none p-1 text-muted-foreground"
+          aria-label="Drag to reorder"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      )}
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
@@ -91,11 +96,12 @@ type InputMode = "grams" | "units";
 interface FoodEntryCardProps {
   item: LogEntry;
   food: Food;
+  isLocked: boolean;
   onRemove: () => void;
   onUpdate: (updates: { grams?: number; units?: number }) => void;
 }
 
-function FoodEntryCard({ item, food, onRemove, onUpdate }: FoodEntryCardProps) {
+function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
@@ -190,7 +196,9 @@ function FoodEntryCard({ item, food, onRemove, onUpdate }: FoodEntryCardProps) {
               className="h-8 w-8"
               onClick={(e) => {
                 e.stopPropagation();
-                onRemove();
+                if (window.confirm(`Remove "${food.name}" from this day's log?`)) {
+                  onRemove();
+                }
               }}
             >
               <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -249,8 +257,8 @@ function FoodEntryCard({ item, food, onRemove, onUpdate }: FoodEntryCardProps) {
 
   return (
     <Card
-      className="cursor-pointer transition-colors hover:bg-accent/50"
-      onClick={startEditing}
+      className={`transition-colors ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
+      onClick={isLocked ? undefined : startEditing}
     >
       <CardContent className="flex items-center gap-3 p-3">
         {foodImage}
@@ -266,17 +274,21 @@ function FoodEntryCard({ item, food, onRemove, onUpdate }: FoodEntryCardProps) {
             {entryNutrition.protein}g prot
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-        </Button>
+        {!isLocked && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Remove "${food.name}" from this day's log?`)) {
+                onRemove();
+              }
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -297,6 +309,7 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [customLabel, setCustomLabel] = useState("");
+  const [unlockedDates, setUnlockedDates] = useState<Set<string>>(new Set());
 
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 200, tolerance: 5 },
@@ -307,6 +320,19 @@ export function DailyLog({ appData }: DailyLogProps) {
   const sensors = useSensors(pointerSensor, touchSensor);
 
   const dateStr = formatDate(selectedDate);
+  const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
+
+  function toggleLock() {
+    setUnlockedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateStr)) {
+        next.delete(dateStr);
+      } else {
+        next.add(dateStr);
+      }
+      return next;
+    });
+  }
 
   const dayLog = useMemo(() => {
     if (activeProfile == null) return undefined;
@@ -394,6 +420,19 @@ export function DailyLog({ appData }: DailyLogProps) {
               Today
             </Badge>
           )}
+          {!isToday(selectedDate) && (
+            <button
+              className="ml-2 inline-flex items-center text-muted-foreground hover:text-foreground"
+              onClick={toggleLock}
+              aria-label={isLocked ? "Unlock this day for editing" : "Lock this day to prevent edits"}
+            >
+              {isLocked ? (
+                <Lock className="h-4 w-4" />
+              ) : (
+                <LockOpen className="h-4 w-4" />
+              )}
+            </button>
+          )}
           <p className="text-xs text-muted-foreground">
             {activeProfile.name}
           </p>
@@ -439,6 +478,7 @@ export function DailyLog({ appData }: DailyLogProps) {
       {/* Entries list */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-semibold">Entries</h2>
+        {!isLocked && (
         <div className="flex gap-2">
           <div className="relative">
             <Button
@@ -503,6 +543,7 @@ export function DailyLog({ appData }: DailyLogProps) {
             Add Entry
           </Button>
         </div>
+        )}
       </div>
 
       {(dayLog == null || dayLog.entries.length === 0) && (
@@ -523,27 +564,31 @@ export function DailyLog({ appData }: DailyLogProps) {
             {dayLog?.entries.map((item) => {
               if (item.type === "separator") {
                 return (
-                  <SortableItem key={item.id} item={item}>
+                  <SortableItem key={item.id} item={item} isLocked={isLocked}>
                     <div className="flex items-center gap-2 pt-2 first:pt-0">
                       <div className="h-px flex-1 bg-border" />
                       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {item.label}
                       </span>
                       <div className="h-px flex-1 bg-border" />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() =>
-                          removeLogEntry(
-                            activeProfile.id as ProfileId,
-                            dateStr,
-                            item.id as LogEntryId,
-                          )
-                        }
-                      >
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
+                      {!isLocked && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => {
+                            if (window.confirm(`Remove "${item.label}" section separator?`)) {
+                              removeLogEntry(
+                                activeProfile.id as ProfileId,
+                                dateStr,
+                                item.id as LogEntryId,
+                              );
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   </SortableItem>
                 );
@@ -553,10 +598,11 @@ export function DailyLog({ appData }: DailyLogProps) {
               if (food == null) return null;
 
               return (
-                <SortableItem key={item.id} item={item}>
+                <SortableItem key={item.id} item={item} isLocked={isLocked}>
                   <FoodEntryCard
                     item={item}
                     food={food}
+                    isLocked={isLocked}
                     onRemove={() =>
                       removeLogEntry(
                         activeProfile.id as ProfileId,
