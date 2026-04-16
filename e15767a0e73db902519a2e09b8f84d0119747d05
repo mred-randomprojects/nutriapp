@@ -1,0 +1,31 @@
+README.md
+  fc1620cc1715daaa 131-133
+src/nutrition.ts
+  fc1620cc1715daaa 1,65-93
+src/types.ts
+  fc1620cc1715daaa 84-101,110-111
+src/components/ProfileManager.tsx
+  fc1620cc1715daaa 2,4,8,13-156,162,167,312-320,339-348
+src/useAppData.ts
+  fc1620cc1715daaa 6,14,189-190,239-254,393
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "e15767a0e73db902519a2e09b8f84d0119747d05",
+  "prompts": {
+    "fc1620cc1715daaa": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "06019d98-5f5c-434e-b0c7-c54cef7ab459",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 249,
+      "total_deletions": 5,
+      "accepted_lines": 249,
+      "overriden_lines": 0
+    }
+  }
+}
