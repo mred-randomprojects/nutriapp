@@ -13,6 +13,7 @@ import type {
   SectionSeparator,
   UserMetrics,
   WakeSleepSchedule,
+  WeightLossPlan,
 } from "./types";
 import { generateId } from "./types";
 import { loadAppData, saveAppData, StorageQuotaError } from "./storage";
@@ -190,6 +191,7 @@ export function useAppData() {
         goals: null,
         schedule: null,
         userMetrics: null,
+        weightLossPlan: null,
       };
       const next: AppData = {
         ...data,
@@ -350,6 +352,18 @@ export function useAppData() {
     [data, persist],
   );
 
+  const setWeightLossPlan = useCallback(
+    (profileId: ProfileId, plan: WeightLossPlan | null) => {
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) =>
+          p.id === profileId ? { ...p, weightLossPlan: plan } : p,
+        ),
+      });
+    },
+    [data, persist],
+  );
+
   const updateDayLogWeight = useCallback(
     (profileId: ProfileId, date: string, weightKg: number | undefined) => {
       persist({
@@ -423,6 +437,7 @@ export function useAppData() {
     reorderLogEntries,
     updateLogEntry,
     updateDayLogWeight,
+    setWeightLossPlan,
     setStorageError,
   };
 }

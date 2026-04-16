@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { Check, Plus, Trash2, Pencil, Target, HelpCircle, Calculator } from "lucide-react";
+import { format } from "date-fns";
+import { Check, Plus, Trash2, Pencil, Target, HelpCircle, Calculator, TrendingDown } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import type {
   ActivityLevel,
@@ -9,11 +10,13 @@ import type {
   Sex,
   UserMetrics,
   WakeSleepSchedule,
+  WeightLossPlan,
 } from "../types";
 import {
   ACTIVITY_LABELS,
   ACTIVITY_LEVELS,
   computeDeficitInfo,
+  computeExpectedWeight,
   computeRecommendedGoals,
   computeWeightGoalEstimate,
 } from "../calculator";
@@ -44,15 +47,17 @@ interface GoalsEditorProps {
   goals: NutritionGoals | null;
   schedule: WakeSleepSchedule | null;
   userMetrics: UserMetrics | null;
+  weightLossPlan: WeightLossPlan | null;
   onSave: (
     goals: NutritionGoals | null,
     schedule: WakeSleepSchedule | null,
     userMetrics: UserMetrics | null,
   ) => void;
+  onSetPlan: (plan: WeightLossPlan | null) => void;
   onClose: () => void;
 }
 
-function GoalsEditor({ goals, schedule, userMetrics, onSave, onClose }: GoalsEditorProps) {
+function GoalsEditor({ goals, schedule, userMetrics, weightLossPlan, onSave, onSetPlan, onClose }: GoalsEditorProps) {
   // Body metrics state
   const [sex, setSex] = useState<Sex>(userMetrics?.sex ?? "male");
   const [age, setAge] = useState(String(userMetrics?.age ?? ""));
@@ -427,6 +432,13 @@ function GoalsEditor({ goals, schedule, userMetrics, onSave, onClose }: GoalsEdi
         The daily budget grows linearly from wake to sleep hour.
       </p>
 
+      {/* Weight Loss Plan */}
+      <WeightLossPlanSection
+        plan={weightLossPlan}
+        userMetrics={parsedMetrics}
+        onSetPlan={onSetPlan}
+      />
+
       <div className="flex gap-2">
         <Button size="sm" onClick={handleSave}>
           Save Goals
@@ -439,12 +451,167 @@ function GoalsEditor({ goals, schedule, userMetrics, onSave, onClose }: GoalsEdi
   );
 }
 
+interface WeightLossPlanSectionProps {
+  plan: WeightLossPlan | null;
+  userMetrics: UserMetrics | null;
+  onSetPlan: (plan: WeightLossPlan | null) => void;
+}
+
+function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanSectionProps) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [startWeight, setStartWeight] = useState("");
+  const [targetWeight, setTargetWeight] = useState("");
+  const [lossRate, setLossRate] = useState("");
+
+  function startCreating() {
+    setStartWeight(String(userMetrics?.weightKg ?? ""));
+    setTargetWeight(String(userMetrics?.targetWeightKg ?? ""));
+    setLossRate(String(userMetrics?.weightLossRateKg ?? "0.5"));
+    setIsCreating(true);
+  }
+
+  function handleCreate() {
+    const sw = parseFloat(startWeight);
+    const tw = parseFloat(targetWeight);
+    const lr = parseFloat(lossRate);
+    if (Number.isNaN(sw) || Number.isNaN(tw) || Number.isNaN(lr)) return;
+    if (sw <= 0 || tw <= 0 || lr <= 0 || tw >= sw) return;
+
+    onSetPlan({
+      startDate: format(new Date(), "yyyy-MM-dd"),
+      startWeightKg: sw,
+      targetWeightKg: tw,
+      weeklyLossRateKg: lr,
+    });
+    setIsCreating(false);
+  }
+
+  if (plan != null) {
+    const expectedToday = computeExpectedWeight(plan, format(new Date(), "yyyy-MM-dd"));
+    const totalKgToLose = plan.startWeightKg - plan.targetWeightKg;
+    const totalWeeks = totalKgToLose / plan.weeklyLossRateKg;
+    const estimatedEndDate = new Date(plan.startDate);
+    estimatedEndDate.setDate(estimatedEndDate.getDate() + Math.ceil(totalWeeks * 7));
+
+    return (
+      <>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Weight Loss Plan
+        </p>
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+          <div className="flex items-center gap-1.5 font-medium">
+            <TrendingDown className="h-3.5 w-3.5" />
+            Active plan
+          </div>
+          <p className="mt-1">
+            {plan.startWeightKg} kg → {plan.targetWeightKg} kg at {plan.weeklyLossRateKg} kg/week
+          </p>
+          <p>Started {plan.startDate}</p>
+          {expectedToday != null && (
+            <p className="font-medium">
+              Expected today: {expectedToday.toFixed(1)} kg
+            </p>
+          )}
+          <p>
+            ETA: {formatDate(estimatedEndDate)}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2 h-7 text-xs"
+            onClick={() => onSetPlan(null)}
+          >
+            <Trash2 className="mr-1 h-3 w-3" />
+            Remove Plan
+          </Button>
+        </div>
+      </>
+    );
+  }
+
+  if (isCreating) {
+    return (
+      <>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Start Weight Loss Plan
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <Label htmlFor="plan-start-weight" className="text-xs">Start (kg)</Label>
+            <Input
+              id="plan-start-weight"
+              type="number"
+              value={startWeight}
+              onChange={(e) => setStartWeight(e.target.value)}
+              placeholder="e.g. 85"
+              className="h-8 text-sm"
+              step="0.1"
+              min={1}
+            />
+          </div>
+          <div>
+            <Label htmlFor="plan-target-weight" className="text-xs">Target (kg)</Label>
+            <Input
+              id="plan-target-weight"
+              type="number"
+              value={targetWeight}
+              onChange={(e) => setTargetWeight(e.target.value)}
+              placeholder="e.g. 75"
+              className="h-8 text-sm"
+              step="0.1"
+              min={1}
+            />
+          </div>
+          <div>
+            <Label htmlFor="plan-loss-rate" className="text-xs">Rate (kg/wk)</Label>
+            <Input
+              id="plan-loss-rate"
+              type="number"
+              value={lossRate}
+              onChange={(e) => setLossRate(e.target.value)}
+              placeholder="0.5"
+              className="h-8 text-sm"
+              step="0.1"
+              min={0.1}
+            />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={handleCreate}>
+            Start Plan
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setIsCreating(false)}>
+            Cancel
+          </Button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Weight Loss Plan
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full"
+        onClick={startCreating}
+      >
+        <TrendingDown className="mr-1.5 h-3.5 w-3.5" />
+        Start a Weight Loss Plan
+      </Button>
+    </>
+  );
+}
+
 interface ProfileManagerProps {
   appData: AppDataHandle;
 }
 
 export function ProfileManager({ appData }: ProfileManagerProps) {
-  const { data, addProfile, setActiveProfile, deleteProfile, renameProfile, updateProfileGoals } =
+  const { data, addProfile, setActiveProfile, deleteProfile, renameProfile, updateProfileGoals, setWeightLossPlan } =
     appData;
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<ProfileId | null>(null);
@@ -626,8 +793,12 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                     goals={profile.goals ?? null}
                     schedule={profile.schedule ?? null}
                     userMetrics={profile.userMetrics ?? null}
+                    weightLossPlan={profile.weightLossPlan ?? null}
                     onSave={(goals, schedule, userMetrics) =>
                       updateProfileGoals(profile.id as ProfileId, goals, schedule, userMetrics)
+                    }
+                    onSetPlan={(plan) =>
+                      setWeightLossPlan(profile.id as ProfileId, plan)
                     }
                     onClose={() => setGoalsEditingId(null)}
                   />

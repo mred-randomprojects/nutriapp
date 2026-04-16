@@ -1,4 +1,5 @@
-import type { ActivityLevel, Sex, UserMetrics } from "./types";
+import { differenceInCalendarDays } from "date-fns";
+import type { ActivityLevel, Sex, UserMetrics, WeightLossPlan } from "./types";
 
 const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
   sedentary: 1.2,
@@ -145,12 +146,26 @@ function computeWeightGoalEstimate(
   return { estimatedDays: totalDays, estimatedDate };
 }
 
+/**
+ * Returns the expected weight on a given date according to a linear weight
+ * loss plan. Returns null if the date is before the plan start or the plan
+ * has already reached its target.
+ */
+function computeExpectedWeight(plan: WeightLossPlan, date: string): number | null {
+  const daysSinceStart = differenceInCalendarDays(new Date(date), new Date(plan.startDate));
+  if (daysSinceStart < 0) return null;
+
+  const expectedWeight = plan.startWeightKg - (daysSinceStart / 7) * plan.weeklyLossRateKg;
+  return Math.max(expectedWeight, plan.targetWeightKg);
+}
+
 export {
   ACTIVITY_LABELS,
   ACTIVITY_LEVELS,
   ACTIVITY_MULTIPLIERS,
   computeBmr,
   computeDeficitInfo,
+  computeExpectedWeight,
   computeRecommendedGoals,
   computeTdee,
   computeWeightGoalEstimate,

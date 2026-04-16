@@ -45,6 +45,7 @@ function mergeProfiles(
     return {
       ...cloudProfile,
       userMetrics: cloudProfile.userMetrics ?? localProfile.userMetrics ?? null,
+      weightLossPlan: cloudProfile.weightLossPlan ?? localProfile.weightLossPlan ?? null,
       dayLogs: mergeDayLogs(localProfile.dayLogs, cloudProfile.dayLogs),
     };
   });

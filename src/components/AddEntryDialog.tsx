@@ -34,6 +34,7 @@ export function AddEntryDialog({
   const [inputMode, setInputMode] = useState<InputMode>("grams");
   const [amount, setAmount] = useState("");
   const [search, setSearch] = useState("");
+  const [notes, setNotes] = useState("");
 
   const filteredFoods = allFoods.filter((f) =>
     f.name.toLowerCase().includes(search.toLowerCase()),
@@ -63,17 +64,21 @@ export function AddEntryDialog({
 
   function handleAdd() {
     if (selectedFoodId == null || parsedAmount <= 0) return;
+    const trimmedNotes = notes.trim();
+    const entryNotes = trimmedNotes.length > 0 ? trimmedNotes : undefined;
     if (isUnitBased) {
       addLogEntry(profileId, date, {
         foodId: selectedFoodId,
         grams: 0,
         units: parsedAmount,
+        notes: entryNotes,
       });
     } else {
       if (totalGrams <= 0) return;
       addLogEntry(profileId, date, {
         foodId: selectedFoodId,
         grams: totalGrams,
+        notes: entryNotes,
       });
     }
     resetAndClose();
@@ -97,6 +102,7 @@ export function AddEntryDialog({
       setInputMode("grams");
       setAmount("");
       setSearch("");
+      setNotes("");
     }
     onOpenChange(nextOpen);
   }
@@ -280,6 +286,18 @@ export function AddEntryDialog({
                 </div>
               </div>
             )}
+
+            <div>
+              <Label htmlFor="entry-notes">Notes (optional)</Label>
+              <textarea
+                id="entry-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. felt bloated, ate too fast…"
+                className="mt-1 w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                rows={2}
+              />
+            </div>
 
             <Button className="w-full" onClick={handleAdd}>
               Add to Log
