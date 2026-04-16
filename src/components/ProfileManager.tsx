@@ -6,6 +6,8 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
+import { ConfirmDialog } from "./ConfirmDialog";
+import type { PendingAction } from "./ConfirmDialog";
 
 interface ProfileManagerProps {
   appData: AppDataHandle;
@@ -17,6 +19,7 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<ProfileId | null>(null);
   const [editName, setEditName] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
 
   function handleCreate() {
     const trimmed = newName.trim();
@@ -159,15 +162,14 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Delete profile "${profile.name}"? All its logs will be lost.`,
-                            )
-                          ) {
-                            deleteProfile(profile.id as ProfileId);
-                          }
-                        }}
+                        onClick={() =>
+                          setPendingDelete({
+                            title: "Delete profile",
+                            description: `Delete profile "${profile.name}"? All its logs will be lost.`,
+                            onConfirm: () =>
+                              deleteProfile(profile.id as ProfileId),
+                          })
+                        }
                       >
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
@@ -179,6 +181,11 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
           );
         })}
       </div>
+
+      <ConfirmDialog
+        pending={pendingDelete}
+        onClose={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
