@@ -1,0 +1,31 @@
+src/components/AddEntryDialog.tsx
+  fc1620cc1715daaa 83,94-103,105
+src/components/FoodList.tsx
+  fc1620cc1715daaa 5-6,11-12,22,130-134,145-149
+src/components/ConfirmDialog.tsx
+  fc1620cc1715daaa 1-56
+src/components/DailyLog.tsx
+  fc1620cc1715daaa 12,39-40,601-641
+src/components/ProfileManager.tsx
+  fc1620cc1715daaa 9-10,22,165-172,184-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "249014a6c8e239932ef8d2a6710d4b8769eae462",
+  "prompts": {
+    "fc1620cc1715daaa": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "06019d98-5f5c-434e-b0c7-c54cef7ab459",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 143,
+      "total_deletions": 80,
+      "accepted_lines": 143,
+      "overriden_lines": 0
+    }
+  }
+}
