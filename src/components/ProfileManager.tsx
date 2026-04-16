@@ -67,6 +67,9 @@ function GoalsEditor({ goals, schedule, userMetrics, onSave, onClose }: GoalsEdi
   const [proteinPerKg, setProteinPerKg] = useState(
     String(userMetrics?.proteinPerKg ?? "1.8"),
   );
+  const [weightLossRate, setWeightLossRate] = useState(
+    String(userMetrics?.weightLossRateKg ?? "0.5"),
+  );
 
   // Goals state
   const [calories, setCalories] = useState(String(goals?.calories ?? ""));
@@ -83,6 +86,7 @@ function GoalsEditor({ goals, schedule, userMetrics, onSave, onClose }: GoalsEdi
     const w = parseFloat(weightKg);
     const ppk = parseFloat(proteinPerKg);
     const tw = parseFloat(targetWeight);
+    const wlr = parseFloat(weightLossRate);
 
     if (Number.isNaN(a) || Number.isNaN(h) || Number.isNaN(w)) return null;
     if (a <= 0 || h <= 0 || w <= 0) return null;
@@ -95,8 +99,9 @@ function GoalsEditor({ goals, schedule, userMetrics, onSave, onClose }: GoalsEdi
       activityLevel,
       targetWeightKg: Number.isNaN(tw) || tw <= 0 ? null : tw,
       proteinPerKg: Number.isNaN(ppk) || ppk <= 0 ? 1.8 : ppk,
+      weightLossRateKg: Number.isNaN(wlr) || wlr <= 0 ? 0.5 : wlr,
     };
-  }, [sex, age, heightCm, weightKg, activityLevel, targetWeight, proteinPerKg]);
+  }, [sex, age, heightCm, weightKg, activityLevel, targetWeight, proteinPerKg, weightLossRate]);
 
   function handleCalculate() {
     if (parsedMetrics == null) return;
@@ -258,6 +263,26 @@ function GoalsEditor({ goals, schedule, userMetrics, onSave, onClose }: GoalsEdi
             min={0.1}
           />
         </div>
+        {parsedMetrics != null &&
+          parsedMetrics.targetWeightKg != null &&
+          parsedMetrics.targetWeightKg < parsedMetrics.weightKg && (
+          <div className="col-span-2">
+            <Label htmlFor="metric-loss-rate" className="text-xs">
+              Weight Loss Rate (kg/week)
+              <Tooltip text="How fast you want to lose weight. 0.5 kg/week is moderate, 1.0 kg/week is aggressive. The calculator subtracts the corresponding deficit from your TDEE." />
+            </Label>
+            <Input
+              id="metric-loss-rate"
+              type="number"
+              value={weightLossRate}
+              onChange={(e) => setWeightLossRate(e.target.value)}
+              placeholder="0.5"
+              className="h-8 text-sm"
+              step="0.1"
+              min={0.1}
+            />
+          </div>
+        )}
       </div>
 
       <Button

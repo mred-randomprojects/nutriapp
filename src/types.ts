@@ -104,6 +104,8 @@ export interface UserMetrics {
   targetWeightKg: number | null;
   /** Grams of protein per kg of body weight (default 1.8, range 1.6–2.2 for lifters). */
   proteinPerKg: number;
+  /** Desired weight loss rate in kg/week (e.g. 0.5). Only used when targetWeightKg < weightKg. */
+  weightLossRateKg: number;
 }
 
 /**
