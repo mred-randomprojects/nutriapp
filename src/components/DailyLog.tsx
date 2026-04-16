@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { format, addDays, subDays } from "date-fns";
 import {
   ChevronLeft,
@@ -552,6 +552,21 @@ export function DailyLog({ appData }: DailyLogProps) {
   });
   const sensors = useSensors(pointerSensor, touchSensor);
 
+  const goToToday = useCallback(() => setSelectedDate(new Date()), []);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== "t" && e.key !== "T") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((e.target as HTMLElement).isContentEditable) return;
+      goToToday();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [goToToday]);
+
   const dateStr = formatDate(selectedDate);
   const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
 
@@ -644,7 +659,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         <div className="text-center">
           <button
             className="text-lg font-bold hover:text-primary"
-            onClick={() => setSelectedDate(new Date())}
+            onClick={goToToday}
           >
             {format(selectedDate, "EEE, MMM d")}
           </button>
@@ -678,6 +693,14 @@ export function DailyLog({ appData }: DailyLogProps) {
           <ChevronRight className="h-5 w-5" />
         </Button>
       </div>
+
+      {!isToday(selectedDate) && (
+        <div className="mb-4 flex justify-center">
+          <Button variant="outline" size="sm" onClick={goToToday}>
+            Go to Today
+          </Button>
+        </div>
+      )}
 
       {/* Daily totals */}
       <DailyTotalsCard
