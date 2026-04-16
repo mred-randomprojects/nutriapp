@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { format, addDays, subDays } from "date-fns";
 import {
   ChevronLeft,
@@ -213,6 +213,21 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
   const [editNotes, setEditNotes] = useState("");
+  const editCardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        editCardRef.current != null &&
+        !editCardRef.current.contains(e.target as Node)
+      ) {
+        setIsEditing(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isEditing]);
 
   const isUnitBased = food.nutritionPerUnit != null;
   const entryNutrition = nutritionForEntry(item, food);
@@ -296,7 +311,7 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
 
   if (isEditing) {
     return (
-      <Card>
+      <Card ref={editCardRef}>
         <CardContent className="p-3">
           <div className="flex items-center gap-3">
             {foodImage}
