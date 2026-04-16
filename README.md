@@ -122,3 +122,9 @@ The values are the same as in your `.env` file.
   - **Firestore** — async cloud sync for cross-device access
 - On app load, data from Firestore and localStorage is **merged** (union of both, no data is ever discarded)
 - Firestore document path: `users/{uid}/data/appData`
+
+## Future Features
+
+- [ ] **Argentinian food database** — curate a comprehensive database of common Argentinian foods with accurate nutrition info. Users can optionally subscribe to the full database or cherry-pick individual items from it into their personal food list.
+- [ ] **AI food recognition from photos** — take a picture of a food item and have an AI model automatically identify the food, estimate its name, and fill in nutrition info (calories, protein, fat, fiber, etc.). This would streamline the food-creation flow significantly.
+- [ ] **Storage support** — add Firebase Storage (or equivalent) for storing user-uploaded files such as food photos.
