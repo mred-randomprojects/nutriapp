@@ -1,0 +1,25 @@
+README.md
+  fc1620cc1715daaa 125-130
+src/components/DailyLog.tsx
+  fc1620cc1715daaa 10-11,55,59,67,78-87,99,104,199-201,260-261,277-291,312,323-335,423-435,481,546,567,574-591,601,605
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "319b64efb570812c978eb751a83fa5cfdaab7785",
+  "prompts": {
+    "fc1620cc1715daaa": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "06019d98-5f5c-434e-b0c7-c54cef7ab459",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 93,
+      "total_deletions": 41,
+      "accepted_lines": 93,
+      "overriden_lines": 0
+    }
+  }
+}
