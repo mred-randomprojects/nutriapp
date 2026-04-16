@@ -3,6 +3,7 @@ import type {
   AppData,
   Food,
   FoodId,
+  NutritionGoals,
   Profile,
   ProfileId,
   DayLog,
@@ -10,6 +11,7 @@ import type {
   LogEntryId,
   DayLogItem,
   SectionSeparator,
+  WakeSleepSchedule,
 } from "./types";
 import { generateId } from "./types";
 import { loadAppData, saveAppData, StorageQuotaError } from "./storage";
@@ -184,6 +186,8 @@ export function useAppData() {
         name,
         dayLogs: [],
         createdAt: new Date().toISOString(),
+        goals: null,
+        schedule: null,
       };
       const next: AppData = {
         ...data,
@@ -226,6 +230,22 @@ export function useAppData() {
         ...data,
         profiles: data.profiles.map((p) =>
           p.id === profileId ? { ...p, name } : p,
+        ),
+      });
+    },
+    [data, persist],
+  );
+
+  const updateProfileGoals = useCallback(
+    (
+      profileId: ProfileId,
+      goals: NutritionGoals | null,
+      schedule: WakeSleepSchedule | null,
+    ) => {
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) =>
+          p.id === profileId ? { ...p, goals, schedule } : p,
         ),
       });
     },
@@ -370,6 +390,7 @@ export function useAppData() {
     setActiveProfile,
     deleteProfile,
     renameProfile,
+    updateProfileGoals,
     addLogEntry,
     addSeparator,
     removeLogEntry,

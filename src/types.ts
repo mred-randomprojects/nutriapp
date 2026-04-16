@@ -80,6 +80,31 @@ export interface DayLog {
   entries: DayLogItem[];
 }
 
+export type SaturatedFatMode = "grams" | "percentage";
+
+/**
+ * Daily nutrition targets for a profile.
+ * When saturatedFatMode is "percentage", saturatedFat stores a percentage of
+ * total calories (e.g. 10 means 10%). The gram budget is derived at display
+ * time via: (calories * saturatedFat / 100) / 9.
+ */
+export interface NutritionGoals {
+  calories: number;
+  protein: number;
+  saturatedFat: number;
+  saturatedFatMode: SaturatedFatMode;
+  fiber: number;
+}
+
+/**
+ * Wake/sleep hours that define the "active day" window for budget calculation.
+ * Hours are 0-23 in the user's local timezone.
+ */
+export interface WakeSleepSchedule {
+  wakeHour: number;
+  sleepHour: number;
+}
+
 /**
  * A tracking profile / "book" — an independent tracking context.
  */
@@ -88,6 +113,8 @@ export interface Profile {
   name: string;
   dayLogs: DayLog[];
   createdAt: string;
+  goals: NutritionGoals | null;
+  schedule: WakeSleepSchedule | null;
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { ComboIngredient, DayLogItem, Food, LogEntry, NutritionPer100g, NutritionValues } from "./types";
+import type { ComboIngredient, DayLogItem, Food, LogEntry, NutritionPer100g, NutritionValues, WakeSleepSchedule } from "./types";
 
 /**
  * Calculates the total nutrition for a single log entry.
@@ -60,6 +60,35 @@ export function sumNutrition(
     saturatedFat: Math.round(totals.saturatedFat * 10) / 10,
     fiber: Math.round(totals.fiber * 10) / 10,
   };
+}
+
+// --- Time-proportional budget ---
+
+const DEFAULT_WAKE_HOUR = 7;
+const DEFAULT_SLEEP_HOUR = 23;
+
+/**
+ * Returns 0.0–1.0 representing how far through waking hours `now` is.
+ * Before wake: 0. After sleep: 1. Between: linear interpolation.
+ */
+export function getTimeBudgetFraction(
+  now: Date,
+  schedule: WakeSleepSchedule | null,
+): number {
+  const wakeHour = schedule?.wakeHour ?? DEFAULT_WAKE_HOUR;
+  const sleepHour = schedule?.sleepHour ?? DEFAULT_SLEEP_HOUR;
+  const totalWakingHours = sleepHour - wakeHour;
+
+  if (totalWakingHours <= 0) return 1;
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const wakeMinutes = wakeHour * 60;
+  const sleepMinutes = sleepHour * 60;
+
+  if (currentMinutes <= wakeMinutes) return 0;
+  if (currentMinutes >= sleepMinutes) return 1;
+
+  return (currentMinutes - wakeMinutes) / (sleepMinutes - wakeMinutes);
 }
 
 // --- Combo food helpers ---

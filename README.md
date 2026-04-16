@@ -128,3 +128,6 @@ The values are the same as in your `.env` file.
 - [ ] **Argentinian food database** — curate a comprehensive database of common Argentinian foods with accurate nutrition info. Users can optionally subscribe to the full database or cherry-pick individual items from it into their personal food list.
 - [ ] **AI food recognition from photos** — take a picture of a food item and have an AI model automatically identify the food, estimate its name, and fill in nutrition info (calories, protein, fat, fiber, etc.). This would streamline the food-creation flow significantly.
 - [ ] **Storage support** — add Firebase Storage (or equivalent) for storing user-uploaded files such as food photos.
+- [ ] **Weekly/monthly summary view** — show average daily calories, protein, sat. fat, and fiber over the last 7 or 30 days. Give users a feedback loop that makes tracking feel worthwhile instead of each day being an island.
+- [ ] **Nutrition targets / goals** — let users set calorie/protein/fiber targets per profile, and show progress bars or color-coding (green = on track, red = over) in the daily totals card.
+- [ ] **Cloud sync status indicator** — show a small cloud icon (checkmark/spinner/warning) so users know whether their data is synced, syncing, or failed. Right now cloud sync failures are completely silent.
