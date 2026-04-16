@@ -1,0 +1,27 @@
+src/components/ProfileManager.tsx
+  8320efc5001541e0 70-72,89,102,104,266-285
+src/types.ts
+  8320efc5001541e0 107-108
+src/calculator.ts
+  8320efc5001541e0 51-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "33ea2f1306a362be9b75a1591826165b980532e5",
+  "prompts": {
+    "8320efc5001541e0": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "765fe66e-bc68-42ff-b443-ae5eedfeeb1a",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 39,
+      "total_deletions": 2,
+      "accepted_lines": 39,
+      "overriden_lines": 0
+    }
+  }
+}
