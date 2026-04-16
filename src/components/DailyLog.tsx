@@ -107,11 +107,11 @@ function budgetBarColor(actual: number, budget: number, invert: boolean): string
   const ratio = actual / budget;
   if (invert) {
     if (ratio > 1) return "bg-emerald-500";
-    if (ratio >= 0.75) return "bg-yellow-500";
+    if (ratio >= 0.9) return "bg-yellow-500";
     return "bg-red-500";
   }
   if (ratio > 1) return "bg-red-500";
-  if (ratio >= 0.75) return "bg-yellow-500";
+  if (ratio >= 0.9) return "bg-yellow-500";
   return "bg-emerald-500";
 }
 
@@ -124,6 +124,17 @@ function BudgetBar({ actual, budget, invertColor }: BudgetBarProps) {
         className={`h-full rounded-full transition-all duration-300 ${budgetBarColor(actual, budget, invertColor === true)}`}
         style={{ width: `${pct}%` }}
       />
+    </div>
+  );
+}
+
+function SectionSubtotal({ totals }: { totals: NutritionValues }) {
+  return (
+    <div className="mt-1 flex justify-end gap-3 px-1 text-[11px] text-muted-foreground">
+      <span>{Math.round(totals.calories)} kcal</span>
+      <span>{Math.round(totals.protein)}g prot</span>
+      <span>{Math.round(totals.saturatedFat)}g sat</span>
+      <span>{Math.round(totals.fiber)}g fib</span>
     </div>
   );
 }
@@ -648,6 +659,32 @@ export function DailyLog({ appData }: DailyLogProps) {
     return sumNutrition(dayLog.entries, foodsMap);
   }, [dayLog, foodsMap]);
 
+  const sectionSubtotals = useMemo(() => {
+    if (dayLog == null) return new Map<LogEntryId, NutritionValues>();
+    const result = new Map<LogEntryId, NutritionValues>();
+    let currentSeparatorId: LogEntryId | null = null;
+    let currentItems: LogEntry[] = [];
+
+    function flushSection() {
+      if (currentSeparatorId != null && currentItems.length > 0) {
+        result.set(currentSeparatorId, sumNutrition(currentItems, foodsMap));
+      }
+      currentItems = [];
+    }
+
+    for (const item of dayLog.entries) {
+      if (item.type === "separator") {
+        flushSection();
+        currentSeparatorId = item.id as LogEntryId;
+      } else {
+        currentItems.push(item);
+      }
+    }
+    flushSection();
+
+    return result;
+  }, [dayLog, foodsMap]);
+
   if (activeProfile == null) {
     return (
       <div className="p-4">
@@ -845,7 +882,23 @@ export function DailyLog({ appData }: DailyLogProps) {
       >
         <SortableContext items={entryIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
-            {dayLog?.entries.map((item) => {
+            {dayLog?.entries.map((item, index) => {
+              const nextItem = dayLog.entries[index + 1];
+              const isLastBeforeNextSection = nextItem?.type === "separator" || index === dayLog.entries.length - 1;
+              const showSubtotal = item.type !== "separator" && isLastBeforeNextSection;
+
+              let currentSeparatorId: LogEntryId | null = null;
+              if (showSubtotal) {
+                for (let i = index; i >= 0; i--) {
+                  const prev = dayLog.entries[i];
+                  if (prev.type === "separator") {
+                    currentSeparatorId = prev.id as LogEntryId;
+                    break;
+                  }
+                }
+              }
+              const subtotal = currentSeparatorId != null ? sectionSubtotals.get(currentSeparatorId) : undefined;
+
               if (item.type === "separator") {
                 return (
                   <SortableItem key={item.id} item={item} isLocked={isLocked}>
@@ -920,6 +973,9 @@ export function DailyLog({ appData }: DailyLogProps) {
                         )}
                       </CardContent>
                     </Card>
+                    {subtotal != null && (
+                      <SectionSubtotal totals={subtotal} />
+                    )}
                   </SortableItem>
                 );
               }
@@ -951,6 +1007,9 @@ export function DailyLog({ appData }: DailyLogProps) {
                       )
                     }
                   />
+                  {subtotal != null && (
+                    <SectionSubtotal totals={subtotal} />
+                  )}
                 </SortableItem>
               );
             })}
