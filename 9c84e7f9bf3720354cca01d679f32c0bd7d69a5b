@@ -1,0 +1,58 @@
+src/useAppData.ts
+  771a634865227e7f 353-375,425
+src/types.ts
+  771a634865227e7f 81
+src/components/DailyLog.tsx
+  771a634865227e7f 13,397-485,496,648-654
+  a32f0120224e9e3d 119,125,127-131,135,139-144,187-190
+src/mergeAppData.ts
+  771a634865227e7f 74
+src/components/ui/input.tsx
+  92c59834662af325 5-10,19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "9c84e7f9bf3720354cca01d679f32c0bd7d69a5b",
+  "prompts": {
+    "771a634865227e7f": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "35b1d086-fa19-4a6e-9da0-a02e5dd38ddd",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 124,
+      "total_deletions": 0,
+      "accepted_lines": 124,
+      "overriden_lines": 0
+    },
+    "92c59834662af325": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "cf2a27b2-7b89-4e88-8862-57c23665c51a",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 7,
+      "total_deletions": 1,
+      "accepted_lines": 7,
+      "overriden_lines": 0
+    },
+    "a32f0120224e9e3d": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "3eea1b72-f6c9-4954-872f-c3fd066a0c1f",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 19,
+      "total_deletions": 8,
+      "accepted_lines": 18,
+      "overriden_lines": 0
+    }
+  }
+}
