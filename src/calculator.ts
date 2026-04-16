@@ -48,7 +48,17 @@ interface RecommendedGoals {
 
 function computeRecommendedGoals(metrics: UserMetrics): RecommendedGoals {
   const tdee = computeTdee(metrics.sex, metrics.weightKg, metrics.heightCm, metrics.age, metrics.activityLevel);
-  const calories = Math.round(tdee);
+
+  const isLosing =
+    metrics.targetWeightKg != null &&
+    metrics.targetWeightKg < metrics.weightKg &&
+    metrics.weightLossRateKg > 0;
+
+  const dailyDeficit = isLosing
+    ? (metrics.weightLossRateKg * KCAL_PER_KG) / 7
+    : 0;
+
+  const calories = Math.round(Math.max(tdee - dailyDeficit, 0));
   const protein = Math.round(metrics.weightKg * metrics.proteinPerKg);
 
   // Fiber: 14g per 1000 kcal, adjusted by sex.
