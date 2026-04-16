@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
+import type { FoodId } from "../types";
+import { isBuiltinFood } from "../data/builtinFoods";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import type { FoodId } from "../types";
-import { isBuiltinFood } from "../data/builtinFoods";
+import { ConfirmDialog } from "./ConfirmDialog";
+import type { PendingAction } from "./ConfirmDialog";
 
 interface FoodListProps {
   appData: AppDataHandle;
@@ -17,6 +19,7 @@ export function FoodList({ appData }: FoodListProps) {
   const navigate = useNavigate();
   const { allFoods, deleteFood } = appData;
   const [search, setSearch] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
 
   const filteredFoods = allFoods.filter((f) =>
     f.name.toLowerCase().includes(search.toLowerCase()),
@@ -124,13 +127,11 @@ export function FoodList({ appData }: FoodListProps) {
                     size="icon"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (
-                        window.confirm(
-                          `Delete "${food.name}"? This will also remove it from all logs.`,
-                        )
-                      ) {
-                        deleteFood(food.id as FoodId);
-                      }
+                      setPendingDelete({
+                        title: "Delete food",
+                        description: `Delete "${food.name}"? This will also remove it from all logs.`,
+                        onConfirm: () => deleteFood(food.id as FoodId),
+                      });
                     }}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -141,6 +142,11 @@ export function FoodList({ appData }: FoodListProps) {
           );
         })}
       </div>
+
+      <ConfirmDialog
+        pending={pendingDelete}
+        onClose={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

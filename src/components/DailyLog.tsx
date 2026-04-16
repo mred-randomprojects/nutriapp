@@ -9,6 +9,7 @@ import {
   GripVertical,
   Lock,
   LockOpen,
+  AlertTriangle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -34,16 +35,9 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
 import { AddEntryDialog } from "./AddEntryDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
+import type { PendingAction } from "./ConfirmDialog";
 
 const SEPARATOR_PRESETS = ["Breakfast", "Lunch", "Merienda", "Dinner", "Snack"];
 
@@ -96,52 +90,6 @@ function SortableItem({ item, isLocked, children }: SortableItemProps) {
       )}
       <div className="min-w-0 flex-1">{children}</div>
     </div>
-  );
-}
-
-interface PendingAction {
-  title: string;
-  description: string;
-  onConfirm: () => void;
-}
-
-interface ConfirmDialogProps {
-  pending: PendingAction | null;
-  onClose: () => void;
-}
-
-function ConfirmDialog({ pending, onClose }: ConfirmDialogProps) {
-  return (
-    <Dialog
-      open={pending != null}
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent className="max-w-xs rounded-xl">
-        <DialogHeader>
-          <DialogTitle>{pending?.title}</DialogTitle>
-          <DialogDescription>{pending?.description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="flex-row gap-2 sm:justify-end">
-          <DialogClose asChild>
-            <Button variant="outline" className="flex-1 sm:flex-initial">
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button
-            variant="destructive"
-            className="flex-1 sm:flex-initial"
-            onClick={() => {
-              pending?.onConfirm();
-              onClose();
-            }}
-          >
-            Remove
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -650,7 +598,47 @@ export function DailyLog({ appData }: DailyLogProps) {
               }
 
               const food = foodsMap.get(item.foodId);
-              if (food == null) return null;
+              if (food == null) {
+                return (
+                  <SortableItem key={item.id} item={item} isLocked={isLocked}>
+                    <Card className="border-dashed opacity-60">
+                      <CardContent className="flex items-center gap-3 p-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
+                          <AlertTriangle className="h-5 w-5 text-destructive" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">Deleted food</p>
+                          <p className="text-xs text-muted-foreground">
+                            This food no longer exists in your database
+                          </p>
+                        </div>
+                        {!isLocked && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() =>
+                              setPendingDelete({
+                                title: "Remove entry",
+                                description:
+                                  "Remove this deleted food entry from the log?",
+                                onConfirm: () =>
+                                  removeLogEntry(
+                                    activeProfile.id as ProfileId,
+                                    dateStr,
+                                    item.id as LogEntryId,
+                                  ),
+                              })
+                            }
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </SortableItem>
+                );
+              }
 
               return (
                 <SortableItem key={item.id} item={item} isLocked={isLocked}>

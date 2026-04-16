@@ -80,11 +80,7 @@ export function AddEntryDialog({
   }
 
   function resetAndClose() {
-    setSelectedFoodId(null);
-    setInputMode("grams");
-    setAmount("");
-    setSearch("");
-    onOpenChange(false);
+    handleOpenChange(false);
   }
 
   function selectFood(foodId: FoodId) {
@@ -95,8 +91,18 @@ export function AddEntryDialog({
     setAmount("");
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) {
+      setSelectedFoodId(null);
+      setInputMode("grams");
+      setAmount("");
+      setSearch("");
+    }
+    onOpenChange(nextOpen);
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Entry</DialogTitle>
