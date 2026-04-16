@@ -34,6 +34,15 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { AddEntryDialog } from "./AddEntryDialog";
 
 const SEPARATOR_PRESETS = ["Breakfast", "Lunch", "Merienda", "Dinner", "Snack"];
@@ -87,6 +96,52 @@ function SortableItem({ item, isLocked, children }: SortableItemProps) {
       )}
       <div className="min-w-0 flex-1">{children}</div>
     </div>
+  );
+}
+
+interface PendingAction {
+  title: string;
+  description: string;
+  onConfirm: () => void;
+}
+
+interface ConfirmDialogProps {
+  pending: PendingAction | null;
+  onClose: () => void;
+}
+
+function ConfirmDialog({ pending, onClose }: ConfirmDialogProps) {
+  return (
+    <Dialog
+      open={pending != null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="max-w-xs rounded-xl">
+        <DialogHeader>
+          <DialogTitle>{pending?.title}</DialogTitle>
+          <DialogDescription>{pending?.description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex-row gap-2 sm:justify-end">
+          <DialogClose asChild>
+            <Button variant="outline" className="flex-1 sm:flex-initial">
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            className="flex-1 sm:flex-initial"
+            onClick={() => {
+              pending?.onConfirm();
+              onClose();
+            }}
+          >
+            Remove
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -196,9 +251,7 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
               className="h-8 w-8"
               onClick={(e) => {
                 e.stopPropagation();
-                if (window.confirm(`Remove "${food.name}" from this day's log?`)) {
-                  onRemove();
-                }
+                onRemove();
               }}
             >
               <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -281,9 +334,7 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
             className="h-8 w-8"
             onClick={(e) => {
               e.stopPropagation();
-              if (window.confirm(`Remove "${food.name}" from this day's log?`)) {
-                onRemove();
-              }
+              onRemove();
             }}
           >
             <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -310,6 +361,7 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [customLabel, setCustomLabel] = useState("");
   const [unlockedDates, setUnlockedDates] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
 
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 200, tolerance: 5 },
@@ -576,15 +628,18 @@ export function DailyLog({ appData }: DailyLogProps) {
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6"
-                          onClick={() => {
-                            if (window.confirm(`Remove "${item.label}" section separator?`)) {
-                              removeLogEntry(
-                                activeProfile.id as ProfileId,
-                                dateStr,
-                                item.id as LogEntryId,
-                              );
-                            }
-                          }}
+                          onClick={() =>
+                            setPendingDelete({
+                              title: "Remove section",
+                              description: `Remove the "${item.label}" section separator?`,
+                              onConfirm: () =>
+                                removeLogEntry(
+                                  activeProfile.id as ProfileId,
+                                  dateStr,
+                                  item.id as LogEntryId,
+                                ),
+                            })
+                          }
                         >
                           <Trash2 className="h-3 w-3 text-destructive" />
                         </Button>
@@ -604,11 +659,16 @@ export function DailyLog({ appData }: DailyLogProps) {
                     food={food}
                     isLocked={isLocked}
                     onRemove={() =>
-                      removeLogEntry(
-                        activeProfile.id as ProfileId,
-                        dateStr,
-                        item.id as LogEntryId,
-                      )
+                      setPendingDelete({
+                        title: "Remove entry",
+                        description: `Remove "${food.name}" from this day's log?`,
+                        onConfirm: () =>
+                          removeLogEntry(
+                            activeProfile.id as ProfileId,
+                            dateStr,
+                            item.id as LogEntryId,
+                          ),
+                      })
                     }
                     onUpdate={(updates) =>
                       updateLogEntry(
@@ -632,6 +692,11 @@ export function DailyLog({ appData }: DailyLogProps) {
         appData={appData}
         profileId={activeProfile.id}
         date={dateStr}
+      />
+
+      <ConfirmDialog
+        pending={pendingDelete}
+        onClose={() => setPendingDelete(null)}
       />
     </div>
   );
