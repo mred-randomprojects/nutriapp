@@ -29,8 +29,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppDataHandle } from "../appDataType";
-import type { DayLogItem, Food, LogEntry, LogEntryId, ProfileId } from "../types";
-import { nutritionForEntry, sumNutrition } from "../nutrition";
+import type { DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, ProfileId, WakeSleepSchedule } from "../types";
+import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -90,6 +90,95 @@ function SortableItem({ item, isLocked, children }: SortableItemProps) {
       )}
       <div className="min-w-0 flex-1">{children}</div>
     </div>
+  );
+}
+
+interface BudgetBarProps {
+  actual: number;
+  budget: number;
+}
+
+function BudgetBar({ actual, budget }: BudgetBarProps) {
+  if (budget <= 0) return null;
+  const pct = Math.min(100, (actual / budget) * 100);
+  const over = actual > budget;
+  return (
+    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+      <div
+        className={`h-full rounded-full transition-all duration-300 ${over ? "bg-red-500" : "bg-emerald-500"}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+interface MetricCellProps {
+  actual: number;
+  budget: number | null;
+  unit: string;
+  label: string;
+  highlight?: boolean;
+}
+
+function MetricCell({ actual, budget, unit, label, highlight }: MetricCellProps) {
+  const over = budget != null && budget > 0 && actual > budget;
+  return (
+    <div>
+      <p className={`text-lg font-bold ${highlight === true ? "text-primary" : ""} ${over ? "text-red-500" : ""}`}>
+        {Math.round(actual)}{unit !== "kcal" ? "g" : ""}
+      </p>
+      {budget != null && budget > 0 && (
+        <p className="text-[10px] text-muted-foreground">
+          / {Math.round(budget)}{unit !== "kcal" ? "g" : ""}
+        </p>
+      )}
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      {budget != null && budget > 0 && (
+        <BudgetBar actual={actual} budget={budget} />
+      )}
+    </div>
+  );
+}
+
+interface DailyTotalsCardProps {
+  totals: NutritionValues;
+  goals: NutritionGoals | null;
+  schedule: WakeSleepSchedule | null;
+  isSelectedDayToday: boolean;
+}
+
+function DailyTotalsCard({ totals, goals, schedule, isSelectedDayToday }: DailyTotalsCardProps) {
+  const fraction = isSelectedDayToday
+    ? getTimeBudgetFraction(new Date(), schedule)
+    : 1;
+
+  const budgetCalories = goals != null ? goals.calories * fraction : null;
+  const budgetProtein = goals != null ? goals.protein * fraction : null;
+  const budgetFiber = goals != null ? goals.fiber * fraction : null;
+
+  const KCAL_PER_GRAM_FAT = 9;
+  const satFatMode = goals?.saturatedFatMode ?? "grams";
+  const satFatDailyGrams = goals != null
+    ? satFatMode === "percentage"
+      ? (goals.calories * goals.saturatedFat / 100) / KCAL_PER_GRAM_FAT
+      : goals.saturatedFat
+    : null;
+  const budgetSatFat = satFatDailyGrams != null ? satFatDailyGrams * fraction : null;
+
+  return (
+    <Card className="mb-4">
+      <CardHeader>
+        <CardTitle>Daily Totals</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <MetricCell actual={totals.calories} budget={budgetCalories} unit="kcal" label="kcal" highlight />
+          <MetricCell actual={totals.protein} budget={budgetProtein} unit="g" label="Protein" />
+          <MetricCell actual={totals.saturatedFat} budget={budgetSatFat} unit="g" label="Sat. Fat" />
+          <MetricCell actual={totals.fiber} budget={budgetFiber} unit="g" label="Fiber" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -447,33 +536,12 @@ export function DailyLog({ appData }: DailyLogProps) {
       </div>
 
       {/* Daily totals */}
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle>Daily Totals</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <div>
-              <p className="text-lg font-bold text-primary">
-                {Math.round(totals.calories)}
-              </p>
-              <p className="text-[10px] text-muted-foreground">kcal</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold">{totals.protein}g</p>
-              <p className="text-[10px] text-muted-foreground">Protein</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold">{totals.saturatedFat}g</p>
-              <p className="text-[10px] text-muted-foreground">Sat. Fat</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold">{totals.fiber}g</p>
-              <p className="text-[10px] text-muted-foreground">Fiber</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <DailyTotalsCard
+        totals={totals}
+        goals={activeProfile.goals ?? null}
+        schedule={activeProfile.schedule ?? null}
+        isSelectedDayToday={isToday(selectedDate)}
+      />
 
       {/* Entries list */}
       <div className="mb-4 flex items-center justify-between">
