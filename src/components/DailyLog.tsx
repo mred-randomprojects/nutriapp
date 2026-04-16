@@ -587,12 +587,18 @@ export function DailyLog({ appData }: DailyLogProps) {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key !== "t" && e.key !== "T") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if ((e.target as HTMLElement).isContentEditable) return;
-      goToToday();
+
+      if (e.key === "t" || e.key === "T") {
+        goToToday();
+      } else if (e.key === "ArrowLeft") {
+        setSelectedDate((prev) => subDays(prev, 1));
+      } else if (e.key === "ArrowRight") {
+        setSelectedDate((prev) => addDays(prev, 1));
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
