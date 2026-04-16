@@ -11,6 +11,7 @@ import type {
   LogEntryId,
   DayLogItem,
   SectionSeparator,
+  UserMetrics,
   WakeSleepSchedule,
 } from "./types";
 import { generateId } from "./types";
@@ -188,6 +189,7 @@ export function useAppData() {
         createdAt: new Date().toISOString(),
         goals: null,
         schedule: null,
+        userMetrics: null,
       };
       const next: AppData = {
         ...data,
@@ -241,11 +243,12 @@ export function useAppData() {
       profileId: ProfileId,
       goals: NutritionGoals | null,
       schedule: WakeSleepSchedule | null,
+      userMetrics: UserMetrics | null,
     ) => {
       persist({
         ...data,
         profiles: data.profiles.map((p) =>
-          p.id === profileId ? { ...p, goals, schedule } : p,
+          p.id === profileId ? { ...p, goals, schedule, userMetrics } : p,
         ),
       });
     },

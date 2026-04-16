@@ -82,6 +82,30 @@ export interface DayLog {
 
 export type SaturatedFatMode = "grams" | "percentage";
 
+export type Sex = "male" | "female";
+
+export type ActivityLevel =
+  | "sedentary"
+  | "lightly_active"
+  | "moderately_active"
+  | "active"
+  | "very_active";
+
+/**
+ * Body measurements and demographic data used to compute recommended nutrition
+ * goals via Mifflin-St Jeor and related formulas.
+ */
+export interface UserMetrics {
+  sex: Sex;
+  age: number;
+  heightCm: number;
+  weightKg: number;
+  activityLevel: ActivityLevel;
+  targetWeightKg: number | null;
+  /** Grams of protein per kg of body weight (default 1.8, range 1.6–2.2 for lifters). */
+  proteinPerKg: number;
+}
+
 /**
  * Daily nutrition targets for a profile.
  * When saturatedFatMode is "percentage", saturatedFat stores a percentage of
@@ -115,6 +139,7 @@ export interface Profile {
   createdAt: string;
   goals: NutritionGoals | null;
   schedule: WakeSleepSchedule | null;
+  userMetrics: UserMetrics | null;
 }
 
 /**

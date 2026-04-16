@@ -44,6 +44,7 @@ function mergeProfiles(
     if (localProfile == null) return cloudProfile;
     return {
       ...cloudProfile,
+      userMetrics: cloudProfile.userMetrics ?? localProfile.userMetrics ?? null,
       dayLogs: mergeDayLogs(localProfile.dayLogs, cloudProfile.dayLogs),
     };
   });
