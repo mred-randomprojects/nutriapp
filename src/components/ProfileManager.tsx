@@ -1,7 +1,22 @@
-import { useState } from "react";
-import { Check, Plus, Trash2, Pencil, Target } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Check, Plus, Trash2, Pencil, Target, HelpCircle, Calculator } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
-import type { NutritionGoals, ProfileId, SaturatedFatMode, WakeSleepSchedule } from "../types";
+import type {
+  ActivityLevel,
+  NutritionGoals,
+  ProfileId,
+  SaturatedFatMode,
+  Sex,
+  UserMetrics,
+  WakeSleepSchedule,
+} from "../types";
+import {
+  ACTIVITY_LABELS,
+  ACTIVITY_LEVELS,
+  computeDeficitInfo,
+  computeRecommendedGoals,
+  computeWeightGoalEstimate,
+} from "../calculator";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -10,21 +25,102 @@ import { Badge } from "./ui/badge";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
 
+function Tooltip({ text }: { text: string }) {
+  return (
+    <span className="group relative ml-1 inline-flex cursor-help">
+      <HelpCircle className="h-3 w-3 text-muted-foreground" />
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 w-48 -translate-x-1/2 rounded-md bg-popover px-2 py-1.5 text-[10px] leading-tight text-popover-foreground shadow-md opacity-0 transition-opacity group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
 interface GoalsEditorProps {
   goals: NutritionGoals | null;
   schedule: WakeSleepSchedule | null;
-  onSave: (goals: NutritionGoals | null, schedule: WakeSleepSchedule | null) => void;
+  userMetrics: UserMetrics | null;
+  onSave: (
+    goals: NutritionGoals | null,
+    schedule: WakeSleepSchedule | null,
+    userMetrics: UserMetrics | null,
+  ) => void;
   onClose: () => void;
 }
 
-function GoalsEditor({ goals, schedule, onSave, onClose }: GoalsEditorProps) {
+function GoalsEditor({ goals, schedule, userMetrics, onSave, onClose }: GoalsEditorProps) {
+  // Body metrics state
+  const [sex, setSex] = useState<Sex>(userMetrics?.sex ?? "male");
+  const [age, setAge] = useState(String(userMetrics?.age ?? ""));
+  const [heightCm, setHeightCm] = useState(String(userMetrics?.heightCm ?? ""));
+  const [weightKg, setWeightKg] = useState(String(userMetrics?.weightKg ?? ""));
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>(
+    userMetrics?.activityLevel ?? "moderately_active",
+  );
+  const [targetWeight, setTargetWeight] = useState(
+    String(userMetrics?.targetWeightKg ?? ""),
+  );
+  const [proteinPerKg, setProteinPerKg] = useState(
+    String(userMetrics?.proteinPerKg ?? "1.8"),
+  );
+
+  // Goals state
   const [calories, setCalories] = useState(String(goals?.calories ?? ""));
   const [protein, setProtein] = useState(String(goals?.protein ?? ""));
   const [saturatedFat, setSaturatedFat] = useState(String(goals?.saturatedFat ?? ""));
-  const [satFatMode, setSatFatMode] = useState<SaturatedFatMode>(goals?.saturatedFatMode ?? "grams");
+  const [satFatMode, setSatFatMode] = useState<SaturatedFatMode>(goals?.saturatedFatMode ?? "percentage");
   const [fiber, setFiber] = useState(String(goals?.fiber ?? ""));
   const [wakeHour, setWakeHour] = useState(String(schedule?.wakeHour ?? 7));
   const [sleepHour, setSleepHour] = useState(String(schedule?.sleepHour ?? 23));
+
+  const parsedMetrics = useMemo((): UserMetrics | null => {
+    const a = parseInt(age, 10);
+    const h = parseFloat(heightCm);
+    const w = parseFloat(weightKg);
+    const ppk = parseFloat(proteinPerKg);
+    const tw = parseFloat(targetWeight);
+
+    if (Number.isNaN(a) || Number.isNaN(h) || Number.isNaN(w)) return null;
+    if (a <= 0 || h <= 0 || w <= 0) return null;
+
+    return {
+      sex,
+      age: a,
+      heightCm: h,
+      weightKg: w,
+      activityLevel,
+      targetWeightKg: Number.isNaN(tw) || tw <= 0 ? null : tw,
+      proteinPerKg: Number.isNaN(ppk) || ppk <= 0 ? 1.8 : ppk,
+    };
+  }, [sex, age, heightCm, weightKg, activityLevel, targetWeight, proteinPerKg]);
+
+  function handleCalculate() {
+    if (parsedMetrics == null) return;
+    const rec = computeRecommendedGoals(parsedMetrics);
+    setCalories(String(rec.calories));
+    setProtein(String(rec.protein));
+    setSaturatedFat(String(rec.saturatedFatPercentage));
+    setSatFatMode("percentage");
+    setFiber(String(rec.fiber));
+  }
+
+  const deficitInfo = useMemo(() => {
+    if (parsedMetrics == null) return null;
+    const cal = parseFloat(calories);
+    if (Number.isNaN(cal) || cal <= 0) return null;
+    return computeDeficitInfo(parsedMetrics, cal);
+  }, [parsedMetrics, calories]);
+
+  const weightEstimate = useMemo(() => {
+    if (parsedMetrics == null) return null;
+    const cal = parseFloat(calories);
+    if (Number.isNaN(cal) || cal <= 0) return null;
+    return computeWeightGoalEstimate(parsedMetrics, cal);
+  }, [parsedMetrics, calories]);
 
   function handleSave() {
     const cal = parseFloat(calories);
@@ -51,18 +147,157 @@ function GoalsEditor({ goals, schedule, onSave, onClose }: GoalsEditorProps) {
         ? { wakeHour: wake, sleepHour: sleep }
         : null;
 
-    onSave(newGoals, newSchedule);
+    onSave(newGoals, newSchedule, parsedMetrics);
     onClose();
   }
 
   return (
     <div className="mt-3 space-y-3 border-t pt-3">
+      {/* Body Metrics */}
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Body Metrics
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label htmlFor="metric-sex" className="text-xs">Sex</Label>
+          <select
+            id="metric-sex"
+            value={sex}
+            onChange={(e) => setSex(e.target.value === "male" ? "male" : "female")}
+            className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm ring-offset-background"
+          >
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="metric-age" className="text-xs">Age (years)</Label>
+          <Input
+            id="metric-age"
+            type="number"
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            placeholder="e.g. 30"
+            className="h-8 text-sm"
+            min={1}
+          />
+        </div>
+        <div>
+          <Label htmlFor="metric-height" className="text-xs">Height (cm)</Label>
+          <Input
+            id="metric-height"
+            type="number"
+            value={heightCm}
+            onChange={(e) => setHeightCm(e.target.value)}
+            placeholder="e.g. 175"
+            className="h-8 text-sm"
+            step="any"
+            min={1}
+          />
+        </div>
+        <div>
+          <Label htmlFor="metric-weight" className="text-xs">Weight (kg)</Label>
+          <Input
+            id="metric-weight"
+            type="number"
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+            placeholder="e.g. 80"
+            className="h-8 text-sm"
+            step="any"
+            min={1}
+          />
+        </div>
+        <div className="col-span-2">
+          <Label htmlFor="metric-activity" className="text-xs">
+            Activity Level
+            <Tooltip text="Based on how often you exercise. Affects your total daily energy expenditure (TDEE)." />
+          </Label>
+          <select
+            id="metric-activity"
+            value={activityLevel}
+            onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)}
+            className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm ring-offset-background"
+          >
+            {ACTIVITY_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {ACTIVITY_LABELS[level]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label htmlFor="metric-target-weight" className="text-xs">
+            Target Weight (kg)
+            <Tooltip text="Optional. If set and you have a calorie deficit, we'll estimate when you'll reach this weight." />
+          </Label>
+          <Input
+            id="metric-target-weight"
+            type="number"
+            value={targetWeight}
+            onChange={(e) => setTargetWeight(e.target.value)}
+            placeholder="e.g. 75"
+            className="h-8 text-sm"
+            step="any"
+            min={1}
+          />
+        </div>
+        <div>
+          <Label htmlFor="metric-protein-ratio" className="text-xs">
+            Protein (g/kg)
+            <Tooltip text="Grams of protein per kg of body weight. Lifters: 1.6–2.2 g/kg. Default 1.8 g/kg." />
+          </Label>
+          <Input
+            id="metric-protein-ratio"
+            type="number"
+            value={proteinPerKg}
+            onChange={(e) => setProteinPerKg(e.target.value)}
+            placeholder="1.8"
+            className="h-8 text-sm"
+            step="0.1"
+            min={0.1}
+          />
+        </div>
+      </div>
+
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={handleCalculate}
+        disabled={parsedMetrics == null}
+        className="w-full"
+      >
+        <Calculator className="mr-1.5 h-3.5 w-3.5" />
+        Calculate Recommended Goals
+      </Button>
+
+      {/* Deficit / Weight Goal Info */}
+      {deficitInfo != null && (
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
+          <p className="font-medium">
+            {deficitInfo.deficitPercentage}% deficit — {deficitInfo.dailyDeficit} kcal/day below maintenance
+          </p>
+          <p>
+            ≈ {deficitInfo.weeklyWeightLossKg.toFixed(2)} kg/week weight loss
+          </p>
+          {weightEstimate != null && (
+            <p className="mt-1 font-medium">
+              Target weight by ≈ {formatDate(weightEstimate.estimatedDate)} ({weightEstimate.estimatedDays} days)
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Daily Goals */}
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Daily Goals
       </p>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <Label htmlFor="goal-cal" className="text-xs">Calories (kcal)</Label>
+          <Label htmlFor="goal-cal" className="text-xs">
+            Calories (kcal)
+            <Tooltip text="Mifflin-St Jeor BMR × activity multiplier. Reduce to create a deficit for weight loss." />
+          </Label>
           <Input
             id="goal-cal"
             type="number"
@@ -74,7 +309,10 @@ function GoalsEditor({ goals, schedule, onSave, onClose }: GoalsEditorProps) {
           />
         </div>
         <div>
-          <Label htmlFor="goal-prot" className="text-xs">Protein (g)</Label>
+          <Label htmlFor="goal-prot" className="text-xs">
+            Protein (g)
+            <Tooltip text="Recommended 1.6–2.2 g/kg body weight for lifters. Computed from your protein ratio setting." />
+          </Label>
           <Input
             id="goal-prot"
             type="number"
@@ -88,6 +326,7 @@ function GoalsEditor({ goals, schedule, onSave, onClose }: GoalsEditorProps) {
         <div>
           <Label htmlFor="goal-sat" className="text-xs">
             Sat. Fat ({satFatMode === "grams" ? "g" : "% of kcal"})
+            <Tooltip text="WHO/AHA recommends < 10% of total calories from saturated fat." />
           </Label>
           <div className="flex gap-1">
             <Input
@@ -113,7 +352,10 @@ function GoalsEditor({ goals, schedule, onSave, onClose }: GoalsEditorProps) {
           </div>
         </div>
         <div>
-          <Label htmlFor="goal-fib" className="text-xs">Fiber (g)</Label>
+          <Label htmlFor="goal-fib" className="text-xs">
+            Fiber (g)
+            <Tooltip text={`14g per 1000 kcal. Min ${sex === "male" ? "28g (men)" : "22g (women)"}. FDA Daily Value: 28g.`} />
+          </Label>
           <Input
             id="goal-fib"
             type="number"
@@ -126,6 +368,7 @@ function GoalsEditor({ goals, schedule, onSave, onClose }: GoalsEditorProps) {
         </div>
       </div>
 
+      {/* Active Hours */}
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Active Hours
       </p>
@@ -357,8 +600,9 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                   <GoalsEditor
                     goals={profile.goals ?? null}
                     schedule={profile.schedule ?? null}
-                    onSave={(goals, schedule) =>
-                      updateProfileGoals(profile.id as ProfileId, goals, schedule)
+                    userMetrics={profile.userMetrics ?? null}
+                    onSave={(goals, schedule, userMetrics) =>
+                      updateProfileGoals(profile.id as ProfileId, goals, schedule, userMetrics)
                     }
                     onClose={() => setGoalsEditingId(null)}
                   />
