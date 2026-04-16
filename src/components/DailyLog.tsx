@@ -100,16 +100,28 @@ function SortableItem({ item, isLocked, children }: SortableItemProps) {
 interface BudgetBarProps {
   actual: number;
   budget: number;
+  invertColor?: boolean;
 }
 
-function BudgetBar({ actual, budget }: BudgetBarProps) {
+function budgetBarColor(actual: number, budget: number, invert: boolean): string {
+  const ratio = actual / budget;
+  if (invert) {
+    if (ratio > 1) return "bg-emerald-500";
+    if (ratio >= 0.75) return "bg-yellow-500";
+    return "bg-red-500";
+  }
+  if (ratio > 1) return "bg-red-500";
+  if (ratio >= 0.75) return "bg-yellow-500";
+  return "bg-emerald-500";
+}
+
+function BudgetBar({ actual, budget, invertColor }: BudgetBarProps) {
   if (budget <= 0) return null;
   const pct = Math.min(100, (actual / budget) * 100);
-  const over = actual > budget;
   return (
     <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
       <div
-        className={`h-full rounded-full transition-all duration-300 ${over ? "bg-red-500" : "bg-emerald-500"}`}
+        className={`h-full rounded-full transition-all duration-300 ${budgetBarColor(actual, budget, invertColor === true)}`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -123,10 +135,14 @@ interface MetricCellProps {
   unit: string;
   label: string;
   highlight?: boolean;
+  invertColor?: boolean;
 }
 
-function MetricCell({ actual, budget, dailyGoal, unit, label, highlight }: MetricCellProps) {
+function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, invertColor }: MetricCellProps) {
   const over = budget != null && budget > 0 && actual > budget;
+  const under = budget != null && budget > 0 && actual < budget;
+  const isRed = invertColor === true ? under : over;
+  const isGreen = invertColor === true ? over : false;
   const suffix = unit !== "kcal" ? "g" : "";
   const showDailyGoal =
     dailyGoal != null &&
@@ -134,7 +150,7 @@ function MetricCell({ actual, budget, dailyGoal, unit, label, highlight }: Metri
     Math.round(dailyGoal) !== Math.round(budget);
   return (
     <div>
-      <p className={`text-lg font-bold ${highlight === true ? "text-primary" : ""} ${over ? "text-red-500" : ""}`}>
+      <p className={`text-lg font-bold ${highlight === true ? "text-primary" : ""} ${isRed ? "text-red-500" : ""} ${isGreen ? "text-emerald-500" : ""}`}>
         {Math.round(actual)}{suffix}
       </p>
       {budget != null && budget > 0 && (
@@ -149,7 +165,7 @@ function MetricCell({ actual, budget, dailyGoal, unit, label, highlight }: Metri
       )}
       <p className="text-[10px] text-muted-foreground">{label}</p>
       {budget != null && budget > 0 && (
-        <BudgetBar actual={actual} budget={budget} />
+        <BudgetBar actual={actual} budget={budget} invertColor={invertColor} />
       )}
     </div>
   );
@@ -188,7 +204,7 @@ function DailyTotalsCard({ totals, goals, schedule, isSelectedDayToday }: DailyT
       <CardContent>
         <div className="grid grid-cols-4 gap-2 text-center">
           <MetricCell actual={totals.calories} budget={budgetCalories} dailyGoal={goals?.calories ?? null} unit="kcal" label="kcal" highlight />
-          <MetricCell actual={totals.protein} budget={budgetProtein} dailyGoal={goals?.protein ?? null} unit="g" label="Protein" />
+          <MetricCell actual={totals.protein} budget={budgetProtein} dailyGoal={goals?.protein ?? null} unit="g" label="Protein" invertColor />
           <MetricCell actual={totals.saturatedFat} budget={budgetSatFat} dailyGoal={satFatDailyGrams} unit="g" label="Sat. Fat" />
           <MetricCell actual={totals.fiber} budget={budgetFiber} dailyGoal={goals?.fiber ?? null} unit="g" label="Fiber" />
         </div>
