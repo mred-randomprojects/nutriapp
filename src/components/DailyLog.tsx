@@ -584,6 +584,7 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [customLabel, setCustomLabel] = useState("");
   const [unlockedDates, setUnlockedDates] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
 
   const touchSensor = useSensor(TouchSensor, {
@@ -888,22 +889,45 @@ export function DailyLog({ appData }: DailyLogProps) {
               const showSubtotal = item.type !== "separator" && isLastBeforeNextSection;
 
               let currentSeparatorId: LogEntryId | null = null;
-              if (showSubtotal) {
-                for (let i = index; i >= 0; i--) {
-                  const prev = dayLog.entries[i];
-                  if (prev.type === "separator") {
-                    currentSeparatorId = prev.id as LogEntryId;
-                    break;
-                  }
+              for (let i = index; i >= 0; i--) {
+                const prev = dayLog.entries[i];
+                if (prev.type === "separator") {
+                  currentSeparatorId = prev.id as LogEntryId;
+                  break;
                 }
               }
-              const subtotal = currentSeparatorId != null ? sectionSubtotals.get(currentSeparatorId) : undefined;
+              const subtotal = showSubtotal && currentSeparatorId != null
+                ? sectionSubtotals.get(currentSeparatorId)
+                : undefined;
+
+              const isCollapsed = currentSeparatorId != null && collapsedSections.has(currentSeparatorId);
 
               if (item.type === "separator") {
+                const separatorId = item.id as LogEntryId;
+                const sectionCollapsed = collapsedSections.has(separatorId);
+                const sectionTotals = sectionSubtotals.get(separatorId);
                 return (
                   <SortableItem key={item.id} item={item} isLocked={isLocked}>
-                    <div className="flex items-center gap-2 pt-2 first:pt-0">
+                    <button
+                      className="flex w-full items-center gap-2 pt-2 first:pt-0"
+                      onClick={() =>
+                        setCollapsedSections((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(separatorId)) {
+                            next.delete(separatorId);
+                          } else {
+                            next.add(separatorId);
+                          }
+                          return next;
+                        })
+                      }
+                    >
                       <div className="h-px flex-1 bg-border" />
+                      {sectionCollapsed ? (
+                        <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      )}
                       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {item.label}
                       </span>
@@ -913,7 +937,8 @@ export function DailyLog({ appData }: DailyLogProps) {
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6"
-                          onClick={() =>
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setPendingDelete({
                               title: "Remove section",
                               description: `Remove the "${item.label}" section separator?`,
@@ -923,16 +948,21 @@ export function DailyLog({ appData }: DailyLogProps) {
                                   dateStr,
                                   item.id as LogEntryId,
                                 ),
-                            })
-                          }
+                            });
+                          }}
                         >
                           <Trash2 className="h-3 w-3 text-destructive" />
                         </Button>
                       )}
-                    </div>
+                    </button>
+                    {sectionCollapsed && sectionTotals != null && (
+                      <SectionSubtotal totals={sectionTotals} />
+                    )}
                   </SortableItem>
                 );
               }
+
+              if (isCollapsed) return null;
 
               const food = foodsMap.get(item.foodId);
               if (food == null) {
