@@ -11,6 +11,7 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { normalizeForSearch } from "../search";
 
 type InputMode = "grams" | "units";
 
@@ -37,7 +38,7 @@ export function AddEntryDialog({
   const [notes, setNotes] = useState("");
 
   const filteredFoods = allFoods.filter((f) =>
-    f.name.toLowerCase().includes(search.toLowerCase()),
+    normalizeForSearch(f.name).includes(normalizeForSearch(search)),
   );
 
   const selectedFood =

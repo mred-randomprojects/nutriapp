@@ -13,6 +13,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { normalizeForSearch } from "../search";
 
 interface FoodFormProps {
   appData: AppDataHandle;
@@ -206,7 +207,7 @@ export function FoodForm({ appData }: FoodFormProps) {
       if (forbiddenIngredientIds.has(f.id)) return false;
       if (f.nutritionPerUnit != null) return false;
       if (ingredientSearch.length === 0) return true;
-      return f.name.toLowerCase().includes(ingredientSearch.toLowerCase());
+      return normalizeForSearch(f.name).includes(normalizeForSearch(ingredientSearch));
     });
   }, [
     showIngredientPicker,

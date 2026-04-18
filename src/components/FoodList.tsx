@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import type { FoodId } from "../types";
 import { isBuiltinFood } from "../data/builtinFoods";
+import { normalizeForSearch } from "../search";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -22,7 +23,7 @@ export function FoodList({ appData }: FoodListProps) {
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
 
   const filteredFoods = allFoods.filter((f) =>
-    f.name.toLowerCase().includes(search.toLowerCase()),
+    normalizeForSearch(f.name).includes(normalizeForSearch(search)),
   );
 
   return (
