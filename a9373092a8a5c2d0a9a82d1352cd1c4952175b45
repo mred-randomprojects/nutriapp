@@ -1,0 +1,44 @@
+src/components/FoodList.tsx
+  e9e8611b863294da 7,26
+src/search.ts
+  e9e8611b863294da 1-10
+src/components/AddEntryDialog.tsx
+  e9e8611b863294da 14,41
+src/components/FoodForm.tsx
+  e9e8611b863294da 16,210
+src/components/DailyLog.tsx
+  c0d94d1b22a05065 587,892-896,899-903,906-908,911-924,926-930,940-941,951-952,957-960,965
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "a9373092a8a5c2d0a9a82d1352cd1c4952175b45",
+  "prompts": {
+    "c0d94d1b22a05065": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "6dfd7cd4-3cd9-43c2-8ae3-206d4bb5c8dc",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 43,
+      "total_deletions": 13,
+      "accepted_lines": 43,
+      "overriden_lines": 0
+    },
+    "e9e8611b863294da": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "1cb1862c-a852-463e-9e3a-3a0a3355f31b",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 16,
+      "total_deletions": 3,
+      "accepted_lines": 16,
+      "overriden_lines": 0
+    }
+  }
+}
