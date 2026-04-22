@@ -15,6 +15,7 @@ import {
   Weight,
   MessageSquare,
   TrendingDown,
+  Copy,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -34,7 +35,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppDataHandle } from "../appDataType";
-import type { DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, ProfileId, WakeSleepSchedule } from "../types";
+import type { DayLog, DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, ProfileId, WakeSleepSchedule } from "../types";
 import { computeExpectedWeight } from "../calculator";
 import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
 import { Button } from "./ui/button";
@@ -55,8 +56,85 @@ function formatDate(date: Date): string {
   return format(date, "yyyy-MM-dd");
 }
 
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatNutritionSummary(values: NutritionValues): string {
+  return `${Math.round(values.calories)} kcal, ${formatNumber(values.protein)}g protein, ${formatNumber(values.saturatedFat)}g sat fat, ${formatNumber(values.fiber)}g fiber`;
+}
+
 function isToday(date: Date): boolean {
   return formatDate(date) === formatDate(new Date());
+}
+
+function describeEntryAmount(entry: LogEntry, food: Food): string {
+  if (entry.units != null && food.nutritionPerUnit != null) {
+    return `${formatNumber(entry.units)} unit${entry.units === 1 ? "" : "s"}`;
+  }
+
+  if (food.gramsPerUnit != null && food.gramsPerUnit > 0) {
+    const exactUnits = entry.grams / food.gramsPerUnit;
+    if (Number.isInteger(exactUnits)) {
+      return `${formatNumber(exactUnits)} unit${exactUnits === 1 ? "" : "s"} (${formatNumber(entry.grams)}g)`;
+    }
+  }
+
+  return `${formatNumber(entry.grams)}g`;
+}
+
+function buildMarkdownForDay(
+  dayLog: DayLog | undefined,
+  foodsMap: Map<string, Food>,
+  expectedWeightKg: number | null,
+  dateStr: string,
+): string {
+  const items = dayLog?.entries ?? [];
+  const totals = sumNutrition(items, foodsMap);
+  const lines = [`## ${dateStr}`];
+
+  lines.push(`- Daily totals: ${formatNutritionSummary(totals)}`);
+
+  if (dayLog?.weightKg != null || expectedWeightKg != null) {
+    const weightParts: string[] = [];
+    if (dayLog?.weightKg != null) {
+      weightParts.push(`weight ${formatNumber(dayLog.weightKg)} kg`);
+    }
+    if (expectedWeightKg != null) {
+      weightParts.push(`expected ${expectedWeightKg.toFixed(1)} kg`);
+    }
+    lines.push(`- Weight: ${weightParts.join(", ")}`);
+  }
+
+  if (items.length === 0) {
+    lines.push("- Entries: none");
+    return lines.join("\n");
+  }
+
+  lines.push("- Entries:");
+
+  let currentSection: string | null = null;
+  for (const item of items) {
+    if (item.type === "separator") {
+      currentSection = item.label;
+      lines.push(`  - Section: ${item.label}`);
+      continue;
+    }
+
+    const food = foodsMap.get(item.foodId);
+    if (food == null) continue;
+
+    const sectionPrefix = currentSection != null ? `[${currentSection}] ` : "";
+    const entryNutrition = nutritionForEntry(item, food);
+    const entryLine = `  - ${sectionPrefix}${food.name}: ${describeEntryAmount(item, food)}; ${formatNutritionSummary(entryNutrition)}`;
+    lines.push(entryLine);
+
+    if (item.notes != null && item.notes.trim().length > 0) {
+      lines.push(`  - Note: ${item.notes.trim()}`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 interface SortableItemProps {
@@ -584,10 +662,13 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [customLabel, setCustomLabel] = useState("");
   const [unlockedDates, setUnlockedDates] = useState<Set<string>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const copyMenuRef = useRef<HTMLDivElement>(null);
 
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 200, tolerance: 5 },
@@ -617,6 +698,28 @@ export function DailyLog({ appData }: DailyLogProps) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [goToToday]);
+
+  useEffect(() => {
+    if (!copyMenuOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        copyMenuRef.current != null &&
+        !copyMenuRef.current.contains(event.target as Node)
+      ) {
+        setCopyMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [copyMenuOpen]);
+
+  useEffect(() => {
+    if (copyFeedback == null) return;
+    const timeout = window.setTimeout(() => setCopyFeedback(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [copyFeedback]);
 
   const dateStr = formatDate(selectedDate);
   const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
@@ -661,6 +764,52 @@ export function DailyLog({ appData }: DailyLogProps) {
     }
     return sumNutrition(dayLog.entries, foodsMap);
   }, [dayLog, foodsMap]);
+
+  const selectedExpectedWeightKg = useMemo(
+    () =>
+      activeProfile?.weightLossPlan != null
+        ? computeExpectedWeight(activeProfile.weightLossPlan, dateStr)
+        : null,
+    [activeProfile?.weightLossPlan, dateStr],
+  );
+
+  const copyThisDayMarkdown = useMemo(
+    () => buildMarkdownForDay(dayLog, foodsMap, selectedExpectedWeightKg, dateStr),
+    [dayLog, foodsMap, selectedExpectedWeightKg, dateStr],
+  );
+
+  const copyLastSevenDaysMarkdown = useMemo(() => {
+    if (activeProfile == null) return "";
+
+    const lines = [`# ${activeProfile.name} log summary`, ""];
+
+    for (let offset = 6; offset >= 0; offset--) {
+      const dayDate = subDays(selectedDate, offset);
+      const dayDateStr = formatDate(dayDate);
+      const day = activeProfile.dayLogs.find((entry) => entry.date === dayDateStr);
+      const expectedWeight =
+        activeProfile.weightLossPlan != null
+          ? computeExpectedWeight(activeProfile.weightLossPlan, dayDateStr)
+          : null;
+
+      lines.push(buildMarkdownForDay(day, foodsMap, expectedWeight, dayDateStr));
+      if (offset !== 0) {
+        lines.push("");
+      }
+    }
+
+    return lines.join("\n");
+  }, [activeProfile, foodsMap, selectedDate]);
+
+  const writeToClipboard = useCallback(async (text: string, successMessage: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback(successMessage);
+      setCopyMenuOpen(false);
+    } catch {
+      setCopyFeedback("Clipboard copy failed");
+    }
+  }, []);
 
   const sectionSubtotals = useMemo(() => {
     if (dayLog == null) return new Map<LogEntryId, NutritionValues>();
@@ -790,11 +939,7 @@ export function DailyLog({ appData }: DailyLogProps) {
       {/* Weight */}
       <WeightInput
         weightKg={dayLog?.weightKg}
-        expectedWeightKg={
-          activeProfile.weightLossPlan != null
-            ? computeExpectedWeight(activeProfile.weightLossPlan, dateStr)
-            : null
-        }
+        expectedWeightKg={selectedExpectedWeightKg}
         isLocked={isLocked}
         onSave={(w) => updateDayLogWeight(activeProfile.id, dateStr, w)}
       />
@@ -822,6 +967,42 @@ export function DailyLog({ appData }: DailyLogProps) {
             </Button>
           )}
         </div>
+        <div className="flex items-center gap-2">
+          <div className="relative" ref={copyMenuRef}>
+            <div className="flex">
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-r-none border-r-0"
+                onClick={() => void writeToClipboard(copyThisDayMarkdown, "Copied this day")}
+              >
+                <Copy className="mr-1 h-4 w-4" />
+                Copy this day
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-l-none px-2"
+                aria-label="More copy options"
+                onClick={() => setCopyMenuOpen((prev) => !prev)}
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            {copyMenuOpen && (
+              <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border bg-popover p-1 shadow-lg">
+                <button
+                  className="w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
+                  onClick={() => void writeToClipboard(copyLastSevenDaysMarkdown, "Copied last 7 days")}
+                >
+                  Copy last 7 days
+                </button>
+              </div>
+            )}
+          </div>
+          {copyFeedback != null && (
+            <span className="text-xs text-muted-foreground">{copyFeedback}</span>
+          )}
         {!isLocked && (
         <div className="flex gap-2">
           <div className="relative">
@@ -888,6 +1069,7 @@ export function DailyLog({ appData }: DailyLogProps) {
           </Button>
         </div>
         )}
+        </div>
       </div>
 
       {(dayLog == null || dayLog.entries.length === 0) && (
