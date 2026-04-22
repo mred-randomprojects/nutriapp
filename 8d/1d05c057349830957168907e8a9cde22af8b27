@@ -1,0 +1,42 @@
+src/components/TrendPage.tsx
+  9c5175f8d7b27212 1-440
+src/components/DailyLog.tsx
+  c0d94d1b22a05065 7-8,804-824
+src/components/NavBar.tsx
+  9c5175f8d7b27212 2,8
+src/App.tsx
+  9c5175f8d7b27212 9,64-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2",
+  "base_commit_sha": "8d1d05c057349830957168907e8a9cde22af8b27",
+  "prompts": {
+    "9c5175f8d7b27212": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "a8e66b78-3dbb-4a29-9383-e0b964fb1ab0",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 456,
+      "total_deletions": 10,
+      "accepted_lines": 447,
+      "overriden_lines": 0
+    },
+    "c0d94d1b22a05065": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "6dfd7cd4-3cd9-43c2-8ae3-206d4bb5c8dc",
+        "model": "claude-4.6-opus-high-thinking"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 23,
+      "total_deletions": 1,
+      "accepted_lines": 23,
+      "overriden_lines": 0
+    }
+  }
+}
