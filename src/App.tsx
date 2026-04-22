@@ -6,6 +6,7 @@ import { FoodList } from "./components/FoodList";
 import { FoodForm } from "./components/FoodForm";
 import { DailyLog } from "./components/DailyLog";
 import { ProfileManager } from "./components/ProfileManager";
+import { TrendPage } from "./components/TrendPage";
 import { StorageUsage } from "./components/StorageUsage";
 import { AccountPage } from "./components/AccountPage";
 import { LoginPage } from "./components/LoginPage";
@@ -59,6 +60,10 @@ function AuthenticatedApp() {
         <Route
           path="/log"
           element={<DailyLog appData={appData} />}
+        />
+        <Route
+          path="/trend"
+          element={<TrendPage appData={appData} />}
         />
         <Route
           path="/profiles"
