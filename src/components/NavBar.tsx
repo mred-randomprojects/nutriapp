@@ -1,10 +1,11 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { UtensilsCrossed, BookOpen, Users, CircleUserRound } from "lucide-react";
+import { UtensilsCrossed, BookOpen, TrendingUp, Users, CircleUserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { path: "/foods", label: "Foods", icon: UtensilsCrossed },
   { path: "/log", label: "Log", icon: BookOpen },
+  { path: "/trend", label: "Trend", icon: TrendingUp },
   { path: "/profiles", label: "Profiles", icon: Users },
   { path: "/account", label: "Account", icon: CircleUserRound },
 ] as const;

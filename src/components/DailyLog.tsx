@@ -4,6 +4,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Plus,
   Trash2,
   GripVertical,
@@ -799,7 +801,27 @@ export function DailyLog({ appData }: DailyLogProps) {
 
       {/* Entries list */}
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="font-semibold">Entries</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="font-semibold">Entries</h2>
+          {sectionSubtotals.size > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => {
+                const allSeparatorIds = [...sectionSubtotals.keys()];
+                const allCollapsed = allSeparatorIds.every((id) => collapsedSections.has(id));
+                setCollapsedSections(allCollapsed ? new Set() : new Set(allSeparatorIds));
+              }}
+            >
+              {[...sectionSubtotals.keys()].every((id) => collapsedSections.has(id)) ? (
+                <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronsDownUp className="h-4 w-4 text-muted-foreground" />
+              )}
+            </Button>
+          )}
+        </div>
         {!isLocked && (
         <div className="flex gap-2">
           <div className="relative">
