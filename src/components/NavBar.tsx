@@ -3,11 +3,11 @@ import { UtensilsCrossed, BookOpen, TrendingUp, Users, CircleUserRound } from "l
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { path: "/foods", label: "Foods", icon: UtensilsCrossed },
-  { path: "/log", label: "Log", icon: BookOpen },
-  { path: "/trend", label: "Trend", icon: TrendingUp },
-  { path: "/profiles", label: "Profiles", icon: Users },
-  { path: "/account", label: "Account", icon: CircleUserRound },
+  { path: "/foods", label: "Foods", shortcut: "1", icon: UtensilsCrossed },
+  { path: "/log", label: "Log", shortcut: "2", icon: BookOpen },
+  { path: "/trend", label: "Trend", shortcut: "3", icon: TrendingUp },
+  { path: "/profiles", label: "Profiles", shortcut: "4", icon: Users },
+  { path: "/account", label: "Account", shortcut: "5", icon: CircleUserRound },
 ] as const;
 
 export function NavBar() {
@@ -25,6 +25,7 @@ export function NavBar() {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
+              aria-label={`${item.label} (${item.shortcut})`}
               className={cn(
                 "flex flex-1 flex-col items-center gap-1 py-2 text-xs transition-colors",
                 isActive
@@ -33,7 +34,12 @@ export function NavBar() {
               )}
             >
               <item.icon className="h-5 w-5" />
-              {item.label}
+              <span className="flex items-baseline gap-1">
+                <span>{item.label}</span>
+                <span className="text-[10px] leading-none opacity-70">
+                  {item.shortcut}
+                </span>
+              </span>
             </button>
           );
         })}

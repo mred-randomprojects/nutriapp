@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAppData } from "./useAppData";
 import { AuthProvider, useAuth } from "./auth";
 import { NavBar } from "./components/NavBar";
@@ -11,6 +12,14 @@ import { StorageUsage } from "./components/StorageUsage";
 import { AccountPage } from "./components/AccountPage";
 import { LoginPage } from "./components/LoginPage";
 import { CloudUpload, Loader2 } from "lucide-react";
+
+const NAV_SHORTCUTS = {
+  "1": "/foods",
+  "2": "/log",
+  "3": "/trend",
+  "4": "/profiles",
+  "5": "/account",
+} as const;
 
 export default function App() {
   return (
@@ -40,6 +49,48 @@ function AuthGate() {
 
 function AuthenticatedApp() {
   const appData = useAppData();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement)
+      ) {
+        return;
+      }
+
+      if (!(event.key in NAV_SHORTCUTS)) {
+        return;
+      }
+
+      const destination =
+        NAV_SHORTCUTS[event.key as keyof typeof NAV_SHORTCUTS];
+      if (location.pathname === destination) {
+        return;
+      }
+
+      event.preventDefault();
+      navigate(destination);
+    }
+
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [location.pathname, navigate]);
 
   return (
     <div className="mx-auto min-h-dvh max-w-lg pb-20">
