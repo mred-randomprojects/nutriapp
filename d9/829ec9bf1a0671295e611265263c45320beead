@@ -1,0 +1,36 @@
+dist/index.html
+  b7e7d91bb0d37b19 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "d9829ec9bf1a0671295e611265263c45320beead",
+  "prompts": {
+    "5e84706a39b690c6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dbf59-e2dd-7251-8d4c-6c830f858122",
+        "model": "unknown"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "b7e7d91bb0d37b19": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dbf59-d56f-7433-8896-b3bb96388b03",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 2,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
