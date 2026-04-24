@@ -63,6 +63,18 @@ export interface LogEntry {
 }
 
 /**
+ * A one-time food estimate stored directly in the log. It is intentionally
+ * not linked to, or persisted as, a reusable Food.
+ */
+export interface QuickAddEntry {
+  type: "quick-add";
+  id: LogEntryId;
+  name: string;
+  nutrition: NutritionValues;
+  notes?: string;
+}
+
+/**
  * A visual separator/header in the daily log (e.g. "Breakfast", "Lunch").
  */
 export interface SectionSeparator {
@@ -70,8 +82,7 @@ export interface SectionSeparator {
   id: LogEntryId;
   label: string;
 }
-
-export type DayLogItem = LogEntry | SectionSeparator;
+export type DayLogItem = LogEntry | QuickAddEntry | SectionSeparator;
 
 /**
  * All log items for a specific date within a profile.
