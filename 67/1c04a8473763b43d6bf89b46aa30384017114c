@@ -1,0 +1,31 @@
+src/components/AddEntryDialog.tsx
+  e9b625902defbe1c 3,17,34-35,41-45,73-85,108-126,141,147-151,162,166-308
+src/useAppData.ts
+  e9b625902defbe1c 13,213-216,306,357-371,466-502,531,536
+src/components/DailyLog.tsx
+  e9b625902defbe1c 38,124-135,561-763,880,1039,1375-1407
+src/nutrition.ts
+  e9b625902defbe1c 48-54
+src/types.ts
+  e9b625902defbe1c 66-76,85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "671c04a8473763b43d6bf89b46aa30384017114c",
+  "prompts": {
+    "e9b625902defbe1c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dbf49-ce2b-77a1-b40f-0c807d1ffe28",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 523,
+      "total_deletions": 29,
+      "accepted_lines": 523,
+      "overriden_lines": 0
+    }
+  }
+}
