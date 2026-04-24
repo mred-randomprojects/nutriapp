@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AppDataHandle } from "../appDataType";
-import type { FoodId, ProfileId } from "../types";
+import type { FoodId, NutritionValues, ProfileId } from "../types";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { Label } from "./ui/label";
 import { normalizeForSearch } from "../search";
 
 type InputMode = "grams" | "units";
+type AddMode = "search" | "quick-add";
 
 interface AddEntryDialogProps {
   open: boolean;
@@ -30,12 +31,18 @@ export function AddEntryDialog({
   profileId,
   date,
 }: AddEntryDialogProps) {
-  const { allFoods, addLogEntry } = appData;
+  const { allFoods, addLogEntry, addQuickAddEntry } = appData;
+  const [addMode, setAddMode] = useState<AddMode>("search");
   const [selectedFoodId, setSelectedFoodId] = useState<FoodId | null>(null);
   const [inputMode, setInputMode] = useState<InputMode>("grams");
   const [amount, setAmount] = useState("");
   const [search, setSearch] = useState("");
   const [notes, setNotes] = useState("");
+  const [quickName, setQuickName] = useState("");
+  const [quickCalories, setQuickCalories] = useState("");
+  const [quickProtein, setQuickProtein] = useState("");
+  const [quickSaturatedFat, setQuickSaturatedFat] = useState("");
+  const [quickFiber, setQuickFiber] = useState("");
 
   const filteredFoods = allFoods.filter((f) =>
     normalizeForSearch(f.name).includes(normalizeForSearch(search)),
@@ -63,6 +70,19 @@ export function AddEntryDialog({
 
   const factor = totalGrams / 100;
 
+  const quickNutrition: NutritionValues = {
+    calories: Math.max(0, parseNum(quickCalories)),
+    protein: Math.max(0, parseNum(quickProtein)),
+    saturatedFat: Math.max(0, parseNum(quickSaturatedFat)),
+    fiber: Math.max(0, parseNum(quickFiber)),
+  };
+
+  const quickHasNutrition =
+    quickNutrition.calories > 0 ||
+    quickNutrition.protein > 0 ||
+    quickNutrition.saturatedFat > 0 ||
+    quickNutrition.fiber > 0;
+
   function handleAdd() {
     if (selectedFoodId == null || parsedAmount <= 0) return;
     const trimmedNotes = notes.trim();
@@ -85,6 +105,25 @@ export function AddEntryDialog({
     resetAndClose();
   }
 
+  function handleQuickAdd() {
+    const trimmedName = quickName.trim();
+    if (trimmedName.length === 0 || !quickHasNutrition) return;
+
+    const trimmedNotes = notes.trim();
+    addQuickAddEntry(profileId, date, {
+      type: "quick-add",
+      name: trimmedName,
+      nutrition: {
+        calories: Math.round(quickNutrition.calories * 10) / 10,
+        protein: Math.round(quickNutrition.protein * 10) / 10,
+        saturatedFat: Math.round(quickNutrition.saturatedFat * 10) / 10,
+        fiber: Math.round(quickNutrition.fiber * 10) / 10,
+      },
+      notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
+    });
+    resetAndClose();
+  }
+
   function resetAndClose() {
     handleOpenChange(false);
   }
@@ -99,11 +138,17 @@ export function AddEntryDialog({
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
+      setAddMode("search");
       setSelectedFoodId(null);
       setInputMode("grams");
       setAmount("");
       setSearch("");
       setNotes("");
+      setQuickName("");
+      setQuickCalories("");
+      setQuickProtein("");
+      setQuickSaturatedFat("");
+      setQuickFiber("");
     }
     onOpenChange(nextOpen);
   }
@@ -114,11 +159,153 @@ export function AddEntryDialog({
         <DialogHeader>
           <DialogTitle>Add Entry</DialogTitle>
           <DialogDescription>
-            Search for a food, then enter grams or units.
+            Search for a saved food or add one estimated entry.
           </DialogDescription>
         </DialogHeader>
 
-        {selectedFood == null ? (
+        <div className="grid grid-cols-2 gap-2 rounded-lg bg-secondary p-1">
+          <button
+            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+              addMode === "search"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => setAddMode("search")}
+          >
+            Search
+          </button>
+          <button
+            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+              addMode === "quick-add"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => {
+              setAddMode("quick-add");
+              setSelectedFoodId(null);
+            }}
+          >
+            Quick Add
+          </button>
+        </div>
+
+        {addMode === "quick-add" ? (
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="quick-name">Name</Label>
+              <Input
+                id="quick-name"
+                value={quickName}
+                onChange={(e) => setQuickName(e.target.value)}
+                placeholder="e.g. Restaurant pasta"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="quick-calories">Calories</Label>
+                <Input
+                  id="quick-calories"
+                  type="number"
+                  value={quickCalories}
+                  onChange={(e) => setQuickCalories(e.target.value)}
+                  step="any"
+                  min="0"
+                  placeholder="kcal"
+                />
+              </div>
+              <div>
+                <Label htmlFor="quick-protein">Protein</Label>
+                <Input
+                  id="quick-protein"
+                  type="number"
+                  value={quickProtein}
+                  onChange={(e) => setQuickProtein(e.target.value)}
+                  step="any"
+                  min="0"
+                  placeholder="g"
+                />
+              </div>
+              <div>
+                <Label htmlFor="quick-saturated-fat">Sat. Fat</Label>
+                <Input
+                  id="quick-saturated-fat"
+                  type="number"
+                  value={quickSaturatedFat}
+                  onChange={(e) => setQuickSaturatedFat(e.target.value)}
+                  step="any"
+                  min="0"
+                  placeholder="g"
+                />
+              </div>
+              <div>
+                <Label htmlFor="quick-fiber">Fiber</Label>
+                <Input
+                  id="quick-fiber"
+                  type="number"
+                  value={quickFiber}
+                  onChange={(e) => setQuickFiber(e.target.value)}
+                  step="any"
+                  min="0"
+                  placeholder="g"
+                />
+              </div>
+            </div>
+
+            {quickHasNutrition && (
+              <div className="rounded-lg bg-secondary/50 p-3 text-sm">
+                <p className="mb-1 text-xs text-muted-foreground">Preview</p>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div>
+                    <p className="font-medium text-primary">
+                      {Math.round(quickNutrition.calories)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">kcal</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">
+                      {Math.round(quickNutrition.protein * 10) / 10}g
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">Protein</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">
+                      {Math.round(quickNutrition.saturatedFat * 10) / 10}g
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">Sat. Fat</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">
+                      {Math.round(quickNutrition.fiber * 10) / 10}g
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">Fiber</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="quick-notes">Notes (optional)</Label>
+              <textarea
+                id="quick-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. estimated at restaurant"
+                className="mt-1 w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                rows={2}
+              />
+            </div>
+
+            <Button
+              className="w-full"
+              onClick={handleQuickAdd}
+              disabled={quickName.trim().length === 0 || !quickHasNutrition}
+            >
+              Add to Log
+            </Button>
+          </div>
+        ) : selectedFood == null ? (
           <div className="space-y-3">
             <Input
               placeholder="Search foods..."

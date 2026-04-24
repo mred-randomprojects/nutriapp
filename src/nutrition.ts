@@ -45,6 +45,13 @@ export function sumNutrition(
 
   for (const item of items) {
     if (item.type === "separator") continue;
+    if (item.type === "quick-add") {
+      totals.calories += item.nutrition.calories;
+      totals.protein += item.nutrition.protein;
+      totals.saturatedFat += item.nutrition.saturatedFat;
+      totals.fiber += item.nutrition.fiber;
+      continue;
+    }
     const food = foodsMap.get(item.foodId);
     if (food == null) continue;
     const entryNutrition = nutritionForEntry(item, food);

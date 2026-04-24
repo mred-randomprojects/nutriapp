@@ -35,7 +35,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppDataHandle } from "../appDataType";
-import type { DayLog, DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, ProfileId, WakeSleepSchedule } from "../types";
+import type { DayLog, DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, ProfileId, QuickAddEntry, WakeSleepSchedule } from "../types";
 import { computeExpectedWeight } from "../calculator";
 import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
 import { Button } from "./ui/button";
@@ -118,6 +118,18 @@ function buildMarkdownForDay(
     if (item.type === "separator") {
       currentSection = item.label;
       lines.push(`  - Section: ${item.label}`);
+      continue;
+    }
+
+    if (item.type === "quick-add") {
+      const sectionPrefix = currentSection != null ? `[${currentSection}] ` : "";
+      lines.push(
+        `  - ${sectionPrefix}${item.name}: quick add; ${formatNutritionSummary(item.nutrition)}`,
+      );
+
+      if (item.notes != null && item.notes.trim().length > 0) {
+        lines.push(`  - Note: ${item.notes.trim()}`);
+      }
       continue;
     }
 
@@ -546,6 +558,209 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
   );
 }
 
+interface QuickAddEntryCardProps {
+  item: QuickAddEntry;
+  isLocked: boolean;
+  onRemove: () => void;
+  onUpdate: (updates: Partial<Omit<QuickAddEntry, "id" | "type">>) => void;
+}
+
+function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate }: QuickAddEntryCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editCalories, setEditCalories] = useState("");
+  const [editProtein, setEditProtein] = useState("");
+  const [editSaturatedFat, setEditSaturatedFat] = useState("");
+  const [editFiber, setEditFiber] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const editCardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        editCardRef.current != null &&
+        !editCardRef.current.contains(e.target as Node)
+      ) {
+        setIsEditing(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isEditing]);
+
+  function startEditing() {
+    setEditName(item.name);
+    setEditCalories(String(item.nutrition.calories));
+    setEditProtein(String(item.nutrition.protein));
+    setEditSaturatedFat(String(item.nutrition.saturatedFat));
+    setEditFiber(String(item.nutrition.fiber));
+    setEditNotes(item.notes ?? "");
+    setIsEditing(true);
+  }
+
+  function parseEditValue(value: string): number {
+    const parsed = parseFloat(value);
+    return Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
+  }
+
+  function commitEdit() {
+    const trimmedName = editName.trim();
+    if (trimmedName.length === 0) {
+      setIsEditing(false);
+      return;
+    }
+
+    const nutrition: NutritionValues = {
+      calories: Math.round(parseEditValue(editCalories) * 10) / 10,
+      protein: Math.round(parseEditValue(editProtein) * 10) / 10,
+      saturatedFat: Math.round(parseEditValue(editSaturatedFat) * 10) / 10,
+      fiber: Math.round(parseEditValue(editFiber) * 10) / 10,
+    };
+    const trimmedNotes = editNotes.trim();
+
+    onUpdate({
+      name: trimmedName,
+      nutrition,
+      notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
+    });
+    setIsEditing(false);
+  }
+
+  if (isEditing) {
+    return (
+      <Card ref={editCardRef}>
+        <CardContent className="p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-xs font-medium">
+              QA
+            </div>
+            <Input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="h-8 min-w-0 flex-1 text-sm"
+              autoFocus
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+          </div>
+          <form
+            className="mt-3 space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              commitEdit();
+            }}
+          >
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                type="number"
+                value={editCalories}
+                onChange={(e) => setEditCalories(e.target.value)}
+                className="h-8 text-sm"
+                step="any"
+                min="0"
+                placeholder="kcal"
+              />
+              <Input
+                type="number"
+                value={editProtein}
+                onChange={(e) => setEditProtein(e.target.value)}
+                className="h-8 text-sm"
+                step="any"
+                min="0"
+                placeholder="protein g"
+              />
+              <Input
+                type="number"
+                value={editSaturatedFat}
+                onChange={(e) => setEditSaturatedFat(e.target.value)}
+                className="h-8 text-sm"
+                step="any"
+                min="0"
+                placeholder="sat fat g"
+              />
+              <Input
+                type="number"
+                value={editFiber}
+                onChange={(e) => setEditFiber(e.target.value)}
+                className="h-8 text-sm"
+                step="any"
+                min="0"
+                placeholder="fiber g"
+              />
+            </div>
+            <textarea
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="Add a note..."
+              className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              rows={2}
+            />
+            <div className="flex justify-end">
+              <Button type="submit" size="sm" className="h-8">
+                Save
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card
+      className={`transition-colors ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
+      onClick={isLocked ? undefined : startEditing}
+    >
+      <CardContent className="flex items-center gap-3 p-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-xs font-medium">
+          QA
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{item.name}</p>
+          <p className="text-xs text-muted-foreground">Quick add</p>
+          {item.notes != null && item.notes.length > 0 && (
+            <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground italic">
+              <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
+              <span className="line-clamp-2">{item.notes}</span>
+            </p>
+          )}
+        </div>
+        <div className="text-right text-xs">
+          <p className="font-medium text-primary">
+            {Math.round(item.nutrition.calories)} kcal
+          </p>
+          <p className="text-muted-foreground">
+            {formatNumber(item.nutrition.protein)}g prot
+          </p>
+        </div>
+        {!isLocked && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface WeightInputProps {
   weightKg: number | undefined;
   expectedWeightKg: number | null;
@@ -658,11 +873,11 @@ export function DailyLog({ appData }: DailyLogProps) {
   const {
     activeProfile,
     foodsMap,
-    allFoods,
     addSeparator,
     removeLogEntry,
     reorderLogEntries,
     updateLogEntry,
+    updateQuickAddEntry,
     updateDayLogWeight,
   } = appData;
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -821,7 +1036,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     if (dayLog == null) return new Map<LogEntryId, NutritionValues>();
     const result = new Map<LogEntryId, NutritionValues>();
     let currentSeparatorId: LogEntryId | null = null;
-    let currentItems: LogEntry[] = [];
+    let currentItems: Array<LogEntry | QuickAddEntry> = [];
 
     function flushSection() {
       if (currentSeparatorId != null && currentItems.length > 0) {
@@ -853,23 +1068,6 @@ export function DailyLog({ appData }: DailyLogProps) {
             </p>
             <Button onClick={() => navigate("/profiles")}>
               Go to Profiles
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (allFoods.length === 0) {
-    return (
-      <div className="p-4">
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            <p className="mb-3">
-              No foods in your database yet. Add some foods first.
-            </p>
-            <Button onClick={() => navigate("/foods/new")}>
-              Add First Food
             </Button>
           </CardContent>
         </Card>
@@ -1173,6 +1371,40 @@ export function DailyLog({ appData }: DailyLogProps) {
               }
 
               if (isCollapsed) return null;
+
+              if (item.type === "quick-add") {
+                return (
+                  <SortableItem key={item.id} item={item} isLocked={isLocked}>
+                    <QuickAddEntryCard
+                      item={item}
+                      isLocked={isLocked}
+                      onRemove={() =>
+                        setPendingDelete({
+                          title: "Remove entry",
+                          description: `Remove "${item.name}" from this day's log?`,
+                          onConfirm: () =>
+                            removeLogEntry(
+                              activeProfile.id as ProfileId,
+                              dateStr,
+                              item.id as LogEntryId,
+                            ),
+                        })
+                      }
+                      onUpdate={(updates) =>
+                        updateQuickAddEntry(
+                          activeProfile.id as ProfileId,
+                          dateStr,
+                          item.id as LogEntryId,
+                          updates,
+                        )
+                      }
+                    />
+                    {subtotal != null && (
+                      <SectionSubtotal totals={subtotal} />
+                    )}
+                  </SortableItem>
+                );
+              }
 
               const food = foodsMap.get(item.foodId);
               if (food == null) {

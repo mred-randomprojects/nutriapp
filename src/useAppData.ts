@@ -10,6 +10,7 @@ import type {
   LogEntry,
   LogEntryId,
   DayLogItem,
+  QuickAddEntry,
   SectionSeparator,
   UserMetrics,
   WakeSleepSchedule,
@@ -209,7 +210,10 @@ export function useAppData() {
           dayLogs: p.dayLogs.map((dl) => ({
             ...dl,
             entries: dl.entries.filter(
-              (e) => e.type === "separator" || e.foodId !== foodId,
+              (e) =>
+                e.type === "separator" ||
+                e.type === "quick-add" ||
+                e.foodId !== foodId,
             ),
           })),
         })),
@@ -299,7 +303,7 @@ export function useAppData() {
   // --- Day log entries ---
 
   const appendToDayLog = useCallback(
-    (profileId: ProfileId, date: string, item: LogEntry | SectionSeparator) => {
+    (profileId: ProfileId, date: string, item: DayLogItem) => {
       persist({
         ...data,
         profiles: data.profiles.map((p) => {
@@ -346,6 +350,21 @@ export function useAppData() {
         label,
       };
       appendToDayLog(profileId, date, separator);
+    },
+    [appendToDayLog],
+  );
+
+  const addQuickAddEntry = useCallback(
+    (
+      profileId: ProfileId,
+      date: string,
+      entry: Omit<QuickAddEntry, "id">,
+    ) => {
+      const newEntry: QuickAddEntry = {
+        ...entry,
+        id: generateId() as LogEntryId,
+      };
+      appendToDayLog(profileId, date, newEntry);
     },
     [appendToDayLog],
   );
@@ -444,7 +463,43 @@ export function useAppData() {
                 ? {
                     ...dl,
                     entries: dl.entries.map((e) =>
-                      e.id === entryId ? { ...e, ...updates } : e,
+                      e.type !== "separator" &&
+                      e.type !== "quick-add" &&
+                      e.id === entryId
+                        ? { ...e, ...updates }
+                        : e,
+                    ),
+                  }
+                : dl,
+            ),
+          };
+        }),
+      });
+    },
+    [data, persist],
+  );
+
+  const updateQuickAddEntry = useCallback(
+    (
+      profileId: ProfileId,
+      date: string,
+      entryId: LogEntryId,
+      updates: Partial<Omit<QuickAddEntry, "id" | "type">>,
+    ) => {
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          return {
+            ...p,
+            dayLogs: p.dayLogs.map((dl) =>
+              dl.date === date
+                ? {
+                    ...dl,
+                    entries: dl.entries.map((e) =>
+                      e.type === "quick-add" && e.id === entryId
+                        ? { ...e, ...updates }
+                        : e,
                     ),
                   }
                 : dl,
@@ -473,10 +528,12 @@ export function useAppData() {
     renameProfile,
     updateProfileGoals,
     addLogEntry,
+    addQuickAddEntry,
     addSeparator,
     removeLogEntry,
     reorderLogEntries,
     updateLogEntry,
+    updateQuickAddEntry,
     updateDayLogWeight,
     setWeightLossPlan,
     setStorageError,
