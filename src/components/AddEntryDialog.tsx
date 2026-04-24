@@ -155,7 +155,7 @@ export function AddEntryDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto">
+      <DialogContent className="max-h-[85dvh] overflow-x-hidden overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Entry</DialogTitle>
           <DialogDescription>
@@ -306,18 +306,18 @@ export function AddEntryDialog({
             </Button>
           </div>
         ) : selectedFood == null ? (
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             <Input
               placeholder="Search foods..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
             />
-            <div className="max-h-60 space-y-1 overflow-y-auto">
+            <div className="max-h-60 min-w-0 space-y-1 overflow-y-auto">
               {filteredFoods.map((food) => (
                 <button
                   key={food.id}
-                  className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-accent"
+                  className="flex w-full min-w-0 items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-accent"
                   onClick={() => selectFood(food.id)}
                 >
                   {food.imageUrl != null ? (
