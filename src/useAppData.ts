@@ -10,8 +10,9 @@ import type {
   LogEntry,
   LogEntryId,
   DayLogItem,
+  MealPlanId,
   QuickAddEntry,
-  PlanWeekday,
+  SavedMealPlan,
   SectionSeparator,
   UserMetrics,
   WakeSleepSchedule,
@@ -26,6 +27,22 @@ import { useAuth } from "./auth";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
 
+function clonePlanEntries(entries: ReadonlyArray<DayLogItem>): DayLogItem[] {
+  return entries.map((entry) => ({ ...entry }));
+}
+
+function removeFoodFromPlanEntries(
+  entries: ReadonlyArray<DayLogItem>,
+  foodId: FoodId,
+): DayLogItem[] {
+  return entries.filter(
+    (entry) =>
+      entry.type === "separator" ||
+      entry.type === "quick-add" ||
+      entry.foodId !== foodId,
+  );
+}
+
 function removeFoodFromWeeklyPlan(
   plan: WeeklyMealPlan | undefined,
   foodId: FoodId,
@@ -34,17 +51,47 @@ function removeFoodFromWeeklyPlan(
   const next: WeeklyMealPlan = {};
 
   for (const key of Object.keys(plan)) {
-    const weekday = Number(key) as PlanWeekday;
+    const weekday = Number(key) as keyof WeeklyMealPlan;
     const entries = plan[weekday] ?? [];
-    next[weekday] = entries.filter(
-      (entry) =>
-        entry.type === "separator" ||
-        entry.type === "quick-add" ||
-        entry.foodId !== foodId,
-    );
+    next[weekday] = removeFoodFromPlanEntries(entries, foodId);
   }
 
   return next;
+}
+
+function removeFoodFromMealPlans(
+  plans: ReadonlyArray<SavedMealPlan> | undefined,
+  foodId: FoodId,
+): SavedMealPlan[] | undefined {
+  if (plans == null) return plans;
+  return plans.map((plan) => ({
+    ...plan,
+    entries: removeFoodFromPlanEntries(plan.entries, foodId),
+    updatedAt: new Date().toISOString(),
+  }));
+}
+
+function makeBudgetedPlanEntries(entries: ReadonlyArray<DayLogItem>): DayLogItem[] {
+  return entries.map((entry) => {
+    if (entry.type === "separator") {
+      return {
+        ...entry,
+        id: generateId() as LogEntryId,
+      };
+    }
+    if (entry.type === "quick-add") {
+      return {
+        ...entry,
+        id: generateId() as LogEntryId,
+        isBudgeted: true,
+      };
+    }
+    return {
+      ...entry,
+      id: generateId() as LogEntryId,
+      isBudgeted: true,
+    };
+  });
 }
 
 /**
@@ -230,6 +277,7 @@ export function useAppData() {
           }),
         profiles: data.profiles.map((p) => ({
           ...p,
+          mealPlans: removeFoodFromMealPlans(p.mealPlans, foodId),
           weeklyPlan: removeFoodFromWeeklyPlan(p.weeklyPlan, foodId),
           dayLogs: p.dayLogs.map((dl) => ({
             ...dl,
@@ -259,6 +307,7 @@ export function useAppData() {
         schedule: null,
         userMetrics: null,
         weightLossPlan: null,
+        mealPlans: [],
         weeklyPlan: {},
       };
       const next: AppData = {
@@ -536,55 +585,53 @@ export function useAppData() {
     [data, persist],
   );
 
-  const saveWeekdayPlanFromDay = useCallback(
-    (profileId: ProfileId, weekday: PlanWeekday, entries: ReadonlyArray<DayLogItem>) => {
+  const saveMealPlanFromDay = useCallback(
+    (profileId: ProfileId, name: string, entries: ReadonlyArray<DayLogItem>) => {
+      const trimmedName = name.trim();
+      if (trimmedName.length === 0 || entries.length === 0) return;
+      const now = new Date().toISOString();
       persist({
         ...data,
-        profiles: data.profiles.map((p) =>
-          p.id === profileId
-            ? {
-                ...p,
-                weeklyPlan: {
-                  ...(p.weeklyPlan ?? {}),
-                  [weekday]: entries.map((entry) => ({ ...entry })),
-                },
-              }
-            : p,
-        ),
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          const existingPlans = p.mealPlans ?? [];
+          const existingIndex = existingPlans.findIndex(
+            (plan) => plan.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+          );
+          const nextPlan: SavedMealPlan = {
+            id:
+              existingIndex >= 0
+                ? existingPlans[existingIndex].id
+                : (generateId() as MealPlanId),
+            name: trimmedName,
+            entries: clonePlanEntries(entries),
+            createdAt:
+              existingIndex >= 0 ? existingPlans[existingIndex].createdAt : now,
+            updatedAt: now,
+          };
+          const nextPlans =
+            existingIndex >= 0
+              ? existingPlans.map((plan, index) =>
+                  index === existingIndex ? nextPlan : plan,
+                )
+              : [...existingPlans, nextPlan];
+          return { ...p, mealPlans: nextPlans };
+        }),
       });
     },
     [data, persist],
   );
 
-  const applyWeekdayPlanToDay = useCallback(
-    (profileId: ProfileId, weekday: PlanWeekday, date: string) => {
+  const applyMealPlanToDay = useCallback(
+    (profileId: ProfileId, planId: MealPlanId, date: string) => {
       persist({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
-          const planEntries = p.weeklyPlan?.[weekday] ?? [];
+          const planEntries =
+            p.mealPlans?.find((plan) => plan.id === planId)?.entries ?? [];
           if (planEntries.length === 0) return p;
-
-          const entriesToAdd: DayLogItem[] = planEntries.map((entry) => {
-            if (entry.type === "separator") {
-              return {
-                ...entry,
-                id: generateId() as LogEntryId,
-              };
-            }
-            if (entry.type === "quick-add") {
-              return {
-                ...entry,
-                id: generateId() as LogEntryId,
-                isBudgeted: true,
-              };
-            }
-            return {
-              ...entry,
-              id: generateId() as LogEntryId,
-              isBudgeted: true,
-            };
-          });
+          const entriesToAdd = makeBudgetedPlanEntries(planEntries);
 
           const existingDay = p.dayLogs.find((dl) => dl.date === date);
           if (existingDay != null) {
@@ -629,8 +676,8 @@ export function useAppData() {
     reorderLogEntries,
     updateLogEntry,
     updateQuickAddEntry,
-    saveWeekdayPlanFromDay,
-    applyWeekdayPlanToDay,
+    saveMealPlanFromDay,
+    applyMealPlanToDay,
     updateDayLogWeight,
     setWeightLossPlan,
     setStorageError,

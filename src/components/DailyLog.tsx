@@ -39,13 +39,21 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppDataHandle } from "../appDataType";
-import type { DayLog, DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, PlanWeekday, ProfileId, QuickAddEntry, WakeSleepSchedule } from "../types";
+import type { DayLog, DayLogItem, Food, LogEntry, LogEntryId, MealPlanId, NutritionGoals, NutritionValues, ProfileId, QuickAddEntry, WakeSleepSchedule } from "../types";
 import { computeExpectedWeight } from "../calculator";
 import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
+import { normalizeForSearch } from "../search";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "./ui/dialog";
 import { AddEntryDialog } from "./AddEntryDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
@@ -998,8 +1006,8 @@ export function DailyLog({ appData }: DailyLogProps) {
     reorderLogEntries,
     updateLogEntry,
     updateQuickAddEntry,
-    saveWeekdayPlanFromDay,
-    applyWeekdayPlanToDay,
+    saveMealPlanFromDay,
+    applyMealPlanToDay,
     updateDayLogWeight,
   } = appData;
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -1007,6 +1015,9 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [planMenuOpen, setPlanMenuOpen] = useState(false);
+  const [savePlanDialogOpen, setSavePlanDialogOpen] = useState(false);
+  const [planName, setPlanName] = useState("");
+  const [planSearch, setPlanSearch] = useState("");
   const [customLabel, setCustomLabel] = useState("");
   const [unlockedDates, setUnlockedDates] = useState<Set<string>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
@@ -1091,8 +1102,6 @@ export function DailyLog({ appData }: DailyLogProps) {
 
   const dateStr = formatDate(selectedDate);
   const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
-  const selectedWeekday = selectedDate.getDay() as PlanWeekday;
-  const selectedWeekdayName = format(selectedDate, "EEEE");
 
   function toggleLock() {
     setUnlockedDates((prev) => {
@@ -1116,7 +1125,17 @@ export function DailyLog({ appData }: DailyLogProps) {
     [dayLog],
   );
 
-  const selectedWeekdayPlan = activeProfile?.weeklyPlan?.[selectedWeekday] ?? [];
+  const mealPlans = useMemo(
+    () => activeProfile?.mealPlans ?? [],
+    [activeProfile?.mealPlans],
+  );
+  const filteredMealPlans = useMemo(() => {
+    const normalizedSearch = normalizeForSearch(planSearch);
+    if (normalizedSearch.length === 0) return mealPlans;
+    return mealPlans.filter((plan) =>
+      normalizeForSearch(plan.name).includes(normalizedSearch),
+    );
+  }, [mealPlans, planSearch]);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -1192,29 +1211,28 @@ export function DailyLog({ appData }: DailyLogProps) {
 
   const saveCurrentDayAsPlan = useCallback(() => {
     if (activeProfile == null || dayLog == null || dayLog.entries.length === 0) return;
-    saveWeekdayPlanFromDay(activeProfile.id, selectedWeekday, dayLog.entries);
-    setPlanFeedback(`Saved ${selectedWeekdayName} plan`);
-    setPlanMenuOpen(false);
+    const trimmedName = planName.trim();
+    if (trimmedName.length === 0) return;
+    saveMealPlanFromDay(activeProfile.id, trimmedName, dayLog.entries);
+    setPlanFeedback(`Saved ${trimmedName}`);
+    setSavePlanDialogOpen(false);
+    setPlanName("");
   }, [
     activeProfile,
     dayLog,
-    saveWeekdayPlanFromDay,
-    selectedWeekday,
-    selectedWeekdayName,
+    planName,
+    saveMealPlanFromDay,
   ]);
 
-  const applyCurrentWeekdayPlan = useCallback(() => {
-    if (activeProfile == null || selectedWeekdayPlan.length === 0) return;
-    applyWeekdayPlanToDay(activeProfile.id, selectedWeekday, dateStr);
-    setPlanFeedback(`Applied ${selectedWeekdayName} plan`);
+  const applyPlan = useCallback((planId: MealPlanId, planNameToApply: string) => {
+    if (activeProfile == null) return;
+    applyMealPlanToDay(activeProfile.id, planId, dateStr);
+    setPlanFeedback(`Applied ${planNameToApply}`);
     setPlanMenuOpen(false);
   }, [
     activeProfile,
-    applyWeekdayPlanToDay,
+    applyMealPlanToDay,
     dateStr,
-    selectedWeekday,
-    selectedWeekdayName,
-    selectedWeekdayPlan.length,
   ]);
 
   const sectionSubtotals = useMemo(() => {
@@ -1335,8 +1353,8 @@ export function DailyLog({ appData }: DailyLogProps) {
       />
 
       {/* Entries list */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-1">
+      <div className="mb-4 space-y-3">
+        <div className="flex items-center justify-center gap-1">
           <h2 className="font-semibold">Entries</h2>
           {sectionSubtotals.size > 0 && (
             <Button
@@ -1357,7 +1375,7 @@ export function DailyLog({ appData }: DailyLogProps) {
             </Button>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <div className="relative" ref={copyMenuRef}>
             <div className="flex">
               <Button
@@ -1397,7 +1415,7 @@ export function DailyLog({ appData }: DailyLogProps) {
             <span className="text-xs text-muted-foreground">{planFeedback}</span>
           )}
         {!isLocked && (
-        <div className="flex gap-2">
+        <>
           <div className="relative" ref={planMenuRef}>
             <Button
               size="sm"
@@ -1409,33 +1427,66 @@ export function DailyLog({ appData }: DailyLogProps) {
               <ChevronDown className="ml-1 h-3.5 w-3.5" />
             </Button>
             {planMenuOpen && (
-              <div className="absolute right-0 z-10 mt-1 w-64 rounded-lg border bg-popover p-1 shadow-lg">
-                <button
-                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={selectedWeekdayPlan.length === 0}
-                  onClick={applyCurrentWeekdayPlan}
-                >
-                  <CalendarCheck className="h-4 w-4" />
-                  <span className="min-w-0 flex-1">
-                    Apply {selectedWeekdayName} plan
-                  </span>
-                  {selectedWeekdayPlan.length > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {selectedWeekdayPlan.length}
-                    </span>
+              <div className="absolute right-0 z-10 mt-1 w-72 rounded-lg border bg-popover p-2 shadow-lg">
+                <Input
+                  value={planSearch}
+                  onChange={(e) => setPlanSearch(e.target.value)}
+                  placeholder="Search plans..."
+                  className="mb-2 h-8 text-sm"
+                />
+                <div className="max-h-56 space-y-1 overflow-y-auto">
+                  {filteredMealPlans.map((plan) => (
+                    <button
+                      key={plan.id}
+                      className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent"
+                      onClick={() => applyPlan(plan.id, plan.name)}
+                    >
+                      <CalendarCheck className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {plan.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {plan.entries.length}
+                      </span>
+                    </button>
+                  ))}
+                  {filteredMealPlans.length === 0 && (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">
+                      {mealPlans.length === 0
+                        ? "No saved plans yet."
+                        : "No plans match your search."}
+                    </p>
                   )}
-                </button>
-                <button
-                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={dayLog == null || dayLog.entries.length === 0}
-                  onClick={saveCurrentDayAsPlan}
-                >
-                  <Save className="h-4 w-4" />
-                  Save this day as {selectedWeekdayName} plan
-                </button>
+                </div>
+                <div className="mt-2 border-t pt-2">
+                  <button
+                    className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={dayLog == null || dayLog.entries.length === 0}
+                    onClick={() => {
+                      setPlanName("");
+                      setSavePlanDialogOpen(true);
+                      setPlanMenuOpen(false);
+                    }}
+                  >
+                    <Save className="h-4 w-4" />
+                    Save this day as plan
+                  </button>
+                </div>
               </div>
             )}
           </div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={dayLog == null || dayLog.entries.length === 0}
+            onClick={() => {
+              setPlanName("");
+              setSavePlanDialogOpen(true);
+            }}
+          >
+            <Save className="mr-1 h-4 w-4" />
+            Save Plan
+          </Button>
           <div className="relative">
             <Button
               size="sm"
@@ -1482,7 +1533,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                     <Input
                       value={customLabel}
                       onChange={(e) => setCustomLabel(e.target.value)}
-                      placeholder="Custom…"
+                      placeholder="Custom..."
                       className="h-7 text-sm"
                       autoFocus
                     />
@@ -1498,7 +1549,7 @@ export function DailyLog({ appData }: DailyLogProps) {
             <Plus className="mr-1 h-4 w-4" />
             Add Entry
           </Button>
-        </div>
+        </>
         )}
         </div>
       </div>
@@ -1731,6 +1782,44 @@ export function DailyLog({ appData }: DailyLogProps) {
           </div>
         </SortableContext>
       </DndContext>
+
+      <Dialog
+        open={savePlanDialogOpen}
+        onOpenChange={(open) => {
+          setSavePlanDialogOpen(open);
+          if (!open) setPlanName("");
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Plan</DialogTitle>
+            <DialogDescription>
+              Save this day as a reusable plan you can apply to any day.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveCurrentDayAsPlan();
+            }}
+          >
+            <Input
+              value={planName}
+              onChange={(e) => setPlanName(e.target.value)}
+              placeholder="e.g. Weekday plan"
+              autoFocus
+            />
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={planName.trim().length === 0}
+            >
+              Save Plan
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AddEntryDialog
         open={addDialogOpen}
