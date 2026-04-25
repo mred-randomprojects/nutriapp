@@ -4,6 +4,7 @@
 export type FoodId = string & { readonly __brand: "FoodId" };
 export type ProfileId = string & { readonly __brand: "ProfileId" };
 export type LogEntryId = string & { readonly __brand: "LogEntryId" };
+export type PlanWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export function generateId(): string {
   return crypto.randomUUID();
@@ -95,6 +96,8 @@ export interface DayLog {
   weightKg?: number;
 }
 
+export type WeeklyMealPlan = Partial<Record<PlanWeekday, DayLogItem[]>>;
+
 export type SaturatedFatMode = "grams" | "percentage";
 
 export type Sex = "male" | "female";
@@ -169,6 +172,7 @@ export interface Profile {
   schedule: WakeSleepSchedule | null;
   userMetrics: UserMetrics | null;
   weightLossPlan: WeightLossPlan | null;
+  weeklyPlan?: WeeklyMealPlan;
 }
 
 /**
