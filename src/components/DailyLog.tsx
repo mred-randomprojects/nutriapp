@@ -18,6 +18,8 @@ import {
   Copy,
   CalendarCheck,
   Utensils,
+  CalendarDays,
+  Save,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -37,7 +39,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppDataHandle } from "../appDataType";
-import type { DayLog, DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, ProfileId, QuickAddEntry, WakeSleepSchedule } from "../types";
+import type { DayLog, DayLogItem, Food, LogEntry, LogEntryId, NutritionGoals, NutritionValues, PlanWeekday, ProfileId, QuickAddEntry, WakeSleepSchedule } from "../types";
 import { computeExpectedWeight } from "../calculator";
 import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
 import { Button } from "./ui/button";
@@ -996,18 +998,23 @@ export function DailyLog({ appData }: DailyLogProps) {
     reorderLogEntries,
     updateLogEntry,
     updateQuickAddEntry,
+    saveWeekdayPlanFromDay,
+    applyWeekdayPlanToDay,
     updateDayLogWeight,
   } = appData;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const [planMenuOpen, setPlanMenuOpen] = useState(false);
   const [customLabel, setCustomLabel] = useState("");
   const [unlockedDates, setUnlockedDates] = useState<Set<string>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [planFeedback, setPlanFeedback] = useState<string | null>(null);
   const copyMenuRef = useRef<HTMLDivElement>(null);
+  const planMenuRef = useRef<HTMLDivElement>(null);
 
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 200, tolerance: 5 },
@@ -1055,13 +1062,37 @@ export function DailyLog({ appData }: DailyLogProps) {
   }, [copyMenuOpen]);
 
   useEffect(() => {
+    if (!planMenuOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        planMenuRef.current != null &&
+        !planMenuRef.current.contains(event.target as Node)
+      ) {
+        setPlanMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [planMenuOpen]);
+
+  useEffect(() => {
     if (copyFeedback == null) return;
     const timeout = window.setTimeout(() => setCopyFeedback(null), 2500);
     return () => window.clearTimeout(timeout);
   }, [copyFeedback]);
 
+  useEffect(() => {
+    if (planFeedback == null) return;
+    const timeout = window.setTimeout(() => setPlanFeedback(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [planFeedback]);
+
   const dateStr = formatDate(selectedDate);
   const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
+  const selectedWeekday = selectedDate.getDay() as PlanWeekday;
+  const selectedWeekdayName = format(selectedDate, "EEEE");
 
   function toggleLock() {
     setUnlockedDates((prev) => {
@@ -1084,6 +1115,8 @@ export function DailyLog({ appData }: DailyLogProps) {
     () => dayLog?.entries.map((e) => e.id) ?? [],
     [dayLog],
   );
+
+  const selectedWeekdayPlan = activeProfile?.weeklyPlan?.[selectedWeekday] ?? [];
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -1156,6 +1189,33 @@ export function DailyLog({ appData }: DailyLogProps) {
       setCopyFeedback("Clipboard copy failed");
     }
   }, []);
+
+  const saveCurrentDayAsPlan = useCallback(() => {
+    if (activeProfile == null || dayLog == null || dayLog.entries.length === 0) return;
+    saveWeekdayPlanFromDay(activeProfile.id, selectedWeekday, dayLog.entries);
+    setPlanFeedback(`Saved ${selectedWeekdayName} plan`);
+    setPlanMenuOpen(false);
+  }, [
+    activeProfile,
+    dayLog,
+    saveWeekdayPlanFromDay,
+    selectedWeekday,
+    selectedWeekdayName,
+  ]);
+
+  const applyCurrentWeekdayPlan = useCallback(() => {
+    if (activeProfile == null || selectedWeekdayPlan.length === 0) return;
+    applyWeekdayPlanToDay(activeProfile.id, selectedWeekday, dateStr);
+    setPlanFeedback(`Applied ${selectedWeekdayName} plan`);
+    setPlanMenuOpen(false);
+  }, [
+    activeProfile,
+    applyWeekdayPlanToDay,
+    dateStr,
+    selectedWeekday,
+    selectedWeekdayName,
+    selectedWeekdayPlan.length,
+  ]);
 
   const sectionSubtotals = useMemo(() => {
     if (dayLog == null) return new Map<LogEntryId, NutritionValues>();
@@ -1333,8 +1393,49 @@ export function DailyLog({ appData }: DailyLogProps) {
           {copyFeedback != null && (
             <span className="text-xs text-muted-foreground">{copyFeedback}</span>
           )}
+          {planFeedback != null && (
+            <span className="text-xs text-muted-foreground">{planFeedback}</span>
+          )}
         {!isLocked && (
         <div className="flex gap-2">
+          <div className="relative" ref={planMenuRef}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPlanMenuOpen(!planMenuOpen)}
+            >
+              <CalendarDays className="mr-1 h-4 w-4" />
+              Plan
+              <ChevronDown className="ml-1 h-3.5 w-3.5" />
+            </Button>
+            {planMenuOpen && (
+              <div className="absolute right-0 z-10 mt-1 w-64 rounded-lg border bg-popover p-1 shadow-lg">
+                <button
+                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={selectedWeekdayPlan.length === 0}
+                  onClick={applyCurrentWeekdayPlan}
+                >
+                  <CalendarCheck className="h-4 w-4" />
+                  <span className="min-w-0 flex-1">
+                    Apply {selectedWeekdayName} plan
+                  </span>
+                  {selectedWeekdayPlan.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {selectedWeekdayPlan.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={dayLog == null || dayLog.entries.length === 0}
+                  onClick={saveCurrentDayAsPlan}
+                >
+                  <Save className="h-4 w-4" />
+                  Save this day as {selectedWeekdayName} plan
+                </button>
+              </div>
+            )}
+          </div>
           <div className="relative">
             <Button
               size="sm"

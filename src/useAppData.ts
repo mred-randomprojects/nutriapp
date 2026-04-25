@@ -11,9 +11,11 @@ import type {
   LogEntryId,
   DayLogItem,
   QuickAddEntry,
+  PlanWeekday,
   SectionSeparator,
   UserMetrics,
   WakeSleepSchedule,
+  WeeklyMealPlan,
   WeightLossPlan,
 } from "./types";
 import { generateId } from "./types";
@@ -23,6 +25,27 @@ import { mergeAppData } from "./mergeAppData";
 import { useAuth } from "./auth";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
+
+function removeFoodFromWeeklyPlan(
+  plan: WeeklyMealPlan | undefined,
+  foodId: FoodId,
+): WeeklyMealPlan | undefined {
+  if (plan == null) return plan;
+  const next: WeeklyMealPlan = {};
+
+  for (const key of Object.keys(plan)) {
+    const weekday = Number(key) as PlanWeekday;
+    const entries = plan[weekday] ?? [];
+    next[weekday] = entries.filter(
+      (entry) =>
+        entry.type === "separator" ||
+        entry.type === "quick-add" ||
+        entry.foodId !== foodId,
+    );
+  }
+
+  return next;
+}
 
 /**
  * Central hook that owns all app state and persists to both
@@ -207,6 +230,7 @@ export function useAppData() {
           }),
         profiles: data.profiles.map((p) => ({
           ...p,
+          weeklyPlan: removeFoodFromWeeklyPlan(p.weeklyPlan, foodId),
           dayLogs: p.dayLogs.map((dl) => ({
             ...dl,
             entries: dl.entries.filter(
@@ -235,6 +259,7 @@ export function useAppData() {
         schedule: null,
         userMetrics: null,
         weightLossPlan: null,
+        weeklyPlan: {},
       };
       const next: AppData = {
         ...data,
@@ -511,6 +536,76 @@ export function useAppData() {
     [data, persist],
   );
 
+  const saveWeekdayPlanFromDay = useCallback(
+    (profileId: ProfileId, weekday: PlanWeekday, entries: ReadonlyArray<DayLogItem>) => {
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) =>
+          p.id === profileId
+            ? {
+                ...p,
+                weeklyPlan: {
+                  ...(p.weeklyPlan ?? {}),
+                  [weekday]: entries.map((entry) => ({ ...entry })),
+                },
+              }
+            : p,
+        ),
+      });
+    },
+    [data, persist],
+  );
+
+  const applyWeekdayPlanToDay = useCallback(
+    (profileId: ProfileId, weekday: PlanWeekday, date: string) => {
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          const planEntries = p.weeklyPlan?.[weekday] ?? [];
+          if (planEntries.length === 0) return p;
+
+          const entriesToAdd: DayLogItem[] = planEntries.map((entry) => {
+            if (entry.type === "separator") {
+              return {
+                ...entry,
+                id: generateId() as LogEntryId,
+              };
+            }
+            if (entry.type === "quick-add") {
+              return {
+                ...entry,
+                id: generateId() as LogEntryId,
+                isBudgeted: true,
+              };
+            }
+            return {
+              ...entry,
+              id: generateId() as LogEntryId,
+              isBudgeted: true,
+            };
+          });
+
+          const existingDay = p.dayLogs.find((dl) => dl.date === date);
+          if (existingDay != null) {
+            return {
+              ...p,
+              dayLogs: p.dayLogs.map((dl) =>
+                dl.date === date
+                  ? { ...dl, entries: [...dl.entries, ...entriesToAdd] }
+                  : dl,
+              ),
+            };
+          }
+
+          const newDayLog: DayLog = { date, entries: entriesToAdd };
+          return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
+        }),
+      });
+    },
+    [data, persist],
+  );
+
   return {
     data,
     allFoods,
@@ -534,6 +629,8 @@ export function useAppData() {
     reorderLogEntries,
     updateLogEntry,
     updateQuickAddEntry,
+    saveWeekdayPlanFromDay,
+    applyWeekdayPlanToDay,
     updateDayLogWeight,
     setWeightLossPlan,
     setStorageError,
