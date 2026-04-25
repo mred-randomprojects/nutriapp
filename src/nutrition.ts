@@ -1,5 +1,11 @@
 import type { ComboIngredient, DayLogItem, Food, LogEntry, NutritionPer100g, NutritionValues, WakeSleepSchedule } from "./types";
 
+type NutritionStatusFilter = "all" | "consumed" | "budgeted";
+
+interface SumNutritionOptions {
+  status?: NutritionStatusFilter;
+}
+
 /**
  * Calculates the total nutrition for a single log entry.
  * For unit-based entries (entry.units is set and food.nutritionPerUnit exists),
@@ -35,6 +41,7 @@ export function nutritionForEntry(
 export function sumNutrition(
   items: ReadonlyArray<DayLogItem>,
   foodsMap: Map<string, Food>,
+  options: SumNutritionOptions = {},
 ): NutritionValues {
   const totals: NutritionValues = {
     calories: 0,
@@ -42,9 +49,13 @@ export function sumNutrition(
     saturatedFat: 0,
     fiber: 0,
   };
+  const status = options.status ?? "all";
 
   for (const item of items) {
     if (item.type === "separator") continue;
+    if (status === "consumed" && item.isBudgeted === true) continue;
+    if (status === "budgeted" && item.isBudgeted !== true) continue;
+
     if (item.type === "quick-add") {
       totals.calories += item.nutrition.calories;
       totals.protein += item.nutrition.protein;

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CalendarCheck, Utensils } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import type { FoodId, NutritionValues, ProfileId } from "../types";
 import {
@@ -43,6 +44,7 @@ export function AddEntryDialog({
   const [quickProtein, setQuickProtein] = useState("");
   const [quickSaturatedFat, setQuickSaturatedFat] = useState("");
   const [quickFiber, setQuickFiber] = useState("");
+  const [isBudgeted, setIsBudgeted] = useState(false);
 
   const filteredFoods = allFoods.filter((f) =>
     normalizeForSearch(f.name).includes(normalizeForSearch(search)),
@@ -93,6 +95,7 @@ export function AddEntryDialog({
         grams: 0,
         units: parsedAmount,
         notes: entryNotes,
+        isBudgeted: isBudgeted ? true : undefined,
       });
     } else {
       if (totalGrams <= 0) return;
@@ -100,6 +103,7 @@ export function AddEntryDialog({
         foodId: selectedFoodId,
         grams: totalGrams,
         notes: entryNotes,
+        isBudgeted: isBudgeted ? true : undefined,
       });
     }
     resetAndClose();
@@ -120,6 +124,7 @@ export function AddEntryDialog({
         fiber: Math.round(quickNutrition.fiber * 10) / 10,
       },
       notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
+      isBudgeted: isBudgeted ? true : undefined,
     });
     resetAndClose();
   }
@@ -149,9 +154,34 @@ export function AddEntryDialog({
       setQuickProtein("");
       setQuickSaturatedFat("");
       setQuickFiber("");
+      setIsBudgeted(false);
     }
     onOpenChange(nextOpen);
   }
+
+  const statusToggle = (
+    <button
+      type="button"
+      className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors ${
+        isBudgeted
+          ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          : "border-input hover:bg-accent"
+      }`}
+      onClick={() => setIsBudgeted((prev) => !prev)}
+    >
+      <span className="flex items-center gap-2">
+        {isBudgeted ? (
+          <CalendarCheck className="h-4 w-4" />
+        ) : (
+          <Utensils className="h-4 w-4" />
+        )}
+        {isBudgeted ? "Budgeted" : "Consumed"}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {isBudgeted ? "planned" : "eaten"}
+      </span>
+    </button>
+  );
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -191,6 +221,8 @@ export function AddEntryDialog({
 
         {addMode === "quick-add" ? (
           <div className="space-y-4">
+            {statusToggle}
+
             <div>
               <Label htmlFor="quick-name">Name</Label>
               <Input
@@ -302,7 +334,7 @@ export function AddEntryDialog({
               onClick={handleQuickAdd}
               disabled={quickName.trim().length === 0 || !quickHasNutrition}
             >
-              Add to Log
+              {isBudgeted ? "Add Budgeted" : "Add to Log"}
             </Button>
           </div>
         ) : selectedFood == null ? (
@@ -353,6 +385,8 @@ export function AddEntryDialog({
           </div>
         ) : (
           <div className="space-y-4">
+            {statusToggle}
+
             <div className="flex items-center gap-3">
               {selectedFood.imageUrl != null ? (
                 <img
@@ -488,7 +522,7 @@ export function AddEntryDialog({
             </div>
 
             <Button className="w-full" onClick={handleAdd}>
-              Add to Log
+              {isBudgeted ? "Add Budgeted" : "Add to Log"}
             </Button>
           </div>
         )}
