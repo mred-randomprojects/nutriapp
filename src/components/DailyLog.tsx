@@ -16,6 +16,8 @@ import {
   MessageSquare,
   TrendingDown,
   Copy,
+  CalendarCheck,
+  Utensils,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -64,6 +66,10 @@ function formatNutritionSummary(values: NutritionValues): string {
   return `${Math.round(values.calories)} kcal, ${formatNumber(values.protein)}g protein, ${formatNumber(values.saturatedFat)}g sat fat, ${formatNumber(values.fiber)}g fiber`;
 }
 
+function hasNutrition(values: NutritionValues): boolean {
+  return values.calories > 0 || values.protein > 0 || values.saturatedFat > 0 || values.fiber > 0;
+}
+
 function isToday(date: Date): boolean {
   return formatDate(date) === formatDate(new Date());
 }
@@ -90,10 +96,14 @@ function buildMarkdownForDay(
   dateStr: string,
 ): string {
   const items = dayLog?.entries ?? [];
-  const totals = sumNutrition(items, foodsMap);
+  const totals = sumNutrition(items, foodsMap, { status: "consumed" });
+  const budgetedTotals = sumNutrition(items, foodsMap, { status: "budgeted" });
   const lines = [`## ${dateStr}`];
 
-  lines.push(`- Daily totals: ${formatNutritionSummary(totals)}`);
+  lines.push(`- Consumed totals: ${formatNutritionSummary(totals)}`);
+  if (hasNutrition(budgetedTotals)) {
+    lines.push(`- Budgeted totals: ${formatNutritionSummary(budgetedTotals)}`);
+  }
 
   if (dayLog?.weightKg != null || expectedWeightKg != null) {
     const weightParts: string[] = [];
@@ -123,8 +133,9 @@ function buildMarkdownForDay(
 
     if (item.type === "quick-add") {
       const sectionPrefix = currentSection != null ? `[${currentSection}] ` : "";
+      const statusPrefix = item.isBudgeted === true ? "[Budgeted] " : "";
       lines.push(
-        `  - ${sectionPrefix}${item.name}: quick add; ${formatNutritionSummary(item.nutrition)}`,
+        `  - ${sectionPrefix}${statusPrefix}${item.name}: quick add; ${formatNutritionSummary(item.nutrition)}`,
       );
 
       if (item.notes != null && item.notes.trim().length > 0) {
@@ -137,8 +148,9 @@ function buildMarkdownForDay(
     if (food == null) continue;
 
     const sectionPrefix = currentSection != null ? `[${currentSection}] ` : "";
+    const statusPrefix = item.isBudgeted === true ? "[Budgeted] " : "";
     const entryNutrition = nutritionForEntry(item, food);
-    const entryLine = `  - ${sectionPrefix}${food.name}: ${describeEntryAmount(item, food)}; ${formatNutritionSummary(entryNutrition)}`;
+    const entryLine = `  - ${sectionPrefix}${statusPrefix}${food.name}: ${describeEntryAmount(item, food)}; ${formatNutritionSummary(entryNutrition)}`;
     lines.push(entryLine);
 
     if (item.notes != null && item.notes.trim().length > 0) {
@@ -282,12 +294,13 @@ function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, invertC
 
 interface DailyTotalsCardProps {
   totals: NutritionValues;
+  budgetedTotals: NutritionValues;
   goals: NutritionGoals | null;
   schedule: WakeSleepSchedule | null;
   isSelectedDayToday: boolean;
 }
 
-function DailyTotalsCard({ totals, goals, schedule, isSelectedDayToday }: DailyTotalsCardProps) {
+function DailyTotalsCard({ totals, budgetedTotals, goals, schedule, isSelectedDayToday }: DailyTotalsCardProps) {
   const fraction = isSelectedDayToday
     ? getTimeBudgetFraction(new Date(), schedule)
     : 1;
@@ -317,6 +330,16 @@ function DailyTotalsCard({ totals, goals, schedule, isSelectedDayToday }: DailyT
           <MetricCell actual={totals.saturatedFat} budget={budgetSatFat} dailyGoal={satFatDailyGrams} unit="g" label="Sat. Fat" />
           <MetricCell actual={totals.fiber} budget={budgetFiber} dailyGoal={goals?.fiber ?? null} unit="g" label="Fiber" aboveGoalIsGood />
         </div>
+        {hasNutrition(budgetedTotals) && (
+          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium">Budgeted</span>
+              <span className="text-right">
+                {Math.round(budgetedTotals.calories)} kcal · {formatNumber(budgetedTotals.protein)}g protein · {formatNumber(budgetedTotals.saturatedFat)}g sat fat · {formatNumber(budgetedTotals.fiber)}g fiber
+              </span>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -331,9 +354,10 @@ interface FoodEntryCardProps {
   isLocked: boolean;
   onRemove: () => void;
   onUpdate: (updates: { grams?: number; units?: number; notes?: string }) => void;
+  onToggleBudgeted: () => void;
 }
 
-function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCardProps) {
+function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
@@ -357,6 +381,7 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
   const isUnitBased = food.nutritionPerUnit != null;
   const entryNutrition = nutritionForEntry(item, food);
   const gramsPerUnit = food.gramsPerUnit;
+  const isBudgeted = item.isBudgeted === true;
 
   const unitCount = isUnitBased
     ? item.units
@@ -517,14 +542,29 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
 
   return (
     <Card
-      className={`transition-colors ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
+      className={`transition-colors ${isBudgeted ? "border-amber-500/40 bg-amber-500/5" : ""} ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
       onClick={isLocked ? undefined : startEditing}
+      onContextMenu={
+        isLocked
+          ? undefined
+          : (e) => {
+              e.preventDefault();
+              onToggleBudgeted();
+            }
+      }
     >
       <CardContent className="flex items-center gap-3 p-3">
         {foodImage}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{food.name}</p>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            {isBudgeted && (
+              <Badge variant="warning" className="px-1.5 py-0 text-[10px]">
+                Budgeted
+              </Badge>
+            )}
+          </div>
           {item.notes != null && item.notes.length > 0 && (
             <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground italic">
               <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
@@ -532,6 +572,25 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate }: FoodEntryCa
             </p>
           )}
         </div>
+        {!isLocked && (
+          <Button
+            variant={isBudgeted ? "outline" : "ghost"}
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+            title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleBudgeted();
+            }}
+          >
+            {isBudgeted ? (
+              <Utensils className="h-3.5 w-3.5" />
+            ) : (
+              <CalendarCheck className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        )}
         <div className="text-right text-xs">
           <p className="font-medium text-primary">
             {Math.round(entryNutrition.calories)} kcal
@@ -563,9 +622,10 @@ interface QuickAddEntryCardProps {
   isLocked: boolean;
   onRemove: () => void;
   onUpdate: (updates: Partial<Omit<QuickAddEntry, "id" | "type">>) => void;
+  onToggleBudgeted: () => void;
 }
 
-function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate }: QuickAddEntryCardProps) {
+function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCalories, setEditCalories] = useState("");
@@ -574,6 +634,7 @@ function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate }: QuickAddEntry
   const [editFiber, setEditFiber] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const editCardRef = useRef<HTMLDivElement>(null);
+  const isBudgeted = item.isBudgeted === true;
 
   useEffect(() => {
     if (!isEditing) return;
@@ -718,8 +779,16 @@ function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate }: QuickAddEntry
 
   return (
     <Card
-      className={`transition-colors ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
+      className={`transition-colors ${isBudgeted ? "border-amber-500/40 bg-amber-500/5" : ""} ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
       onClick={isLocked ? undefined : startEditing}
+      onContextMenu={
+        isLocked
+          ? undefined
+          : (e) => {
+              e.preventDefault();
+              onToggleBudgeted();
+            }
+      }
     >
       <CardContent className="flex items-center gap-3 p-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-xs font-medium">
@@ -727,7 +796,14 @@ function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate }: QuickAddEntry
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{item.name}</p>
-          <p className="text-xs text-muted-foreground">Quick add</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-xs text-muted-foreground">Quick add</p>
+            {isBudgeted && (
+              <Badge variant="warning" className="px-1.5 py-0 text-[10px]">
+                Budgeted
+              </Badge>
+            )}
+          </div>
           {item.notes != null && item.notes.length > 0 && (
             <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground italic">
               <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
@@ -735,6 +811,25 @@ function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate }: QuickAddEntry
             </p>
           )}
         </div>
+        {!isLocked && (
+          <Button
+            variant={isBudgeted ? "outline" : "ghost"}
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+            title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleBudgeted();
+            }}
+          >
+            {isBudgeted ? (
+              <Utensils className="h-3.5 w-3.5" />
+            ) : (
+              <CalendarCheck className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        )}
         <div className="text-right text-xs">
           <p className="font-medium text-primary">
             {Math.round(item.nutrition.calories)} kcal
@@ -983,7 +1078,14 @@ export function DailyLog({ appData }: DailyLogProps) {
     if (dayLog == null) {
       return { calories: 0, protein: 0, saturatedFat: 0, fiber: 0 };
     }
-    return sumNutrition(dayLog.entries, foodsMap);
+    return sumNutrition(dayLog.entries, foodsMap, { status: "consumed" });
+  }, [dayLog, foodsMap]);
+
+  const budgetedTotals = useMemo(() => {
+    if (dayLog == null) {
+      return { calories: 0, protein: 0, saturatedFat: 0, fiber: 0 };
+    }
+    return sumNutrition(dayLog.entries, foodsMap, { status: "budgeted" });
   }, [dayLog, foodsMap]);
 
   const selectedExpectedWeightKg = useMemo(
@@ -1040,7 +1142,7 @@ export function DailyLog({ appData }: DailyLogProps) {
 
     function flushSection() {
       if (currentSeparatorId != null && currentItems.length > 0) {
-        result.set(currentSeparatorId, sumNutrition(currentItems, foodsMap));
+        result.set(currentSeparatorId, sumNutrition(currentItems, foodsMap, { status: "consumed" }));
       }
       currentItems = [];
     }
@@ -1135,6 +1237,7 @@ export function DailyLog({ appData }: DailyLogProps) {
       {/* Daily totals */}
       <DailyTotalsCard
         totals={totals}
+        budgetedTotals={budgetedTotals}
         goals={activeProfile.goals ?? null}
         schedule={activeProfile.schedule ?? null}
         isSelectedDayToday={isToday(selectedDate)}
@@ -1398,6 +1501,14 @@ export function DailyLog({ appData }: DailyLogProps) {
                           updates,
                         )
                       }
+                      onToggleBudgeted={() =>
+                        updateQuickAddEntry(
+                          activeProfile.id as ProfileId,
+                          dateStr,
+                          item.id as LogEntryId,
+                          { isBudgeted: item.isBudgeted === true ? undefined : true },
+                        )
+                      }
                     />
                     {subtotal != null && (
                       <SectionSubtotal totals={subtotal} />
@@ -1476,6 +1587,14 @@ export function DailyLog({ appData }: DailyLogProps) {
                         dateStr,
                         item.id as LogEntryId,
                         updates,
+                      )
+                    }
+                    onToggleBudgeted={() =>
+                      updateLogEntry(
+                        activeProfile.id as ProfileId,
+                        dateStr,
+                        item.id as LogEntryId,
+                        { isBudgeted: item.isBudgeted === true ? undefined : true },
                       )
                     }
                   />

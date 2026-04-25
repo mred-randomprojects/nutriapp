@@ -73,7 +73,7 @@ function buildNutritionData(
     const hasFoodEntries = dl.entries.some((e) => e.type !== "separator");
     if (!hasFoodEntries) continue;
 
-    const totals = sumNutrition(dl.entries, foodsMap);
+    const totals = sumNutrition(dl.entries, foodsMap, { status: "consumed" });
     points.push({
       date: dl.date,
       label: format(parsed, "MMM d"),

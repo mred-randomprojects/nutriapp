@@ -50,7 +50,7 @@ export interface Food {
 }
 
 /**
- * A single log entry — always stores the total grams consumed.
+ * A single food log entry — always stores the total grams for the entry.
  * The optional `type` field is used as a discriminant for DayLogItem union.
  */
 export interface LogEntry {
@@ -60,6 +60,7 @@ export interface LogEntry {
   grams: number;
   units?: number;
   notes?: string;
+  isBudgeted?: boolean;
 }
 
 /**
@@ -72,6 +73,7 @@ export interface QuickAddEntry {
   name: string;
   nutrition: NutritionValues;
   notes?: string;
+  isBudgeted?: boolean;
 }
 
 /**
