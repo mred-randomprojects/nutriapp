@@ -70,6 +70,18 @@ function hasNutrition(values: NutritionValues): boolean {
   return values.calories > 0 || values.protein > 0 || values.saturatedFat > 0 || values.fiber > 0;
 }
 
+function addNutritionValues(
+  a: NutritionValues,
+  b: NutritionValues,
+): NutritionValues {
+  return {
+    calories: Math.round((a.calories + b.calories) * 10) / 10,
+    protein: Math.round((a.protein + b.protein) * 10) / 10,
+    saturatedFat: Math.round((a.saturatedFat + b.saturatedFat) * 10) / 10,
+    fiber: Math.round((a.fiber + b.fiber) * 10) / 10,
+  };
+}
+
 function isToday(date: Date): boolean {
   return formatDate(date) === formatDate(new Date());
 }
@@ -317,6 +329,7 @@ function DailyTotalsCard({ totals, budgetedTotals, goals, schedule, isSelectedDa
       : goals.saturatedFat
     : null;
   const budgetSatFat = satFatDailyGrams != null ? satFatDailyGrams * fraction : null;
+  const expectedTotals = addNutritionValues(totals, budgetedTotals);
 
   return (
     <Card className="mb-4">
@@ -331,12 +344,22 @@ function DailyTotalsCard({ totals, budgetedTotals, goals, schedule, isSelectedDa
           <MetricCell actual={totals.fiber} budget={budgetFiber} dailyGoal={goals?.fiber ?? null} unit="g" label="Fiber" aboveGoalIsGood />
         </div>
         {hasNutrition(budgetedTotals) && (
-          <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-medium">Budgeted</span>
-              <span className="text-right">
-                {Math.round(budgetedTotals.calories)} kcal · {formatNumber(budgetedTotals.protein)}g protein · {formatNumber(budgetedTotals.saturatedFat)}g sat fat · {formatNumber(budgetedTotals.fiber)}g fiber
-              </span>
+          <div className="mt-3 space-y-2">
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium">Budgeted</span>
+                <span className="text-right">
+                  {Math.round(budgetedTotals.calories)} kcal · {formatNumber(budgetedTotals.protein)}g protein · {formatNumber(budgetedTotals.saturatedFat)}g sat fat · {formatNumber(budgetedTotals.fiber)}g fiber
+                </span>
+              </div>
+            </div>
+            <div className="rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-xs text-primary">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium">Expected Daily Totals</span>
+                <span className="text-right">
+                  {Math.round(expectedTotals.calories)} kcal · {formatNumber(expectedTotals.protein)}g protein · {formatNumber(expectedTotals.saturatedFat)}g sat fat · {formatNumber(expectedTotals.fiber)}g fiber
+                </span>
+              </div>
             </div>
           </div>
         )}
