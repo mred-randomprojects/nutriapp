@@ -17,9 +17,9 @@ import {
   TrendingDown,
   Copy,
   CalendarCheck,
-  Utensils,
   CalendarDays,
   Save,
+  MoreVertical,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -223,6 +223,103 @@ function SortableItem({ item, isLocked, children }: SortableItemProps) {
   );
 }
 
+interface EntryActionsMenuProps {
+  isBudgeted: boolean;
+  onAddAbove: () => void;
+  onAddBelow: () => void;
+  onEdit: () => void;
+  onToggleBudgeted: () => void;
+  onRemove: () => void;
+}
+
+function EntryActionsMenu({
+  isBudgeted,
+  onAddAbove,
+  onAddBelow,
+  onEdit,
+  onToggleBudgeted,
+  onRemove,
+}: EntryActionsMenuProps) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        menuRef.current != null &&
+        !menuRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  function runAction(action: () => void) {
+    setOpen(false);
+    action();
+  }
+
+  return (
+    <div ref={menuRef} className="relative shrink-0">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        aria-label="Entry actions"
+        title="Entry actions"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((prev) => !prev);
+        }}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </Button>
+      {open && (
+        <div
+          className="absolute right-0 z-20 mt-1 w-44 rounded-lg border bg-popover p-1 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
+            onClick={() => runAction(onAddAbove)}
+          >
+            Add above
+          </button>
+          <button
+            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
+            onClick={() => runAction(onAddBelow)}
+          >
+            Add below
+          </button>
+          <button
+            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
+            onClick={() => runAction(onEdit)}
+          >
+            Edit
+          </button>
+          <button
+            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
+            onClick={() => runAction(onToggleBudgeted)}
+          >
+            {isBudgeted ? "Mark consumed" : "Mark budgeted"}
+          </button>
+          <button
+            className="w-full rounded px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+            onClick={() => runAction(onRemove)}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface BudgetBarProps {
   actual: number;
   budget: number;
@@ -385,12 +482,14 @@ interface FoodEntryCardProps {
   item: LogEntry;
   food: Food;
   isLocked: boolean;
+  onAddAbove: () => void;
+  onAddBelow: () => void;
   onRemove: () => void;
   onUpdate: (updates: { grams?: number; units?: number; notes?: string }) => void;
   onToggleBudgeted: () => void;
 }
 
-function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
+function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
@@ -605,25 +704,6 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate, onToggleBudge
             </p>
           )}
         </div>
-        {!isLocked && (
-          <Button
-            variant={isBudgeted ? "outline" : "ghost"}
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
-            title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleBudgeted();
-            }}
-          >
-            {isBudgeted ? (
-              <Utensils className="h-3.5 w-3.5" />
-            ) : (
-              <CalendarCheck className="h-3.5 w-3.5" />
-            )}
-          </Button>
-        )}
         <div className="text-right text-xs">
           <p className="font-medium text-primary">
             {Math.round(entryNutrition.calories)} kcal
@@ -633,17 +713,14 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate, onToggleBudge
           </p>
         </div>
         {!isLocked && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
+          <EntryActionsMenu
+            isBudgeted={isBudgeted}
+            onAddAbove={onAddAbove}
+            onAddBelow={onAddBelow}
+            onEdit={startEditing}
+            onToggleBudgeted={onToggleBudgeted}
+            onRemove={onRemove}
+          />
         )}
       </CardContent>
     </Card>
@@ -653,12 +730,14 @@ function FoodEntryCard({ item, food, isLocked, onRemove, onUpdate, onToggleBudge
 interface QuickAddEntryCardProps {
   item: QuickAddEntry;
   isLocked: boolean;
+  onAddAbove: () => void;
+  onAddBelow: () => void;
   onRemove: () => void;
   onUpdate: (updates: Partial<Omit<QuickAddEntry, "id" | "type">>) => void;
   onToggleBudgeted: () => void;
 }
 
-function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
+function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCalories, setEditCalories] = useState("");
@@ -844,25 +923,6 @@ function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate, onToggleBudgete
             </p>
           )}
         </div>
-        {!isLocked && (
-          <Button
-            variant={isBudgeted ? "outline" : "ghost"}
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
-            title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleBudgeted();
-            }}
-          >
-            {isBudgeted ? (
-              <Utensils className="h-3.5 w-3.5" />
-            ) : (
-              <CalendarCheck className="h-3.5 w-3.5" />
-            )}
-          </Button>
-        )}
         <div className="text-right text-xs">
           <p className="font-medium text-primary">
             {Math.round(item.nutrition.calories)} kcal
@@ -872,17 +932,14 @@ function QuickAddEntryCard({ item, isLocked, onRemove, onUpdate, onToggleBudgete
           </p>
         </div>
         {!isLocked && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
+          <EntryActionsMenu
+            isBudgeted={isBudgeted}
+            onAddAbove={onAddAbove}
+            onAddBelow={onAddBelow}
+            onEdit={startEditing}
+            onToggleBudgeted={onToggleBudgeted}
+            onRemove={onRemove}
+          />
         )}
       </CardContent>
     </Card>
@@ -1012,6 +1069,9 @@ export function DailyLog({ appData }: DailyLogProps) {
   } = appData;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addEntryInsertIndex, setAddEntryInsertIndex] = useState<
+    number | undefined
+  >(undefined);
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [planMenuOpen, setPlanMenuOpen] = useState(false);
@@ -1113,6 +1173,11 @@ export function DailyLog({ appData }: DailyLogProps) {
       }
       return next;
     });
+  }
+
+  function openAddEntry(insertIndex?: number) {
+    setAddEntryInsertIndex(insertIndex);
+    setAddDialogOpen(true);
   }
 
   const dayLog = useMemo(() => {
@@ -1545,7 +1610,7 @@ export function DailyLog({ appData }: DailyLogProps) {
               </div>
             )}
           </div>
-          <Button size="sm" onClick={() => setAddDialogOpen(true)}>
+          <Button size="sm" onClick={() => openAddEntry()}>
             <Plus className="mr-1 h-4 w-4" />
             Add Entry
           </Button>
@@ -1656,6 +1721,8 @@ export function DailyLog({ appData }: DailyLogProps) {
                     <QuickAddEntryCard
                       item={item}
                       isLocked={isLocked}
+                      onAddAbove={() => openAddEntry(index)}
+                      onAddBelow={() => openAddEntry(index + 1)}
                       onRemove={() =>
                         setPendingDelete({
                           title: "Remove entry",
@@ -1744,6 +1811,8 @@ export function DailyLog({ appData }: DailyLogProps) {
                     item={item}
                     food={food}
                     isLocked={isLocked}
+                    onAddAbove={() => openAddEntry(index)}
+                    onAddBelow={() => openAddEntry(index + 1)}
                     onRemove={() =>
                       setPendingDelete({
                         title: "Remove entry",
@@ -1823,10 +1892,14 @@ export function DailyLog({ appData }: DailyLogProps) {
 
       <AddEntryDialog
         open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
+        onOpenChange={(open) => {
+          setAddDialogOpen(open);
+          if (!open) setAddEntryInsertIndex(undefined);
+        }}
         appData={appData}
         profileId={activeProfile.id}
         date={dateStr}
+        insertIndex={addEntryInsertIndex}
       />
 
       <ConfirmDialog
