@@ -17,6 +17,7 @@ import {
   TrendingDown,
   Copy,
   CalendarCheck,
+  Utensils,
   CalendarDays,
   Save,
   MoreVertical,
@@ -224,40 +225,67 @@ function SortableItem({ item, isLocked, children }: SortableItemProps) {
 }
 
 interface EntryActionsMenuProps {
-  isBudgeted: boolean;
   onAddAbove: () => void;
   onAddBelow: () => void;
-  onEdit: () => void;
-  onToggleBudgeted: () => void;
-  onRemove: () => void;
 }
 
 function EntryActionsMenu({
-  isBudgeted,
   onAddAbove,
   onAddBelow,
-  onEdit,
-  onToggleBudgeted,
-  onRemove,
 }: EntryActionsMenuProps) {
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const MENU_WIDTH = 176;
+  const MENU_HEIGHT = 89;
+  const MENU_GAP = 6;
+
+  const updateMenuPosition = useCallback(() => {
+    const button = buttonRef.current;
+    if (button == null) return;
+
+    const rect = button.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const opensAbove = spaceBelow < MENU_HEIGHT + MENU_GAP;
+    const top = opensAbove
+      ? Math.max(MENU_GAP, rect.top - MENU_HEIGHT - MENU_GAP)
+      : rect.bottom + MENU_GAP;
+    const left = Math.min(
+      Math.max(MENU_GAP, rect.right - MENU_WIDTH),
+      window.innerWidth - MENU_WIDTH - MENU_GAP,
+    );
+
+    setMenuPosition({ top, left });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
+    updateMenuPosition();
 
     function handleClickOutside(event: MouseEvent) {
       if (
         menuRef.current != null &&
-        !menuRef.current.contains(event.target as Node)
+        buttonRef.current != null &&
+        !menuRef.current.contains(event.target as Node) &&
+        !buttonRef.current.contains(event.target as Node)
       ) {
         setOpen(false);
       }
     }
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [open, updateMenuPosition]);
 
   function runAction(action: () => void) {
     setOpen(false);
@@ -265,8 +293,9 @@ function EntryActionsMenu({
   }
 
   return (
-    <div ref={menuRef} className="relative shrink-0">
+    <div className="relative shrink-0">
       <Button
+        ref={buttonRef}
         variant="ghost"
         size="icon"
         className="h-8 w-8"
@@ -279,9 +308,11 @@ function EntryActionsMenu({
       >
         <MoreVertical className="h-4 w-4" />
       </Button>
-      {open && (
+      {open && menuPosition != null && (
         <div
-          className="absolute right-0 z-20 mt-1 w-44 rounded-lg border bg-popover p-1 shadow-lg"
+          ref={menuRef}
+          className="fixed z-50 w-44 rounded-lg border bg-popover p-1 shadow-lg"
+          style={{ top: menuPosition.top, left: menuPosition.left }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -295,24 +326,6 @@ function EntryActionsMenu({
             onClick={() => runAction(onAddBelow)}
           >
             Add below
-          </button>
-          <button
-            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
-            onClick={() => runAction(onEdit)}
-          >
-            Edit
-          </button>
-          <button
-            className="w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
-            onClick={() => runAction(onToggleBudgeted)}
-          >
-            {isBudgeted ? "Mark consumed" : "Mark budgeted"}
-          </button>
-          <button
-            className="w-full rounded px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
-            onClick={() => runAction(onRemove)}
-          >
-            Delete
           </button>
         </div>
       )}
@@ -704,6 +717,25 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
             </p>
           )}
         </div>
+        {!isLocked && (
+          <Button
+            variant={isBudgeted ? "outline" : "ghost"}
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+            title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleBudgeted();
+            }}
+          >
+            {isBudgeted ? (
+              <Utensils className="h-3.5 w-3.5" />
+            ) : (
+              <CalendarCheck className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        )}
         <div className="text-right text-xs">
           <p className="font-medium text-primary">
             {Math.round(entryNutrition.calories)} kcal
@@ -714,13 +746,22 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
         </div>
         {!isLocked && (
           <EntryActionsMenu
-            isBudgeted={isBudgeted}
             onAddAbove={onAddAbove}
             onAddBelow={onAddBelow}
-            onEdit={startEditing}
-            onToggleBudgeted={onToggleBudgeted}
-            onRemove={onRemove}
           />
+        )}
+        {!isLocked && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </Button>
         )}
       </CardContent>
     </Card>
@@ -923,6 +964,25 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
             </p>
           )}
         </div>
+        {!isLocked && (
+          <Button
+            variant={isBudgeted ? "outline" : "ghost"}
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+            title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleBudgeted();
+            }}
+          >
+            {isBudgeted ? (
+              <Utensils className="h-3.5 w-3.5" />
+            ) : (
+              <CalendarCheck className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        )}
         <div className="text-right text-xs">
           <p className="font-medium text-primary">
             {Math.round(item.nutrition.calories)} kcal
@@ -933,19 +993,27 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
         </div>
         {!isLocked && (
           <EntryActionsMenu
-            isBudgeted={isBudgeted}
             onAddAbove={onAddAbove}
             onAddBelow={onAddBelow}
-            onEdit={startEditing}
-            onToggleBudgeted={onToggleBudgeted}
-            onRemove={onRemove}
           />
+        )}
+        {!isLocked && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+          </Button>
         )}
       </CardContent>
     </Card>
   );
 }
-
 interface WeightInputProps {
   weightKg: number | undefined;
   expectedWeightKg: number | null;
