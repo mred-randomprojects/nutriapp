@@ -94,6 +94,21 @@ function makeBudgetedPlanEntries(entries: ReadonlyArray<DayLogItem>): DayLogItem
   });
 }
 
+function insertDayLogItem(
+  entries: ReadonlyArray<DayLogItem>,
+  item: DayLogItem,
+  insertIndex?: number,
+): DayLogItem[] {
+  if (insertIndex == null) return [...entries, item];
+
+  const safeIndex = Math.max(0, Math.min(insertIndex, entries.length));
+  return [
+    ...entries.slice(0, safeIndex),
+    item,
+    ...entries.slice(safeIndex),
+  ];
+}
+
 /**
  * Central hook that owns all app state and persists to both
  * localStorage (immediate, offline-capable) and Firestore (async, cloud sync).
@@ -377,7 +392,12 @@ export function useAppData() {
   // --- Day log entries ---
 
   const appendToDayLog = useCallback(
-    (profileId: ProfileId, date: string, item: DayLogItem) => {
+    (
+      profileId: ProfileId,
+      date: string,
+      item: DayLogItem,
+      insertIndex?: number,
+    ) => {
       persist({
         ...data,
         profiles: data.profiles.map((p) => {
@@ -388,7 +408,10 @@ export function useAppData() {
               ...p,
               dayLogs: p.dayLogs.map((dl) =>
                 dl.date === date
-                  ? { ...dl, entries: [...dl.entries, item] }
+                  ? {
+                      ...dl,
+                      entries: insertDayLogItem(dl.entries, item, insertIndex),
+                    }
                   : dl,
               ),
             };
@@ -406,12 +429,13 @@ export function useAppData() {
       profileId: ProfileId,
       date: string,
       entry: Omit<LogEntry, "id">,
+      insertIndex?: number,
     ) => {
       const newEntry: LogEntry = {
         ...entry,
         id: generateId() as LogEntryId,
       };
-      appendToDayLog(profileId, date, newEntry);
+      appendToDayLog(profileId, date, newEntry, insertIndex);
     },
     [appendToDayLog],
   );
@@ -433,12 +457,13 @@ export function useAppData() {
       profileId: ProfileId,
       date: string,
       entry: Omit<QuickAddEntry, "id">,
+      insertIndex?: number,
     ) => {
       const newEntry: QuickAddEntry = {
         ...entry,
         id: generateId() as LogEntryId,
       };
-      appendToDayLog(profileId, date, newEntry);
+      appendToDayLog(profileId, date, newEntry, insertIndex);
     },
     [appendToDayLog],
   );

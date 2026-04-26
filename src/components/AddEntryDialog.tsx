@@ -23,6 +23,7 @@ interface AddEntryDialogProps {
   appData: AppDataHandle;
   profileId: ProfileId;
   date: string;
+  insertIndex?: number;
 }
 
 export function AddEntryDialog({
@@ -31,6 +32,7 @@ export function AddEntryDialog({
   appData,
   profileId,
   date,
+  insertIndex,
 }: AddEntryDialogProps) {
   const { allFoods, addLogEntry, addQuickAddEntry } = appData;
   const [addMode, setAddMode] = useState<AddMode>("search");
@@ -90,21 +92,31 @@ export function AddEntryDialog({
     const trimmedNotes = notes.trim();
     const entryNotes = trimmedNotes.length > 0 ? trimmedNotes : undefined;
     if (isUnitBased) {
-      addLogEntry(profileId, date, {
-        foodId: selectedFoodId,
-        grams: 0,
-        units: parsedAmount,
-        notes: entryNotes,
-        isBudgeted: isBudgeted ? true : undefined,
-      });
+      addLogEntry(
+        profileId,
+        date,
+        {
+          foodId: selectedFoodId,
+          grams: 0,
+          units: parsedAmount,
+          notes: entryNotes,
+          isBudgeted: isBudgeted ? true : undefined,
+        },
+        insertIndex,
+      );
     } else {
       if (totalGrams <= 0) return;
-      addLogEntry(profileId, date, {
-        foodId: selectedFoodId,
-        grams: totalGrams,
-        notes: entryNotes,
-        isBudgeted: isBudgeted ? true : undefined,
-      });
+      addLogEntry(
+        profileId,
+        date,
+        {
+          foodId: selectedFoodId,
+          grams: totalGrams,
+          notes: entryNotes,
+          isBudgeted: isBudgeted ? true : undefined,
+        },
+        insertIndex,
+      );
     }
     resetAndClose();
   }
@@ -114,18 +126,23 @@ export function AddEntryDialog({
     if (trimmedName.length === 0 || !quickHasNutrition) return;
 
     const trimmedNotes = notes.trim();
-    addQuickAddEntry(profileId, date, {
-      type: "quick-add",
-      name: trimmedName,
-      nutrition: {
-        calories: Math.round(quickNutrition.calories * 10) / 10,
-        protein: Math.round(quickNutrition.protein * 10) / 10,
-        saturatedFat: Math.round(quickNutrition.saturatedFat * 10) / 10,
-        fiber: Math.round(quickNutrition.fiber * 10) / 10,
+    addQuickAddEntry(
+      profileId,
+      date,
+      {
+        type: "quick-add",
+        name: trimmedName,
+        nutrition: {
+          calories: Math.round(quickNutrition.calories * 10) / 10,
+          protein: Math.round(quickNutrition.protein * 10) / 10,
+          saturatedFat: Math.round(quickNutrition.saturatedFat * 10) / 10,
+          fiber: Math.round(quickNutrition.fiber * 10) / 10,
+        },
+        notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
+        isBudgeted: isBudgeted ? true : undefined,
       },
-      notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
-      isBudgeted: isBudgeted ? true : undefined,
-    });
+      insertIndex,
+    );
     resetAndClose();
   }
 
