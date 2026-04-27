@@ -27,6 +27,8 @@ import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
+import { DiscardChangesDialog } from "./DiscardChangesDialog";
+import { useUnsavedChanges } from "../unsavedChanges";
 
 function Tooltip({ text }: { text: string }) {
   return (
@@ -84,6 +86,39 @@ function GoalsEditor({ goals, schedule, userMetrics, weightLossPlan, onSave, onS
   const [fiber, setFiber] = useState(String(goals?.fiber ?? ""));
   const [wakeHour, setWakeHour] = useState(String(schedule?.wakeHour ?? 7));
   const [sleepHour, setSleepHour] = useState(String(schedule?.sleepHour ?? 23));
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+
+  const isDirty =
+    sex !== (userMetrics?.sex ?? "male") ||
+    age !== String(userMetrics?.age ?? "") ||
+    heightCm !== String(userMetrics?.heightCm ?? "") ||
+    weightKg !== String(userMetrics?.weightKg ?? "") ||
+    activityLevel !== (userMetrics?.activityLevel ?? "moderately_active") ||
+    targetWeight !== String(userMetrics?.targetWeightKg ?? "") ||
+    proteinPerKg !== String(userMetrics?.proteinPerKg ?? "1.8") ||
+    weightLossRate !== String(userMetrics?.weightLossRateKg ?? "0.5") ||
+    calories !== String(goals?.calories ?? "") ||
+    protein !== String(goals?.protein ?? "") ||
+    saturatedFat !== String(goals?.saturatedFat ?? "") ||
+    satFatMode !== (goals?.saturatedFatMode ?? "percentage") ||
+    fiber !== String(goals?.fiber ?? "") ||
+    wakeHour !== String(schedule?.wakeHour ?? 7) ||
+    sleepHour !== String(schedule?.sleepHour ?? 23);
+
+  useUnsavedChanges(isDirty, {
+    title: "Discard goal changes?",
+    description:
+      "Leaving now will lose the profile goals you have not saved.",
+  });
+
+  function requestClose() {
+    if (isDirty) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+
+    onClose();
+  }
 
   const parsedMetrics = useMemo((): UserMetrics | null => {
     const a = parseInt(age, 10);
@@ -443,10 +478,20 @@ function GoalsEditor({ goals, schedule, userMetrics, weightLossPlan, onSave, onS
         <Button size="sm" onClick={handleSave}>
           Save Goals
         </Button>
-        <Button size="sm" variant="outline" onClick={onClose}>
+        <Button size="sm" variant="outline" onClick={requestClose}>
           Cancel
         </Button>
       </div>
+      <DiscardChangesDialog
+        open={discardDialogOpen}
+        title="Discard goal changes?"
+        description="Closing now will lose the profile goals you have not saved."
+        onStay={() => setDiscardDialogOpen(false)}
+        onDiscard={() => {
+          setDiscardDialogOpen(false);
+          onClose();
+        }}
+      />
     </div>
   );
 }
@@ -462,6 +507,18 @@ function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanS
   const [startWeight, setStartWeight] = useState("");
   const [targetWeight, setTargetWeight] = useState("");
   const [lossRate, setLossRate] = useState("");
+
+  const isDirty =
+    isCreating &&
+    (startWeight !== String(userMetrics?.weightKg ?? "") ||
+      targetWeight !== String(userMetrics?.targetWeightKg ?? "") ||
+      lossRate !== String(userMetrics?.weightLossRateKg ?? "0.5"));
+
+  useUnsavedChanges(isDirty, {
+    title: "Discard weight plan?",
+    description:
+      "Leaving now will lose the weight-loss plan you have not started.",
+  });
 
   function startCreating() {
     setStartWeight(String(userMetrics?.weightKg ?? ""));
@@ -618,6 +675,19 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
   const [editName, setEditName] = useState("");
   const [goalsEditingId, setGoalsEditingId] = useState<ProfileId | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
+  const editingProfile =
+    editingId != null
+      ? data.profiles.find((profile) => profile.id === editingId)
+      : undefined;
+  const isDirty =
+    newName.trim().length > 0 ||
+    (editingProfile != null && editName !== editingProfile.name);
+
+  useUnsavedChanges(isDirty, {
+    title: "Discard profile changes?",
+    description:
+      "Leaving now will lose the profile changes you have not saved.",
+  });
 
   function handleCreate() {
     const trimmed = newName.trim();

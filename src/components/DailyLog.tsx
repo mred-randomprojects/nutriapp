@@ -58,6 +58,8 @@ import {
 import { AddEntryDialog } from "./AddEntryDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
+import { DiscardChangesDialog } from "./DiscardChangesDialog";
+import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 
 const SEPARATOR_PRESETS = ["Breakfast", "Lunch", "Merienda", "Dinner", "Snack"];
 
@@ -507,21 +509,8 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
   const [editNotes, setEditNotes] = useState("");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const editCardRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isEditing) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        editCardRef.current != null &&
-        !editCardRef.current.contains(e.target as Node)
-      ) {
-        setIsEditing(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isEditing]);
 
   const isUnitBased = food.nutritionPerUnit != null;
   const entryNutrition = nutritionForEntry(item, food);
@@ -539,6 +528,45 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
     : unitCount != null
       ? `${unitCount} unit${unitCount !== 1 ? "s" : ""} (${item.grams}g)`
       : `${item.grams}g`;
+  const parsedEditValue = parseFloat(editValue);
+  const amountChanged =
+    editValue.trim().length > 0 &&
+    !Number.isNaN(parsedEditValue) &&
+    (isUnitBased
+      ? parsedEditValue !== (item.units ?? 0)
+      : inputMode === "units" && gramsPerUnit != null
+        ? parsedEditValue * gramsPerUnit !== item.grams
+        : parsedEditValue !== item.grams);
+  const invalidAmountDraft =
+    editValue.trim().length === 0 ||
+    (editValue.trim().length > 0 && Number.isNaN(parsedEditValue));
+  const isDirty =
+    isEditing &&
+    (amountChanged || invalidAmountDraft || editNotes !== (item.notes ?? ""));
+
+  useUnsavedChanges(isDirty, {
+    title: "Discard entry changes?",
+    description:
+      "Leaving now will lose the log entry changes you have not saved.",
+  });
+
+  useEffect(() => {
+    if (!isEditing) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        editCardRef.current != null &&
+        !editCardRef.current.contains(e.target as Node)
+      ) {
+        if (isDirty) {
+          setDiscardDialogOpen(true);
+        } else {
+          setIsEditing(false);
+        }
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isDirty, isEditing]);
 
   function startEditing() {
     if (isUnitBased) {
@@ -578,6 +606,7 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
         onUpdate({ grams: newGrams, notes: newNotes });
       }
     }
+    setDiscardDialogOpen(false);
     setIsEditing(false);
   }
 
@@ -606,82 +635,94 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
 
   if (isEditing) {
     return (
-      <Card ref={editCardRef}>
-        <CardContent className="p-3">
-          <div className="flex items-center gap-3">
-            {foodImage}
-            <p className="min-w-0 flex-1 truncate text-sm font-medium">
-              {food.name}
-            </p>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5 text-destructive" />
-            </Button>
-          </div>
-          {!isUnitBased && gramsPerUnit != null && (
-            <div className="mt-2 flex gap-2">
-              <button
-                className={`flex-1 rounded-lg border px-3 py-1 text-xs transition-colors ${
-                  inputMode === "grams"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-input hover:bg-accent"
-                }`}
-                onClick={() => switchMode("grams")}
+      <>
+        <Card ref={editCardRef}>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-3">
+              {foodImage}
+              <p className="min-w-0 flex-1 truncate text-sm font-medium">
+                {food.name}
+              </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
               >
-                Grams
-              </button>
-              <button
-                className={`flex-1 rounded-lg border px-3 py-1 text-xs transition-colors ${
-                  inputMode === "units"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-input hover:bg-accent"
-                }`}
-                onClick={() => switchMode("units")}
-              >
-                Units ({gramsPerUnit}g)
-              </button>
-            </div>
-          )}
-          <form
-            className="mt-2 flex flex-col gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              commitEdit();
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                className="h-8 text-sm"
-                step="any"
-                autoFocus
-              />
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {inputMode === "grams" ? "g" : "units"}
-              </span>
-              <Button type="submit" size="sm" className="h-8 shrink-0">
-                Save
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
               </Button>
             </div>
-            <textarea
-              value={editNotes}
-              onChange={(e) => setEditNotes(e.target.value)}
-              placeholder="Add a note…"
-              className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              rows={2}
-            />
-          </form>
-        </CardContent>
-      </Card>
+            {!isUnitBased && gramsPerUnit != null && (
+              <div className="mt-2 flex gap-2">
+                <button
+                  className={`flex-1 rounded-lg border px-3 py-1 text-xs transition-colors ${
+                    inputMode === "grams"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-input hover:bg-accent"
+                  }`}
+                  onClick={() => switchMode("grams")}
+                >
+                  Grams
+                </button>
+                <button
+                  className={`flex-1 rounded-lg border px-3 py-1 text-xs transition-colors ${
+                    inputMode === "units"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-input hover:bg-accent"
+                  }`}
+                  onClick={() => switchMode("units")}
+                >
+                  Units ({gramsPerUnit}g)
+                </button>
+              </div>
+            )}
+            <form
+              className="mt-2 flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                commitEdit();
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="h-8 text-sm"
+                  step="any"
+                  autoFocus
+                />
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {inputMode === "grams" ? "g" : "units"}
+                </span>
+                <Button type="submit" size="sm" className="h-8 shrink-0">
+                  Save
+                </Button>
+              </div>
+              <textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Add a note…"
+                className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                rows={2}
+              />
+            </form>
+          </CardContent>
+        </Card>
+        <DiscardChangesDialog
+          open={discardDialogOpen}
+          title="Discard entry changes?"
+          description="Closing now will lose the log entry changes you have not saved."
+          onStay={() => setDiscardDialogOpen(false)}
+          onDiscard={() => {
+            setDiscardDialogOpen(false);
+            setIsEditing(false);
+          }}
+        />
+      </>
     );
   }
 
@@ -786,8 +827,23 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
   const [editSaturatedFat, setEditSaturatedFat] = useState("");
   const [editFiber, setEditFiber] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const editCardRef = useRef<HTMLDivElement>(null);
   const isBudgeted = item.isBudgeted === true;
+  const isDirty =
+    isEditing &&
+    (editName !== item.name ||
+      editCalories !== String(item.nutrition.calories) ||
+      editProtein !== String(item.nutrition.protein) ||
+      editSaturatedFat !== String(item.nutrition.saturatedFat) ||
+      editFiber !== String(item.nutrition.fiber) ||
+      editNotes !== (item.notes ?? ""));
+
+  useUnsavedChanges(isDirty, {
+    title: "Discard quick-add changes?",
+    description:
+      "Leaving now will lose the quick-add changes you have not saved.",
+  });
 
   useEffect(() => {
     if (!isEditing) return;
@@ -796,12 +852,16 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
         editCardRef.current != null &&
         !editCardRef.current.contains(e.target as Node)
       ) {
-        setIsEditing(false);
+        if (isDirty) {
+          setDiscardDialogOpen(true);
+        } else {
+          setIsEditing(false);
+        }
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isEditing]);
+  }, [isDirty, isEditing]);
 
   function startEditing() {
     setEditName(item.name);
@@ -838,95 +898,108 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
       nutrition,
       notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
     });
+    setDiscardDialogOpen(false);
     setIsEditing(false);
   }
 
   if (isEditing) {
     return (
-      <Card ref={editCardRef}>
-        <CardContent className="p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-xs font-medium">
-              QA
-            </div>
-            <Input
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className="h-8 min-w-0 flex-1 text-sm"
-              autoFocus
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5 text-destructive" />
-            </Button>
-          </div>
-          <form
-            className="mt-3 space-y-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              commitEdit();
-            }}
-          >
-            <div className="grid grid-cols-2 gap-2">
+      <>
+        <Card ref={editCardRef}>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-xs font-medium">
+                QA
+              </div>
               <Input
-                type="number"
-                value={editCalories}
-                onChange={(e) => setEditCalories(e.target.value)}
-                className="h-8 text-sm"
-                step="any"
-                min="0"
-                placeholder="kcal"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="h-8 min-w-0 flex-1 text-sm"
+                autoFocus
               />
-              <Input
-                type="number"
-                value={editProtein}
-                onChange={(e) => setEditProtein(e.target.value)}
-                className="h-8 text-sm"
-                step="any"
-                min="0"
-                placeholder="protein g"
-              />
-              <Input
-                type="number"
-                value={editSaturatedFat}
-                onChange={(e) => setEditSaturatedFat(e.target.value)}
-                className="h-8 text-sm"
-                step="any"
-                min="0"
-                placeholder="sat fat g"
-              />
-              <Input
-                type="number"
-                value={editFiber}
-                onChange={(e) => setEditFiber(e.target.value)}
-                className="h-8 text-sm"
-                step="any"
-                min="0"
-                placeholder="fiber g"
-              />
-            </div>
-            <textarea
-              value={editNotes}
-              onChange={(e) => setEditNotes(e.target.value)}
-              placeholder="Add a note..."
-              className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              rows={2}
-            />
-            <div className="flex justify-end">
-              <Button type="submit" size="sm" className="h-8">
-                Save
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
               </Button>
             </div>
-          </form>
-        </CardContent>
-      </Card>
+            <form
+              className="mt-3 space-y-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                commitEdit();
+              }}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="number"
+                  value={editCalories}
+                  onChange={(e) => setEditCalories(e.target.value)}
+                  className="h-8 text-sm"
+                  step="any"
+                  min="0"
+                  placeholder="kcal"
+                />
+                <Input
+                  type="number"
+                  value={editProtein}
+                  onChange={(e) => setEditProtein(e.target.value)}
+                  className="h-8 text-sm"
+                  step="any"
+                  min="0"
+                  placeholder="protein g"
+                />
+                <Input
+                  type="number"
+                  value={editSaturatedFat}
+                  onChange={(e) => setEditSaturatedFat(e.target.value)}
+                  className="h-8 text-sm"
+                  step="any"
+                  min="0"
+                  placeholder="sat fat g"
+                />
+                <Input
+                  type="number"
+                  value={editFiber}
+                  onChange={(e) => setEditFiber(e.target.value)}
+                  className="h-8 text-sm"
+                  step="any"
+                  min="0"
+                  placeholder="fiber g"
+                />
+              </div>
+              <textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Add a note..."
+                className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                rows={2}
+              />
+              <div className="flex justify-end">
+                <Button type="submit" size="sm" className="h-8">
+                  Save
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+        <DiscardChangesDialog
+          open={discardDialogOpen}
+          title="Discard quick-add changes?"
+          description="Closing now will lose the quick-add changes you have not saved."
+          onStay={() => setDiscardDialogOpen(false)}
+          onDiscard={() => {
+            setDiscardDialogOpen(false);
+            setIsEditing(false);
+          }}
+        />
+      </>
     );
   }
 
@@ -1024,6 +1097,15 @@ interface WeightInputProps {
 function WeightInput({ weightKg, expectedWeightKg, isLocked, onSave }: WeightInputProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const isDirty =
+    isEditing && editValue !== (weightKg != null ? String(weightKg) : "");
+
+  useUnsavedChanges(isDirty, {
+    title: "Discard weight change?",
+    description:
+      "Leaving now will lose the weight entry you have not saved.",
+  });
 
   function startEditing() {
     setEditValue(weightKg != null ? String(weightKg) : "");
@@ -1040,47 +1122,69 @@ function WeightInput({ weightKg, expectedWeightKg, isLocked, onSave }: WeightInp
         onSave(Math.round(parsed * 10) / 10);
       }
     }
+    setDiscardDialogOpen(false);
+    setIsEditing(false);
+  }
+
+  function requestCancel() {
+    if (isDirty) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+
     setIsEditing(false);
   }
 
   if (isEditing) {
     return (
-      <Card className="mb-4">
-        <CardContent className="p-3">
-          <form
-            className="flex items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              commitEdit();
-            }}
-          >
-            <Weight className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <Input
-              type="number"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              placeholder="e.g. 75.2"
-              className="h-8 text-sm"
-              step="0.1"
-              min="0"
-              autoFocus
-            />
-            <span className="shrink-0 text-xs text-muted-foreground">kg</span>
-            <Button type="submit" size="sm" className="h-8 shrink-0">
-              Save
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 shrink-0"
-              onClick={() => setIsEditing(false)}
+      <>
+        <Card className="mb-4">
+          <CardContent className="p-3">
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                commitEdit();
+              }}
             >
-              Cancel
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <Weight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Input
+                type="number"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                placeholder="e.g. 75.2"
+                className="h-8 text-sm"
+                step="0.1"
+                min="0"
+                autoFocus
+              />
+              <span className="shrink-0 text-xs text-muted-foreground">kg</span>
+              <Button type="submit" size="sm" className="h-8 shrink-0">
+                Save
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={requestCancel}
+              >
+                Cancel
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+        <DiscardChangesDialog
+          open={discardDialogOpen}
+          title="Discard weight change?"
+          description="Closing now will lose the weight entry you have not saved."
+          onStay={() => setDiscardDialogOpen(false)}
+          onDiscard={() => {
+            setDiscardDialogOpen(false);
+            setIsEditing(false);
+          }}
+        />
+      </>
     );
   }
 
@@ -1144,6 +1248,7 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [planMenuOpen, setPlanMenuOpen] = useState(false);
   const [savePlanDialogOpen, setSavePlanDialogOpen] = useState(false);
+  const [savePlanDiscardOpen, setSavePlanDiscardOpen] = useState(false);
   const [planName, setPlanName] = useState("");
   const [planSearch, setPlanSearch] = useState("");
   const [customLabel, setCustomLabel] = useState("");
@@ -1154,6 +1259,7 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [planFeedback, setPlanFeedback] = useState<string | null>(null);
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const planMenuRef = useRef<HTMLDivElement>(null);
+  const hasUnsavedChanges = useHasUnsavedChanges();
 
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 200, tolerance: 5 },
@@ -1165,8 +1271,17 @@ export function DailyLog({ appData }: DailyLogProps) {
 
   const goToToday = useCallback(() => setSelectedDate(new Date()), []);
 
+  const savePlanDirty = savePlanDialogOpen && planName.trim().length > 0;
+
+  useUnsavedChanges(savePlanDirty, {
+    title: "Discard saved plan?",
+    description:
+      "Leaving now will lose the meal plan name you have not saved.",
+  });
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (hasUnsavedChanges) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
@@ -1182,7 +1297,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goToToday]);
+  }, [goToToday, hasUnsavedChanges]);
 
   useEffect(() => {
     if (!copyMenuOpen) return;
@@ -1348,6 +1463,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     if (trimmedName.length === 0) return;
     saveMealPlanFromDay(activeProfile.id, trimmedName, dayLog.entries);
     setPlanFeedback(`Saved ${trimmedName}`);
+    setSavePlanDiscardOpen(false);
     setSavePlanDialogOpen(false);
     setPlanName("");
   }, [
@@ -1356,6 +1472,26 @@ export function DailyLog({ appData }: DailyLogProps) {
     planName,
     saveMealPlanFromDay,
   ]);
+
+  function closeSavePlanDialogWithoutPrompt() {
+    setSavePlanDiscardOpen(false);
+    setSavePlanDialogOpen(false);
+    setPlanName("");
+  }
+
+  function handleSavePlanDialogOpenChange(open: boolean) {
+    if (open) {
+      setSavePlanDialogOpen(true);
+      return;
+    }
+
+    if (savePlanDirty) {
+      setSavePlanDiscardOpen(true);
+      return;
+    }
+
+    closeSavePlanDialogWithoutPrompt();
+  }
 
   const applyPlan = useCallback((planId: MealPlanId, planNameToApply: string) => {
     if (activeProfile == null) return;
@@ -1922,10 +2058,7 @@ export function DailyLog({ appData }: DailyLogProps) {
 
       <Dialog
         open={savePlanDialogOpen}
-        onOpenChange={(open) => {
-          setSavePlanDialogOpen(open);
-          if (!open) setPlanName("");
-        }}
+        onOpenChange={handleSavePlanDialogOpenChange}
       >
         <DialogContent>
           <DialogHeader>
@@ -1957,6 +2090,13 @@ export function DailyLog({ appData }: DailyLogProps) {
           </form>
         </DialogContent>
       </Dialog>
+      <DiscardChangesDialog
+        open={savePlanDiscardOpen}
+        title="Discard saved plan?"
+        description="Closing now will lose the meal plan name you have not saved."
+        onStay={() => setSavePlanDiscardOpen(false)}
+        onDiscard={closeSavePlanDialogWithoutPrompt}
+      />
 
       <AddEntryDialog
         open={addDialogOpen}

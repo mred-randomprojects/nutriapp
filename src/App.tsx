@@ -12,6 +12,7 @@ import { StorageUsage } from "./components/StorageUsage";
 import { AccountPage } from "./components/AccountPage";
 import { LoginPage } from "./components/LoginPage";
 import { CloudUpload, Loader2 } from "lucide-react";
+import { UnsavedChangesProvider } from "./UnsavedChangesProvider";
 
 const NAV_SHORTCUTS = {
   "1": "/foods",
@@ -24,7 +25,9 @@ const NAV_SHORTCUTS = {
 export default function App() {
   return (
     <AuthProvider>
-      <AuthGate />
+      <UnsavedChangesProvider>
+        <AuthGate />
+      </UnsavedChangesProvider>
     </AuthProvider>
   );
 }
