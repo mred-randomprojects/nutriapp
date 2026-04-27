@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
@@ -14,9 +14,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { normalizeForSearch } from "../search";
+import { useUnsavedChanges } from "../unsavedChanges";
 
 interface FoodFormProps {
   appData: AppDataHandle;
+}
+
+type ReferenceType = "grams" | "unit";
+
+interface FoodFormDraft {
+  version: 1;
+  name: string;
+  imageUrl: string;
+  referenceType: ReferenceType;
+  refGrams: string;
+  calories: string;
+  protein: string;
+  saturatedFat: string;
+  fiber: string;
+  gramsPerUnit: string;
+  isCombo: boolean;
+  ingredients: Array<{ foodId: FoodId; grams: number }>;
 }
 
 interface IngredientRowProps {
@@ -25,6 +43,86 @@ interface IngredientRowProps {
   onUpdateGrams: (grams: number) => void;
   onRemove: () => void;
   isReadonly: boolean;
+}
+
+function isFoodFormDraft(value: unknown): value is FoodFormDraft {
+  if (value == null || typeof value !== "object") return false;
+
+  const draft = value as Partial<FoodFormDraft>;
+  return (
+    draft.version === 1 &&
+    typeof draft.name === "string" &&
+    typeof draft.imageUrl === "string" &&
+    (draft.referenceType === "grams" || draft.referenceType === "unit") &&
+    typeof draft.refGrams === "string" &&
+    typeof draft.calories === "string" &&
+    typeof draft.protein === "string" &&
+    typeof draft.saturatedFat === "string" &&
+    typeof draft.fiber === "string" &&
+    typeof draft.gramsPerUnit === "string" &&
+    typeof draft.isCombo === "boolean" &&
+    Array.isArray(draft.ingredients) &&
+    draft.ingredients.every(
+      (ingredient) =>
+        typeof ingredient.foodId === "string" &&
+        typeof ingredient.grams === "number",
+    )
+  );
+}
+
+function loadFoodFormDraft(key: string): FoodFormDraft | null {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw == null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isFoodFormDraft(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveFoodFormDraft(key: string, draft: FoodFormDraft) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(draft));
+  } catch {
+    // Ignore storage quota and privacy-mode errors; the form guard still works.
+  }
+}
+
+function clearFoodFormDraft(key: string) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function areIngredientsEqual(
+  a: Array<{ foodId: FoodId; grams: number }>,
+  b: Array<{ foodId: FoodId; grams: number }>,
+) {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (ingredient, index) =>
+      ingredient.foodId === b[index].foodId &&
+      ingredient.grams === b[index].grams,
+  );
+}
+
+function areFoodFormDraftsEqual(a: FoodFormDraft, b: FoodFormDraft) {
+  return (
+    a.name === b.name &&
+    a.imageUrl === b.imageUrl &&
+    a.referenceType === b.referenceType &&
+    a.refGrams === b.refGrams &&
+    a.calories === b.calories &&
+    a.protein === b.protein &&
+    a.saturatedFat === b.saturatedFat &&
+    a.fiber === b.fiber &&
+    a.gramsPerUnit === b.gramsPerUnit &&
+    a.isCombo === b.isCombo &&
+    areIngredientsEqual(a.ingredients, b.ingredients)
+  );
 }
 
 function IngredientRow({
@@ -107,48 +205,142 @@ export function FoodForm({ appData }: FoodFormProps) {
       ? appData.allFoods.find((f) => f.id === foodId)
       : undefined;
   const readonly = existing != null && isBuiltinFood(existing.id as FoodId);
-
-  const [name, setName] = useState(existing?.name ?? "");
-  const [imageUrl, setImageUrl] = useState(existing?.imageUrl ?? "");
-
-  type ReferenceType = "grams" | "unit";
-  const existingIsUnitBased = existing?.nutritionPerUnit != null;
-  const [referenceType, setReferenceType] = useState<ReferenceType>(
-    existingIsUnitBased ? "unit" : "grams",
+  const draftKey = `nutriapp:food-form-draft:${foodId ?? "new"}`;
+  const [restoredDraft] = useState<FoodFormDraft | null>(() =>
+    readonly ? null : loadFoodFormDraft(draftKey),
   );
 
-  const [refGrams, setRefGrams] = useState("100");
+  const [name, setName] = useState(
+    restoredDraft?.name ?? existing?.name ?? "",
+  );
+  const [imageUrl, setImageUrl] = useState(
+    restoredDraft?.imageUrl ?? existing?.imageUrl ?? "",
+  );
+
+  const existingIsUnitBased = existing?.nutritionPerUnit != null;
+  const [referenceType, setReferenceType] = useState<ReferenceType>(
+    restoredDraft?.referenceType ?? (existingIsUnitBased ? "unit" : "grams"),
+  );
+
+  const [refGrams, setRefGrams] = useState(restoredDraft?.refGrams ?? "100");
   const nutritionSource =
     existingIsUnitBased ? existing.nutritionPerUnit : existing?.nutritionPer100g;
   const [calories, setCalories] = useState(
-    nutritionSource != null ? String(nutritionSource.calories) : "",
+    restoredDraft?.calories ??
+      (nutritionSource != null ? String(nutritionSource.calories) : ""),
   );
   const [protein, setProtein] = useState(
-    nutritionSource != null ? String(nutritionSource.protein) : "",
+    restoredDraft?.protein ??
+      (nutritionSource != null ? String(nutritionSource.protein) : ""),
   );
   const [saturatedFat, setSaturatedFat] = useState(
-    nutritionSource != null ? String(nutritionSource.saturatedFat) : "",
+    restoredDraft?.saturatedFat ??
+      (nutritionSource != null ? String(nutritionSource.saturatedFat) : ""),
   );
   const [fiber, setFiber] = useState(
-    nutritionSource != null ? String(nutritionSource.fiber) : "",
+    restoredDraft?.fiber ??
+      (nutritionSource != null ? String(nutritionSource.fiber) : ""),
   );
 
   const [gramsPerUnit, setGramsPerUnit] = useState(
-    existing?.gramsPerUnit != null ? String(existing.gramsPerUnit) : "",
+    restoredDraft?.gramsPerUnit ??
+      (existing?.gramsPerUnit != null ? String(existing.gramsPerUnit) : ""),
   );
 
   const [isCombo, setIsCombo] = useState(
-    existing?.ingredients != null && existing.ingredients.length > 0,
+    restoredDraft?.isCombo ??
+      (existing?.ingredients != null && existing.ingredients.length > 0),
   );
   const [ingredients, setIngredients] = useState<
     Array<{ foodId: FoodId; grams: number }>
   >(() =>
-    existing?.ingredients != null
+    restoredDraft?.ingredients != null
+      ? restoredDraft.ingredients.map((ing) => ({ ...ing }))
+      : existing?.ingredients != null
       ? existing.ingredients.map((ing) => ({ ...ing }))
       : [],
   );
   const [showIngredientPicker, setShowIngredientPicker] = useState(false);
   const [ingredientSearch, setIngredientSearch] = useState("");
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+
+  const baseDraft = useMemo<FoodFormDraft>(
+    () => ({
+      version: 1,
+      name: existing?.name ?? "",
+      imageUrl: existing?.imageUrl ?? "",
+      referenceType: existingIsUnitBased ? "unit" : "grams",
+      refGrams: "100",
+      calories:
+        nutritionSource != null ? String(nutritionSource.calories) : "",
+      protein: nutritionSource != null ? String(nutritionSource.protein) : "",
+      saturatedFat:
+        nutritionSource != null ? String(nutritionSource.saturatedFat) : "",
+      fiber: nutritionSource != null ? String(nutritionSource.fiber) : "",
+      gramsPerUnit:
+        existing?.gramsPerUnit != null ? String(existing.gramsPerUnit) : "",
+      isCombo:
+        existing?.ingredients != null && existing.ingredients.length > 0,
+      ingredients:
+        existing?.ingredients != null
+          ? existing.ingredients.map((ing) => ({ ...ing }))
+          : [],
+    }),
+    [existing, existingIsUnitBased, nutritionSource],
+  );
+
+  const currentDraft = useMemo<FoodFormDraft>(
+    () => ({
+      version: 1,
+      name,
+      imageUrl,
+      referenceType,
+      refGrams,
+      calories,
+      protein,
+      saturatedFat,
+      fiber,
+      gramsPerUnit,
+      isCombo,
+      ingredients,
+    }),
+    [
+      calories,
+      fiber,
+      gramsPerUnit,
+      imageUrl,
+      ingredients,
+      isCombo,
+      name,
+      protein,
+      refGrams,
+      referenceType,
+      saturatedFat,
+    ],
+  );
+
+  const isDirty =
+    !readonly && !hasSubmitted && !areFoodFormDraftsEqual(currentDraft, baseDraft);
+
+  const clearUnsavedChanges = useUnsavedChanges(isDirty, {
+    title: "Discard food changes?",
+    description:
+      "Leaving this food form will lose the details you have not saved.",
+    onDiscard: () => clearFoodFormDraft(draftKey),
+  });
+
+  useEffect(() => {
+    if (readonly || hasSubmitted) {
+      clearFoodFormDraft(draftKey);
+      return;
+    }
+
+    if (isDirty) {
+      saveFoodFormDraft(draftKey, currentDraft);
+    } else {
+      clearFoodFormDraft(draftKey);
+    }
+  }, [currentDraft, draftKey, hasSubmitted, isDirty, readonly]);
 
   function parseNum(s: string): number {
     const n = parseFloat(s);
@@ -295,6 +487,9 @@ export function FoodForm({ appData }: FoodFormProps) {
         appData.addFood(payload);
       }
     }
+    setHasSubmitted(true);
+    clearUnsavedChanges();
+    clearFoodFormDraft(draftKey);
     navigate("/foods");
   }
 

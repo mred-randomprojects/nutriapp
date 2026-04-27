@@ -13,6 +13,8 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { normalizeForSearch } from "../search";
+import { DiscardChangesDialog } from "./DiscardChangesDialog";
+import { useUnsavedChanges } from "../unsavedChanges";
 
 type InputMode = "grams" | "units";
 type AddMode = "search" | "quick-add";
@@ -47,6 +49,7 @@ export function AddEntryDialog({
   const [quickSaturatedFat, setQuickSaturatedFat] = useState("");
   const [quickFiber, setQuickFiber] = useState("");
   const [isBudgeted, setIsBudgeted] = useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
 
   const filteredFoods = allFoods.filter((f) =>
     normalizeForSearch(f.name).includes(normalizeForSearch(search)),
@@ -87,6 +90,40 @@ export function AddEntryDialog({
     quickNutrition.saturatedFat > 0 ||
     quickNutrition.fiber > 0;
 
+  const isDirty =
+    open &&
+    (selectedFoodId != null ||
+      amount.trim().length > 0 ||
+      notes.trim().length > 0 ||
+      isBudgeted ||
+      quickName.trim().length > 0 ||
+      quickCalories.trim().length > 0 ||
+      quickProtein.trim().length > 0 ||
+      quickSaturatedFat.trim().length > 0 ||
+      quickFiber.trim().length > 0);
+
+  useUnsavedChanges(isDirty, {
+    title: "Discard log entry?",
+    description:
+      "Leaving now will lose the food entry you have not added to the log.",
+    onDiscard: resetDraft,
+  });
+
+  function resetDraft() {
+    setAddMode("search");
+    setSelectedFoodId(null);
+    setInputMode("grams");
+    setAmount("");
+    setSearch("");
+    setNotes("");
+    setQuickName("");
+    setQuickCalories("");
+    setQuickProtein("");
+    setQuickSaturatedFat("");
+    setQuickFiber("");
+    setIsBudgeted(false);
+  }
+
   function handleAdd() {
     if (selectedFoodId == null || parsedAmount <= 0) return;
     const trimmedNotes = notes.trim();
@@ -118,7 +155,7 @@ export function AddEntryDialog({
         insertIndex,
       );
     }
-    resetAndClose();
+    closeWithoutPrompt();
   }
 
   function handleQuickAdd() {
@@ -143,11 +180,13 @@ export function AddEntryDialog({
       },
       insertIndex,
     );
-    resetAndClose();
+    closeWithoutPrompt();
   }
 
-  function resetAndClose() {
-    handleOpenChange(false);
+  function closeWithoutPrompt() {
+    resetDraft();
+    setDiscardDialogOpen(false);
+    onOpenChange(false);
   }
 
   function selectFood(foodId: FoodId) {
@@ -159,21 +198,17 @@ export function AddEntryDialog({
   }
 
   function handleOpenChange(nextOpen: boolean) {
-    if (!nextOpen) {
-      setAddMode("search");
-      setSelectedFoodId(null);
-      setInputMode("grams");
-      setAmount("");
-      setSearch("");
-      setNotes("");
-      setQuickName("");
-      setQuickCalories("");
-      setQuickProtein("");
-      setQuickSaturatedFat("");
-      setQuickFiber("");
-      setIsBudgeted(false);
+    if (nextOpen) {
+      onOpenChange(true);
+      return;
     }
-    onOpenChange(nextOpen);
+
+    if (isDirty) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+
+    closeWithoutPrompt();
   }
 
   const statusToggle = (
@@ -201,8 +236,9 @@ export function AddEntryDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[85dvh] overflow-x-hidden overflow-y-auto">
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="max-h-[85dvh] overflow-x-hidden overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Entry</DialogTitle>
           <DialogDescription>
@@ -543,7 +579,15 @@ export function AddEntryDialog({
             </Button>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <DiscardChangesDialog
+        open={discardDialogOpen}
+        title="Discard log entry?"
+        description="Closing now will lose the food entry you have not added to the log."
+        onStay={() => setDiscardDialogOpen(false)}
+        onDiscard={closeWithoutPrompt}
+      />
+    </>
   );
 }
