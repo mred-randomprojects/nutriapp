@@ -1,5 +1,11 @@
 import { useState, useMemo } from "react";
-import { subDays, format, parseISO } from "date-fns";
+import {
+  addDays,
+  differenceInCalendarDays,
+  format,
+  parseISO,
+  subDays,
+} from "date-fns";
 import {
   LineChart,
   Line,
@@ -15,10 +21,11 @@ import type {
   DayLog,
   Food,
   NutritionGoals,
+  UserMetrics,
   WeightLossPlan,
 } from "../types";
 import { sumNutrition } from "../nutrition";
-import { computeExpectedWeight } from "../calculator";
+import { computeExpectedWeight, computeTdee } from "../calculator";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 
@@ -38,6 +45,8 @@ const TIME_RANGE_DAYS: Record<TimeRange, number | null> = {
   all: null,
 };
 
+const DATE_KEY_FORMAT = "yyyy-MM-dd";
+
 interface NutritionDataPoint {
   date: string;
   label: string;
@@ -50,8 +59,28 @@ interface NutritionDataPoint {
 interface WeightDataPoint {
   date: string;
   label: string;
-  weight: number;
+  weight: number | null;
   expected: number | null;
+}
+
+interface MetricReferenceLine {
+  value: number;
+  label: string;
+  stroke: string;
+  strokeDasharray: string;
+  labelPosition: "insideTopRight" | "insideBottomRight";
+}
+
+const DEFAULT_REFERENCE_STROKE = "hsl(215, 15%, 55%)";
+const MAINTENANCE_REFERENCE_STROKE = "hsl(217, 91%, 60%)";
+
+function formatDateKey(date: Date): string {
+  return format(date, DATE_KEY_FORMAT);
+}
+
+function getRangeCutoffDate(range: TimeRange): Date | null {
+  const cutoff = TIME_RANGE_DAYS[range];
+  return cutoff != null ? subDays(new Date(), cutoff) : null;
 }
 
 function buildNutritionData(
@@ -59,8 +88,7 @@ function buildNutritionData(
   foodsMap: Map<string, Food>,
   range: TimeRange,
 ): NutritionDataPoint[] {
-  const cutoff = TIME_RANGE_DAYS[range];
-  const cutoffDate = cutoff != null ? subDays(new Date(), cutoff) : null;
+  const cutoffDate = getRangeCutoffDate(range);
 
   const points: NutritionDataPoint[] = [];
 
@@ -92,11 +120,11 @@ function buildWeightData(
   dayLogs: ReadonlyArray<DayLog>,
   weightLossPlan: WeightLossPlan | null,
   range: TimeRange,
+  extendToGoalDate: boolean,
 ): WeightDataPoint[] {
-  const cutoff = TIME_RANGE_DAYS[range];
-  const cutoffDate = cutoff != null ? subDays(new Date(), cutoff) : null;
+  const cutoffDate = getRangeCutoffDate(range);
 
-  const points: WeightDataPoint[] = [];
+  const pointsByDate = new Map<string, WeightDataPoint>();
 
   for (const dl of dayLogs) {
     if (dl.weightKg == null) continue;
@@ -109,7 +137,7 @@ function buildWeightData(
         ? computeExpectedWeight(weightLossPlan, dl.date)
         : null;
 
-    points.push({
+    pointsByDate.set(dl.date, {
       date: dl.date,
       label: format(parsed, "MMM d"),
       weight: dl.weightKg,
@@ -117,8 +145,43 @@ function buildWeightData(
     });
   }
 
-  points.sort((a, b) => a.date.localeCompare(b.date));
-  return points;
+  if (extendToGoalDate && weightLossPlan != null) {
+    const goalDate = getWeightPlanGoalDate(weightLossPlan);
+    const latestActualDate = getLatestDateKey(Array.from(pointsByDate.keys()));
+    const projectionStartDate = getLatestDateKey([
+      weightLossPlan.startDate,
+      formatDateKey(new Date()),
+      cutoffDate != null ? formatDateKey(cutoffDate) : null,
+      latestActualDate,
+    ]);
+
+    if (
+      goalDate != null &&
+      projectionStartDate != null &&
+      projectionStartDate.localeCompare(goalDate) <= 0
+    ) {
+      let currentDate = parseISO(projectionStartDate);
+      const endDate = parseISO(goalDate);
+
+      while (currentDate <= endDate) {
+        const date = formatDateKey(currentDate);
+        const existing = pointsByDate.get(date);
+
+        pointsByDate.set(date, {
+          date,
+          label: format(currentDate, "MMM d"),
+          weight: existing?.weight ?? null,
+          expected: computeExpectedWeight(weightLossPlan, date),
+        });
+
+        currentDate = addDays(currentDate, 1);
+      }
+    }
+  }
+
+  return Array.from(pointsByDate.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
 }
 
 const KCAL_PER_GRAM_FAT = 9;
@@ -130,14 +193,124 @@ function getSatFatGoalGrams(goals: NutritionGoals): number {
   return goals.saturatedFat;
 }
 
+function getMaintenanceCalories(metrics: UserMetrics | null): number | null {
+  if (metrics == null) return null;
+
+  return Math.round(
+    computeTdee(
+      metrics.sex,
+      metrics.weightKg,
+      metrics.heightCm,
+      metrics.age,
+      metrics.activityLevel,
+    ),
+  );
+}
+
+function getWeightPlanGoalDate(plan: WeightLossPlan): string | null {
+  const totalLossKg = plan.startWeightKg - plan.targetWeightKg;
+  if (totalLossKg <= 0 || plan.weeklyLossRateKg <= 0) return null;
+
+  const daysToGoal = Math.ceil((totalLossKg / plan.weeklyLossRateKg) * 7);
+  return formatDateKey(addDays(parseISO(plan.startDate), daysToGoal));
+}
+
+function getLatestDateKey(dates: ReadonlyArray<string | null>): string | null {
+  let latestDate: string | null = null;
+
+  for (const date of dates) {
+    if (date == null) continue;
+    if (latestDate == null || date.localeCompare(latestDate) > 0) {
+      latestDate = date;
+    }
+  }
+
+  return latestDate;
+}
+
+function buildGoalReferenceLines(
+  value: number | null,
+  label: string,
+): MetricReferenceLine[] {
+  if (value == null) return [];
+
+  return [
+    {
+      value,
+      label,
+      stroke: DEFAULT_REFERENCE_STROKE,
+      strokeDasharray: "6 3",
+      labelPosition: "insideTopRight",
+    },
+  ];
+}
+
+function buildCalorieReferenceLines(
+  goalValue: number | null,
+  maintenanceValue: number | null,
+): MetricReferenceLine[] {
+  if (goalValue != null && maintenanceValue != null) {
+    const roundedGoal = Math.round(goalValue);
+    const roundedMaintenance = Math.round(maintenanceValue);
+
+    if (roundedGoal === roundedMaintenance) {
+      return [
+        {
+          value: goalValue,
+          label: "Goal / Maintenance",
+          stroke: DEFAULT_REFERENCE_STROKE,
+          strokeDasharray: "6 3",
+          labelPosition: "insideTopRight",
+        },
+      ];
+    }
+
+    return [
+      {
+        value: maintenanceValue,
+        label: "Maintenance",
+        stroke: MAINTENANCE_REFERENCE_STROKE,
+        strokeDasharray: "2 2",
+        labelPosition:
+          maintenanceValue > goalValue ? "insideTopRight" : "insideBottomRight",
+      },
+      {
+        value: goalValue,
+        label: "Goal",
+        stroke: DEFAULT_REFERENCE_STROKE,
+        strokeDasharray: "6 3",
+        labelPosition:
+          goalValue > maintenanceValue ? "insideTopRight" : "insideBottomRight",
+      },
+    ];
+  }
+
+  if (maintenanceValue != null) {
+    return [
+      {
+        value: maintenanceValue,
+        label: "Maintenance",
+        stroke: MAINTENANCE_REFERENCE_STROKE,
+        strokeDasharray: "2 2",
+        labelPosition: "insideTopRight",
+      },
+    ];
+  }
+
+  return buildGoalReferenceLines(goalValue, "Goal");
+}
+
+function formatDaysRemaining(days: number): string {
+  return days === 1 ? "1 day remaining" : `${days} days remaining`;
+}
+
 interface MetricChartProps {
   title: string;
   data: NutritionDataPoint[];
   dataKey: string;
   color: string;
   unit: string;
-  goalValue: number | null;
-  goalLabel: string;
+  referenceLines?: MetricReferenceLine[];
 }
 
 function MetricChart({
@@ -146,8 +319,7 @@ function MetricChart({
   dataKey,
   color,
   unit,
-  goalValue,
-  goalLabel,
+  referenceLines = [],
 }: MetricChartProps) {
   if (data.length === 0) {
     return (
@@ -196,21 +368,22 @@ function MetricChart({
               }}
               formatter={(value) => [`${String(value)}${unit}`, title]}
             />
-            {goalValue != null && (
+            {referenceLines.map((line) => (
               <ReferenceLine
-                y={goalValue}
-                stroke="hsl(215, 15%, 55%)"
-                strokeDasharray="6 3"
+                key={`${line.label}-${line.value}`}
+                y={line.value}
+                stroke={line.stroke}
+                strokeDasharray={line.strokeDasharray}
                 label={{
-                  value: `${goalLabel}: ${Math.round(goalValue)}${unit}`,
-                  position: "insideTopRight",
+                  value: `${line.label}: ${Math.round(line.value)}${unit}`,
+                  position: line.labelPosition,
                   style: {
                     fontSize: 10,
-                    fill: "hsl(215, 15%, 55%)",
+                    fill: line.stroke,
                   },
                 }}
               />
-            )}
+            ))}
             <Line
               type="monotone"
               dataKey={dataKey}
@@ -229,15 +402,44 @@ function MetricChart({
 
 interface WeightChartProps {
   data: WeightDataPoint[];
+  canExtendToGoal: boolean;
+  daysUntilGoal: number | null;
+  extendToGoal: boolean;
+  goalDate: string | null;
+  onToggleExtendToGoal: () => void;
 }
 
-function WeightChart({ data }: WeightChartProps) {
+function WeightChart({
+  data,
+  canExtendToGoal,
+  daysUntilGoal,
+  extendToGoal,
+  goalDate,
+  onToggleExtendToGoal,
+}: WeightChartProps) {
+  const goalDateLabel =
+    goalDate != null ? format(parseISO(goalDate), "MMM d, yyyy") : null;
+  const header = (
+    <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+      <CardTitle>Weight</CardTitle>
+      {canExtendToGoal && (
+        <Button
+          type="button"
+          size="sm"
+          variant={extendToGoal ? "secondary" : "outline"}
+          className="h-8 px-2.5 text-xs"
+          onClick={onToggleExtendToGoal}
+        >
+          {extendToGoal ? "Fit to data" : "Extend to goal"}
+        </Button>
+      )}
+    </CardHeader>
+  );
+
   if (data.length === 0) {
     return (
       <Card className="mb-4">
-        <CardHeader>
-          <CardTitle>Weight</CardTitle>
-        </CardHeader>
+        {header}
         <CardContent>
           <p className="text-sm text-muted-foreground">
             No weight data available for this period.
@@ -247,13 +449,12 @@ function WeightChart({ data }: WeightChartProps) {
     );
   }
 
+  const hasActual = data.some((d) => d.weight != null);
   const hasExpected = data.some((d) => d.expected != null);
 
   return (
     <Card className="mb-4">
-      <CardHeader>
-        <CardTitle>Weight</CardTitle>
-      </CardHeader>
+      {header}
       <CardContent>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={data}>
@@ -280,7 +481,7 @@ function WeightChart({ data }: WeightChartProps) {
                 color: "hsl(210, 20%, 95%)",
               }}
               formatter={(value, name) => [
-                `${String(value)} kg`,
+                typeof value === "number" ? `${value.toFixed(1)} kg` : "",
                 name === "weight" ? "Actual" : "Expected",
               ]}
             />
@@ -306,23 +507,32 @@ function WeightChart({ data }: WeightChartProps) {
             )}
           </LineChart>
         </ResponsiveContainer>
-        {hasExpected && (
+        {(hasActual || hasExpected) && (
           <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-0.5 w-4 rounded"
-                style={{ backgroundColor: "hsl(152, 76%, 42%)" }}
-              />
-              Actual
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-0.5 w-4 rounded border-t border-dashed"
-                style={{ borderColor: "hsl(215, 15%, 55%)" }}
-              />
-              Expected
-            </span>
+            {hasActual && (
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="inline-block h-0.5 w-4 rounded"
+                  style={{ backgroundColor: "hsl(152, 76%, 42%)" }}
+                />
+                Actual
+              </span>
+            )}
+            {hasExpected && (
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="inline-block h-0.5 w-4 rounded border-t border-dashed"
+                  style={{ borderColor: "hsl(215, 15%, 55%)" }}
+                />
+                Expected
+              </span>
+            )}
           </div>
+        )}
+        {extendToGoal && daysUntilGoal != null && goalDateLabel != null && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Projected to {goalDateLabel} - {formatDaysRemaining(daysUntilGoal)}
+          </p>
         )}
       </CardContent>
     </Card>
@@ -337,6 +547,7 @@ export function TrendPage({ appData }: TrendPageProps) {
   const navigate = useNavigate();
   const { activeProfile, foodsMap } = appData;
   const [range, setRange] = useState<TimeRange>("30d");
+  const [extendWeightToGoal, setExtendWeightToGoal] = useState(true);
 
   const nutritionData = useMemo(() => {
     if (activeProfile == null) return [];
@@ -349,10 +560,27 @@ export function TrendPage({ appData }: TrendPageProps) {
       activeProfile.dayLogs,
       activeProfile.weightLossPlan ?? null,
       range,
+      extendWeightToGoal,
     );
-  }, [activeProfile, range]);
+  }, [activeProfile, extendWeightToGoal, range]);
 
   const goals = activeProfile?.goals ?? null;
+  const maintenanceCalories = getMaintenanceCalories(
+    activeProfile?.userMetrics ?? null,
+  );
+  const weightGoalDate =
+    activeProfile?.weightLossPlan != null
+      ? getWeightPlanGoalDate(activeProfile.weightLossPlan)
+      : null;
+  const daysUntilWeightGoal =
+    weightGoalDate != null
+      ? Math.max(
+          differenceInCalendarDays(parseISO(weightGoalDate), new Date()),
+          0,
+        )
+      : null;
+  const canExtendWeightToGoal =
+    daysUntilWeightGoal != null && daysUntilWeightGoal > 0;
 
   if (activeProfile == null) {
     return (
@@ -400,8 +628,10 @@ export function TrendPage({ appData }: TrendPageProps) {
         dataKey="calories"
         color="hsl(45, 93%, 58%)"
         unit=" kcal"
-        goalValue={goals?.calories ?? null}
-        goalLabel="Goal"
+        referenceLines={buildCalorieReferenceLines(
+          goals?.calories ?? null,
+          maintenanceCalories,
+        )}
       />
 
       <MetricChart
@@ -410,8 +640,7 @@ export function TrendPage({ appData }: TrendPageProps) {
         dataKey="protein"
         color="hsl(217, 91%, 60%)"
         unit="g"
-        goalValue={goals?.protein ?? null}
-        goalLabel="Goal"
+        referenceLines={buildGoalReferenceLines(goals?.protein ?? null, "Goal")}
       />
 
       <MetricChart
@@ -420,8 +649,10 @@ export function TrendPage({ appData }: TrendPageProps) {
         dataKey="saturatedFat"
         color="hsl(0, 84%, 60%)"
         unit="g"
-        goalValue={goals != null ? getSatFatGoalGrams(goals) : null}
-        goalLabel="Limit"
+        referenceLines={buildGoalReferenceLines(
+          goals != null ? getSatFatGoalGrams(goals) : null,
+          "Limit",
+        )}
       />
 
       <MetricChart
@@ -430,11 +661,17 @@ export function TrendPage({ appData }: TrendPageProps) {
         dataKey="fiber"
         color="hsl(152, 76%, 42%)"
         unit="g"
-        goalValue={goals?.fiber ?? null}
-        goalLabel="Goal"
+        referenceLines={buildGoalReferenceLines(goals?.fiber ?? null, "Goal")}
       />
 
-      <WeightChart data={weightData} />
+      <WeightChart
+        data={weightData}
+        canExtendToGoal={canExtendWeightToGoal}
+        daysUntilGoal={daysUntilWeightGoal}
+        extendToGoal={extendWeightToGoal && canExtendWeightToGoal}
+        goalDate={weightGoalDate}
+        onToggleExtendToGoal={() => setExtendWeightToGoal((value) => !value)}
+      />
     </div>
   );
 }
