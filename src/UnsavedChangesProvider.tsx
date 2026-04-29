@@ -29,10 +29,13 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
           if (!(id in prev)) return prev;
           const next = { ...prev };
           delete next[id];
+          sourcesRef.current = next;
           return next;
         }
 
-        return { ...prev, [id]: source };
+        const next = { ...prev, [id]: source };
+        sourcesRef.current = next;
+        return next;
       });
     },
     [],
@@ -40,7 +43,7 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
 
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      hasUnsavedChanges &&
+      Object.keys(sourcesRef.current).length > 0 &&
       (currentLocation.pathname !== nextLocation.pathname ||
         currentLocation.search !== nextLocation.search ||
         currentLocation.hash !== nextLocation.hash),
@@ -64,6 +67,7 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
     for (const source of Object.values(sourcesRef.current)) {
       source.onDiscard?.();
     }
+    sourcesRef.current = {};
     setSources({});
   }, []);
 
