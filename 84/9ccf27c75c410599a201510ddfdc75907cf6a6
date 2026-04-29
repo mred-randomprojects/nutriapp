@@ -1,0 +1,23 @@
+dist/index.html
+  51cbd5b1ceaa28b0 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "849ccf27c75c410599a201510ddfdc75907cf6a6",
+  "prompts": {
+    "51cbd5b1ceaa28b0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019dd900-bea9-7462-b20b-6c8ad4f75b5f",
+        "model": "unknown"
+      },
+      "human_author": "Maximiliano Redigonda",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
