@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
@@ -487,8 +488,10 @@ export function FoodForm({ appData }: FoodFormProps) {
         appData.addFood(payload);
       }
     }
-    setHasSubmitted(true);
-    clearUnsavedChanges();
+    flushSync(() => {
+      setHasSubmitted(true);
+      clearUnsavedChanges();
+    });
     clearFoodFormDraft(draftKey);
     navigate("/foods");
   }
