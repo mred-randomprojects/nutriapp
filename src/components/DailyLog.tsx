@@ -1896,7 +1896,8 @@ export function DailyLog({ appData }: DailyLogProps) {
                             e.stopPropagation();
                             setPendingDelete({
                               title: "Remove section",
-                              description: `Remove the "${item.label}" section separator?`,
+                              description: `Delete only the "${item.label}" section separator from all devices?`,
+                              confirmLabel: "Delete from all devices",
                               onConfirm: () =>
                                 removeLogEntry(
                                   activeProfile.id as ProfileId,
@@ -1930,7 +1931,8 @@ export function DailyLog({ appData }: DailyLogProps) {
                       onRemove={() =>
                         setPendingDelete({
                           title: "Remove entry",
-                          description: `Remove "${item.name}" from this day's log?`,
+                          description: `Delete only "${item.name}" from this day's log on all devices?`,
+                          confirmLabel: "Delete from all devices",
                           onConfirm: () =>
                             removeLogEntry(
                               activeProfile.id as ProfileId,
@@ -1987,7 +1989,8 @@ export function DailyLog({ appData }: DailyLogProps) {
                               setPendingDelete({
                                 title: "Remove entry",
                                 description:
-                                  "Remove this deleted food entry from the log?",
+                                  "Delete only this log entry from all devices?",
+                                confirmLabel: "Delete from all devices",
                                 onConfirm: () =>
                                   removeLogEntry(
                                     activeProfile.id as ProfileId,
@@ -2020,7 +2023,8 @@ export function DailyLog({ appData }: DailyLogProps) {
                     onRemove={() =>
                       setPendingDelete({
                         title: "Remove entry",
-                        description: `Remove "${food.name}" from this day's log?`,
+                        description: `Delete only "${food.name}" from this day's log on all devices?`,
+                        confirmLabel: "Delete from all devices",
                         onConfirm: () =>
                           removeLogEntry(
                             activeProfile.id as ProfileId,

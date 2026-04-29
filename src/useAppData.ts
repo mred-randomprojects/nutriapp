@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type {
   AppData,
+  DeletedDayLogEntry,
   Food,
   FoodId,
   NutritionGoals,
@@ -26,6 +27,7 @@ import { mergeAppData } from "./mergeAppData";
 import { useAuth } from "./auth";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
+import { upsertDeletedDayLogEntry } from "./deletedDayLogEntries";
 
 function clonePlanEntries(entries: ReadonlyArray<DayLogItem>): DayLogItem[] {
   return entries.map((entry) => ({ ...entry }));
@@ -470,8 +472,18 @@ export function useAppData() {
 
   const removeLogEntry = useCallback(
     (profileId: ProfileId, date: string, entryId: LogEntryId) => {
+      const deletedEntry: DeletedDayLogEntry = {
+        profileId,
+        date,
+        entryId,
+        deletedAt: new Date().toISOString(),
+      };
       persist({
         ...data,
+        deletedDayLogEntries: upsertDeletedDayLogEntry(
+          data.deletedDayLogEntries ?? [],
+          deletedEntry,
+        ),
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
           return {

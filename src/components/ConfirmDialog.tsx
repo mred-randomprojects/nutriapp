@@ -12,6 +12,7 @@ import { Button } from "./ui/button";
 export interface PendingAction {
   title: string;
   description: string;
+  confirmLabel?: string;
   onConfirm: () => void;
 }
 
@@ -33,21 +34,21 @@ export function ConfirmDialog({ pending, onClose }: ConfirmDialogProps) {
           <DialogTitle>{pending?.title}</DialogTitle>
           <DialogDescription>{pending?.description}</DialogDescription>
         </DialogHeader>
-        <DialogFooter className="flex-row gap-2 sm:justify-end">
+        <DialogFooter className="gap-2 sm:justify-end">
           <DialogClose asChild>
-            <Button variant="outline" className="flex-1 sm:flex-initial">
+            <Button variant="outline" className="w-full sm:w-auto">
               Cancel
             </Button>
           </DialogClose>
           <Button
             variant="destructive"
-            className="flex-1 sm:flex-initial"
+            className="w-full sm:w-auto"
             onClick={() => {
               pending?.onConfirm();
               onClose();
             }}
           >
-            Remove
+            {pending?.confirmLabel ?? "Remove"}
           </Button>
         </DialogFooter>
       </DialogContent>

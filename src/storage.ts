@@ -32,6 +32,7 @@ const DEFAULT_APP_DATA: AppData = {
   foods: [],
   profiles: [],
   activeProfileId: null,
+  deletedDayLogEntries: [],
 };
 
 export function loadAppData(): AppData {
@@ -44,6 +45,7 @@ export function loadAppData(): AppData {
       foods: parsed.foods ?? [],
       profiles: parsed.profiles ?? [],
       activeProfileId: parsed.activeProfileId ?? null,
+      deletedDayLogEntries: parsed.deletedDayLogEntries ?? [],
     };
   } catch {
     // Data exists but is corrupt — stash the raw string so it can be recovered
@@ -62,6 +64,7 @@ export function loadAppData(): AppData {
           foods: parsed.foods ?? [],
           profiles: parsed.profiles ?? [],
           activeProfileId: parsed.activeProfileId ?? null,
+          deletedDayLogEntries: parsed.deletedDayLogEntries ?? [],
         };
       } catch {
         // Backup also corrupt — nothing we can do.
