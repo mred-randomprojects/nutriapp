@@ -97,6 +97,13 @@ export interface DayLog {
   weightKg?: number;
 }
 
+export interface DeletedDayLogEntry {
+  profileId: ProfileId;
+  date: string;
+  entryId: LogEntryId;
+  deletedAt: string;
+}
+
 export type WeeklyMealPlan = Partial<Record<PlanWeekday, DayLogItem[]>>;
 
 export interface SavedMealPlan {
@@ -192,4 +199,5 @@ export interface AppData {
   foods: Food[];
   profiles: Profile[];
   activeProfileId: ProfileId | null;
+  deletedDayLogEntries: DeletedDayLogEntry[];
 }
