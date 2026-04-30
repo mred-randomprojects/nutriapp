@@ -126,6 +126,7 @@ function mergeDayLogs(
     return {
       ...cloudLog,
       weightKg: cloudLog.weightKg ?? localLog.weightKg,
+      weightNotes: cloudLog.weightNotes ?? localLog.weightNotes,
       entries: mergeEntries(
         profileId,
         cloudLog.date,

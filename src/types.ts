@@ -95,6 +95,7 @@ export interface DayLog {
   date: string;
   entries: DayLogItem[];
   weightKg?: number;
+  weightNotes?: string;
 }
 
 export interface DeletedDayLogEntry {

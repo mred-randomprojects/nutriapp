@@ -130,7 +130,12 @@ function buildMarkdownForDay(
     lines.push(`- Budgeted totals: ${formatNutritionSummary(budgetedTotals)}`);
   }
 
-  if (dayLog?.weightKg != null || expectedWeightKg != null) {
+  const weightNotes = dayLog?.weightNotes?.trim();
+  if (
+    dayLog?.weightKg != null ||
+    expectedWeightKg != null ||
+    (weightNotes != null && weightNotes.length > 0)
+  ) {
     const weightParts: string[] = [];
     if (dayLog?.weightKg != null) {
       weightParts.push(`weight ${formatNumber(dayLog.weightKg)} kg`);
@@ -138,7 +143,12 @@ function buildMarkdownForDay(
     if (expectedWeightKg != null) {
       weightParts.push(`expected ${expectedWeightKg.toFixed(1)} kg`);
     }
-    lines.push(`- Weight: ${weightParts.join(", ")}`);
+    lines.push(
+      weightParts.length > 0 ? `- Weight: ${weightParts.join(", ")}` : "- Weight:",
+    );
+    if (weightNotes != null && weightNotes.length > 0) {
+      lines.push(`  - Note: ${weightNotes}`);
+    }
   }
 
   if (items.length === 0) {
@@ -1089,39 +1099,62 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
 }
 interface WeightInputProps {
   weightKg: number | undefined;
+  weightNotes: string | undefined;
   expectedWeightKg: number | null;
   isLocked: boolean;
-  onSave: (weightKg: number | undefined) => void;
+  onSave: (weightKg: number | undefined, weightNotes: string | undefined) => void;
 }
 
-function WeightInput({ weightKg, expectedWeightKg, isLocked, onSave }: WeightInputProps) {
+function WeightInput({
+  weightKg,
+  weightNotes,
+  expectedWeightKg,
+  isLocked,
+  onSave,
+}: WeightInputProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
+  const [editNotes, setEditNotes] = useState("");
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const savedWeightValue = weightKg != null ? String(weightKg) : "";
+  const savedWeightNotes = weightNotes ?? "";
   const isDirty =
-    isEditing && editValue !== (weightKg != null ? String(weightKg) : "");
+    isEditing &&
+    (editValue !== savedWeightValue || editNotes !== savedWeightNotes);
 
   useUnsavedChanges(isDirty, {
-    title: "Discard weight change?",
+    title: "Discard weight changes?",
     description:
-      "Leaving now will lose the weight entry you have not saved.",
+      "Leaving now will lose the weight changes you have not saved.",
   });
 
   function startEditing() {
-    setEditValue(weightKg != null ? String(weightKg) : "");
+    setEditValue(savedWeightValue);
+    setEditNotes(savedWeightNotes);
     setIsEditing(true);
   }
 
-  function commitEdit() {
+  function parseWeightDraft(): number | undefined | null {
     const trimmed = editValue.trim();
     if (trimmed === "") {
-      onSave(undefined);
-    } else {
-      const parsed = parseFloat(trimmed);
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        onSave(Math.round(parsed * 10) / 10);
-      }
+      return undefined;
     }
+
+    const parsed = parseFloat(trimmed);
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      return null;
+    }
+
+    return Math.round(parsed * 10) / 10;
+  }
+
+  function commitEdit() {
+    const parsedWeight = parseWeightDraft();
+    if (parsedWeight === null) return;
+
+    const trimmedNotes = editNotes.trim();
+    const newNotes = trimmedNotes.length > 0 ? trimmedNotes : undefined;
+    onSave(parsedWeight, newNotes);
     setDiscardDialogOpen(false);
     setIsEditing(false);
   }
@@ -1141,43 +1174,52 @@ function WeightInput({ weightKg, expectedWeightKg, isLocked, onSave }: WeightInp
         <Card className="mb-4">
           <CardContent className="p-3">
             <form
-              className="flex items-center gap-2"
+              className="flex flex-col gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 commitEdit();
               }}
             >
-              <Weight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <Input
-                type="number"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                placeholder="e.g. 75.2"
-                className="h-8 text-sm"
-                step="0.1"
-                min="0"
-                autoFocus
+              <div className="flex items-center gap-2">
+                <Weight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <Input
+                  type="number"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  placeholder="e.g. 75.2"
+                  className="h-8 text-sm"
+                  step="0.1"
+                  min="0"
+                  autoFocus
+                />
+                <span className="shrink-0 text-xs text-muted-foreground">kg</span>
+                <Button type="submit" size="sm" className="h-8 shrink-0">
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 shrink-0"
+                  onClick={requestCancel}
+                >
+                  Cancel
+                </Button>
+              </div>
+              <textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Add a note..."
+                className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                rows={2}
               />
-              <span className="shrink-0 text-xs text-muted-foreground">kg</span>
-              <Button type="submit" size="sm" className="h-8 shrink-0">
-                Save
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 shrink-0"
-                onClick={requestCancel}
-              >
-                Cancel
-              </Button>
             </form>
           </CardContent>
         </Card>
         <DiscardChangesDialog
           open={discardDialogOpen}
-          title="Discard weight change?"
-          description="Closing now will lose the weight entry you have not saved."
+          title="Discard weight changes?"
+          description="Closing now will lose the weight changes you have not saved."
           onStay={() => setDiscardDialogOpen(false)}
           onDiscard={() => {
             setDiscardDialogOpen(false);
@@ -1191,6 +1233,7 @@ function WeightInput({ weightKg, expectedWeightKg, isLocked, onSave }: WeightInp
   const delta = weightKg != null && expectedWeightKg != null
     ? weightKg - expectedWeightKg
     : null;
+  const displayWeightNotes = weightNotes?.trim();
 
   return (
     <Card
@@ -1219,6 +1262,12 @@ function WeightInput({ weightKg, expectedWeightKg, isLocked, onSave }: WeightInp
               </span>
             )}
           </div>
+        )}
+        {displayWeightNotes != null && displayWeightNotes.length > 0 && (
+          <p className="mt-1.5 flex items-start gap-1 text-xs text-muted-foreground italic">
+            <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
+            <span className="line-clamp-2">{displayWeightNotes}</span>
+          </p>
         )}
       </CardContent>
     </Card>
@@ -1616,9 +1665,12 @@ export function DailyLog({ appData }: DailyLogProps) {
       {/* Weight */}
       <WeightInput
         weightKg={dayLog?.weightKg}
+        weightNotes={dayLog?.weightNotes}
         expectedWeightKg={selectedExpectedWeightKg}
         isLocked={isLocked}
-        onSave={(w) => updateDayLogWeight(activeProfile.id, dateStr, w)}
+        onSave={(weightKg, weightNotes) =>
+          updateDayLogWeight(activeProfile.id, dateStr, weightKg, weightNotes)
+        }
       />
 
       {/* Entries list */}
