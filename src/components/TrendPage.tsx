@@ -26,7 +26,7 @@ import type {
   WeightLossPlan,
 } from "../types";
 import { sumNutrition } from "../nutrition";
-import { computeExpectedWeight, computeTdee } from "../calculator";
+import { KCAL_PER_KG, computeExpectedWeight, computeTdee } from "../calculator";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 
@@ -327,6 +327,11 @@ function formatSignedKcal(value: number): string {
   return `${rounded > 0 ? "+" : ""}${rounded} kcal`;
 }
 
+function formatSignedKg(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)} kg`;
+}
+
 function getCalorieComparisonValue(
   target: CalorieComparisonTarget,
   goalValue: number | null,
@@ -358,6 +363,23 @@ function getPeriodCalorieDelta(
   return data.reduce(
     (total, point) => total + (point.calories - comparisonValue),
     0,
+  );
+}
+
+function getExpectedWeightDelta(calorieDelta: number | null): number | null {
+  return calorieDelta != null ? calorieDelta / KCAL_PER_KG : null;
+}
+
+function getActualWeightDelta(data: WeightDataPoint[]): number | null {
+  const actualWeights = data.filter(
+    (point): point is WeightDataPoint & { weight: number } =>
+      point.weight != null,
+  );
+
+  if (actualWeights.length < 2) return null;
+
+  return (
+    actualWeights[actualWeights.length - 1].weight - actualWeights[0].weight
   );
 }
 
@@ -723,6 +745,8 @@ export function TrendPage({ appData }: TrendPageProps) {
     nutritionData,
     selectedCalorieComparisonValue,
   );
+  const expectedWeightDelta = getExpectedWeightDelta(periodCalorieDelta);
+  const actualWeightDelta = getActualWeightDelta(weightData);
   const selectedCalorieComparisonLabel = getCalorieComparisonLabel(
     selectedCalorieComparisonTarget,
   );
@@ -804,18 +828,27 @@ export function TrendPage({ appData }: TrendPageProps) {
         )}
         headerMeta={
           periodCalorieDelta != null ? (
-            <p
-              className={`mt-1 text-xs ${
-                periodCalorieDelta > 0
-                  ? "text-red-500"
-                  : periodCalorieDelta < 0
-                    ? "text-emerald-500"
-                    : "text-muted-foreground"
-              }`}
-            >
-              Period delta vs {selectedCalorieComparisonLabel.toLowerCase()}:{" "}
-              {formatSignedKcal(periodCalorieDelta)}
-            </p>
+            <div className="mt-1 space-y-0.5 text-xs">
+              <p
+                className={
+                  periodCalorieDelta > 0
+                    ? "text-red-500"
+                    : periodCalorieDelta < 0
+                      ? "text-emerald-500"
+                      : "text-muted-foreground"
+                }
+              >
+                Period delta vs {selectedCalorieComparisonLabel.toLowerCase()}:{" "}
+                {formatSignedKcal(periodCalorieDelta)}
+              </p>
+              {expectedWeightDelta != null && (
+                <p className="text-muted-foreground">
+                  Expected weight delta: {formatSignedKg(expectedWeightDelta)}
+                  {actualWeightDelta != null &&
+                    ` | Actual: ${formatSignedKg(actualWeightDelta)}`}
+                </p>
+              )}
+            </div>
           ) : null
         }
         headerAction={
