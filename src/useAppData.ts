@@ -534,7 +534,12 @@ export function useAppData() {
   );
 
   const updateDayLogWeight = useCallback(
-    (profileId: ProfileId, date: string, weightKg: number | undefined) => {
+    (
+      profileId: ProfileId,
+      date: string,
+      weightKg: number | undefined,
+      weightNotes: string | undefined,
+    ) => {
       persist({
         ...data,
         profiles: data.profiles.map((p) => {
@@ -544,11 +549,11 @@ export function useAppData() {
             return {
               ...p,
               dayLogs: p.dayLogs.map((dl) =>
-                dl.date === date ? { ...dl, weightKg } : dl,
+                dl.date === date ? { ...dl, weightKg, weightNotes } : dl,
               ),
             };
           }
-          const newDayLog: DayLog = { date, entries: [], weightKg };
+          const newDayLog: DayLog = { date, entries: [], weightKg, weightNotes };
           return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
         }),
       });
