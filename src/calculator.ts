@@ -163,6 +163,7 @@ export {
   ACTIVITY_LABELS,
   ACTIVITY_LEVELS,
   ACTIVITY_MULTIPLIERS,
+  KCAL_PER_KG,
   computeBmr,
   computeDeficitInfo,
   computeExpectedWeight,
