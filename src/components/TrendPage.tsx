@@ -745,7 +745,11 @@ export function TrendPage({ appData }: TrendPageProps) {
     nutritionData,
     selectedCalorieComparisonValue,
   );
-  const expectedWeightDelta = getExpectedWeightDelta(periodCalorieDelta);
+  const maintenanceCalorieDelta = getPeriodCalorieDelta(
+    nutritionData,
+    maintenanceCalories,
+  );
+  const expectedWeightDelta = getExpectedWeightDelta(maintenanceCalorieDelta);
   const actualWeightDelta = getActualWeightDelta(weightData);
   const selectedCalorieComparisonLabel = getCalorieComparisonLabel(
     selectedCalorieComparisonTarget,
@@ -843,7 +847,8 @@ export function TrendPage({ appData }: TrendPageProps) {
               </p>
               {expectedWeightDelta != null && (
                 <p className="text-muted-foreground">
-                  Expected weight delta: {formatSignedKg(expectedWeightDelta)}
+                  Expected weight delta vs maintenance:{" "}
+                  {formatSignedKg(expectedWeightDelta)}
                   {actualWeightDelta != null &&
                     ` | Actual: ${formatSignedKg(actualWeightDelta)}`}
                 </p>
