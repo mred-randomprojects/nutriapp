@@ -99,6 +99,37 @@ function isToday(date: Date): boolean {
   return formatDate(date) === formatDate(new Date());
 }
 
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement)
+  );
+}
+
+function isInteractiveShortcutTarget(target: EventTarget | null): boolean {
+  if (isEditableShortcutTarget(target)) {
+    return true;
+  }
+
+  return (
+    target instanceof Element &&
+    target.closest(
+      'button,a[href],summary,[role="button"],[role="link"],[role="menuitem"],[role="option"],[role="tab"]',
+    ) != null
+  );
+}
+
+function isAddEntryShortcut(event: KeyboardEvent): boolean {
+  return (
+    event.code === "Space" ||
+    event.key === " " ||
+    event.key === "Spacebar"
+  );
+}
+
 function describeEntryAmount(entry: LogEntry, food: Food): string {
   if (entry.units != null && food.nutritionPerUnit != null) {
     return `${formatNumber(entry.units)} unit${entry.units === 1 ? "" : "s"}`;
@@ -1319,8 +1350,14 @@ export function DailyLog({ appData }: DailyLogProps) {
   const sensors = useSensors(pointerSensor, touchSensor);
 
   const goToToday = useCallback(() => setSelectedDate(new Date()), []);
+  const openAddEntry = useCallback((insertIndex?: number) => {
+    setAddEntryInsertIndex(insertIndex);
+    setAddDialogOpen(true);
+  }, []);
 
   const savePlanDirty = savePlanDialogOpen && planName.trim().length > 0;
+  const dateStr = formatDate(selectedDate);
+  const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
 
   useUnsavedChanges(savePlanDirty, {
     title: "Discard saved plan?",
@@ -1330,11 +1367,32 @@ export function DailyLog({ appData }: DailyLogProps) {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (hasUnsavedChanges) return;
+      if (e.defaultPrevented || hasUnsavedChanges) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if ((e.target as HTMLElement).isContentEditable) return;
+      if (isEditableShortcutTarget(e.target)) return;
+
+      if (isAddEntryShortcut(e)) {
+        if (
+          activeProfile == null ||
+          isLocked ||
+          addDialogOpen ||
+          savePlanDialogOpen ||
+          savePlanDiscardOpen ||
+          pendingDelete != null ||
+          copyMenuOpen ||
+          planMenuOpen ||
+          sectionMenuOpen ||
+          isInteractiveShortcutTarget(e.target)
+        ) {
+          return;
+        }
+
+        e.preventDefault();
+        if (!e.repeat) {
+          openAddEntry();
+        }
+        return;
+      }
 
       if (e.key === "t" || e.key === "T") {
         goToToday();
@@ -1346,7 +1404,20 @@ export function DailyLog({ appData }: DailyLogProps) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goToToday, hasUnsavedChanges]);
+  }, [
+    activeProfile,
+    addDialogOpen,
+    copyMenuOpen,
+    goToToday,
+    hasUnsavedChanges,
+    isLocked,
+    openAddEntry,
+    pendingDelete,
+    planMenuOpen,
+    savePlanDialogOpen,
+    savePlanDiscardOpen,
+    sectionMenuOpen,
+  ]);
 
   useEffect(() => {
     if (!copyMenuOpen) return;
@@ -1392,9 +1463,6 @@ export function DailyLog({ appData }: DailyLogProps) {
     return () => window.clearTimeout(timeout);
   }, [planFeedback]);
 
-  const dateStr = formatDate(selectedDate);
-  const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
-
   function toggleLock() {
     setUnlockedDates((prev) => {
       const next = new Set(prev);
@@ -1405,11 +1473,6 @@ export function DailyLog({ appData }: DailyLogProps) {
       }
       return next;
     });
-  }
-
-  function openAddEntry(insertIndex?: number) {
-    setAddEntryInsertIndex(insertIndex);
-    setAddDialogOpen(true);
   }
 
   const dayLog = useMemo(() => {
