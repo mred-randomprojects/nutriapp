@@ -20,7 +20,14 @@ import { useUnsavedChanges } from "../unsavedChanges";
 type InputMode = "grams" | "units";
 type AddMode = "search" | "quick-add" | "section";
 
-const SEPARATOR_PRESETS = ["Breakfast", "Lunch", "Merienda", "Dinner", "Snack"];
+const SEPARATOR_PRESETS = [
+  "Breakfast",
+  "Lunch",
+  "Merienda",
+  "Dinner",
+  "Snack",
+  "Dessert",
+];
 
 const ADD_MODE_OPTIONS: Array<{
   mode: AddMode;
@@ -68,6 +75,7 @@ export function AddEntryDialog({
   const [quickSaturatedFat, setQuickSaturatedFat] = useState("");
   const [quickFiber, setQuickFiber] = useState("");
   const [sectionLabel, setSectionLabel] = useState("");
+  const [highlightedSectionIndex, setHighlightedSectionIndex] = useState(0);
   const [isBudgeted, setIsBudgeted] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -120,12 +128,13 @@ export function AddEntryDialog({
       : SEPARATOR_PRESETS.filter((label) =>
           normalizeForSearch(label).includes(normalizedSectionLabel),
         );
-  const sectionSubmitLabel =
-    filteredSectionPresets.length === 1
-      ? filteredSectionPresets[0]
-      : filteredSectionPresets.length === 0
-        ? sectionLabel
-        : "";
+  const sectionOptions =
+    filteredSectionPresets.length > 0
+      ? filteredSectionPresets
+      : sectionLabel.trim().length > 0
+        ? [sectionLabel.trim()]
+        : [];
+  const sectionSubmitLabel = sectionOptions[highlightedSectionIndex] ?? "";
   const canSubmitSection = sectionSubmitLabel.trim().length > 0;
 
   const isDirty =
@@ -173,8 +182,13 @@ export function AddEntryDialog({
     setQuickSaturatedFat("");
     setQuickFiber("");
     setSectionLabel("");
+    setHighlightedSectionIndex(0);
     setIsBudgeted(false);
   }
+
+  useEffect(() => {
+    setHighlightedSectionIndex(0);
+  }, [normalizedSectionLabel]);
 
   function selectAddMode(nextMode: AddMode) {
     setAddMode(nextMode);
@@ -310,6 +324,18 @@ export function AddEntryDialog({
     event.preventDefault();
     event.stopPropagation();
     selectAddMode(shortcutMode);
+  }
+
+  function handleSectionKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedSectionIndex((prev) =>
+        sectionOptions.length === 0 ? 0 : Math.min(prev + 1, sectionOptions.length - 1),
+      );
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedSectionIndex((prev) => Math.max(prev - 1, 0));
+    }
   }
 
   const statusToggle = (
@@ -497,34 +523,49 @@ export function AddEntryDialog({
               handleSectionAdd(sectionSubmitLabel);
             }}
           >
-            <div>
+            <div className="relative">
               <Label htmlFor="section-label">Section name</Label>
               <Input
                 id="section-label"
                 ref={sectionLabelInputRef}
                 value={sectionLabel}
                 onChange={(e) => setSectionLabel(e.target.value)}
+                onKeyDown={handleSectionKeyDown}
                 placeholder="e.g. Late snack"
+                role="combobox"
+                aria-expanded="true"
+                aria-controls="section-options"
+                aria-autocomplete="list"
                 autoFocus
               />
-            </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              {filteredSectionPresets.map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="rounded-lg border border-input px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
-                  onClick={() => handleSectionAdd(label)}
-                >
-                  {label}
-                </button>
-              ))}
-              {filteredSectionPresets.length === 0 && (
-                <p className="col-span-2 rounded-lg border border-dashed border-input px-3 py-2 text-sm text-muted-foreground">
-                  Custom section: {sectionLabel.trim()}
-                </p>
-              )}
+              <div
+                id="section-options"
+                className="mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover p-1 shadow-lg"
+              >
+                {sectionOptions.map((label, index) => {
+                  const isHighlighted = index === highlightedSectionIndex;
+                  const isCustom = filteredSectionPresets.length === 0;
+                  return (
+                    <button
+                      key={`${isCustom ? "custom" : "preset"}-${label}`}
+                      type="button"
+                      className={`flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm transition-colors ${
+                        isHighlighted
+                          ? "bg-accent text-accent-foreground"
+                          : "hover:bg-accent"
+                      }`}
+                      onMouseEnter={() => setHighlightedSectionIndex(index)}
+                      onClick={() => handleSectionAdd(label)}
+                    >
+                      <span>{label}</span>
+                      {isCustom && (
+                        <span className="text-xs text-muted-foreground">Custom</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <Button
@@ -532,8 +573,8 @@ export function AddEntryDialog({
               className="w-full"
               disabled={!canSubmitSection}
             >
-              {filteredSectionPresets.length === 1
-                ? `Add ${filteredSectionPresets[0]}`
+              {canSubmitSection
+                ? `Add ${sectionSubmitLabel.trim()}`
                 : "Add Section"}
             </Button>
           </form>
