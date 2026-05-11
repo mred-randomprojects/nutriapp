@@ -113,6 +113,21 @@ export function AddEntryDialog({
     quickNutrition.saturatedFat > 0 ||
     quickNutrition.fiber > 0;
 
+  const normalizedSectionLabel = normalizeForSearch(sectionLabel.trim());
+  const filteredSectionPresets =
+    normalizedSectionLabel.length === 0
+      ? SEPARATOR_PRESETS
+      : SEPARATOR_PRESETS.filter((label) =>
+          normalizeForSearch(label).includes(normalizedSectionLabel),
+        );
+  const sectionSubmitLabel =
+    filteredSectionPresets.length === 1
+      ? filteredSectionPresets[0]
+      : filteredSectionPresets.length === 0
+        ? sectionLabel
+        : "";
+  const canSubmitSection = sectionSubmitLabel.trim().length > 0;
+
   const isDirty =
     open &&
     (selectedFoodId != null ||
@@ -479,7 +494,7 @@ export function AddEntryDialog({
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              handleSectionAdd();
+              handleSectionAdd(sectionSubmitLabel);
             }}
           >
             <div>
@@ -495,7 +510,7 @@ export function AddEntryDialog({
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              {SEPARATOR_PRESETS.map((label) => (
+              {filteredSectionPresets.map((label) => (
                 <button
                   key={label}
                   type="button"
@@ -505,14 +520,21 @@ export function AddEntryDialog({
                   {label}
                 </button>
               ))}
+              {filteredSectionPresets.length === 0 && (
+                <p className="col-span-2 rounded-lg border border-dashed border-input px-3 py-2 text-sm text-muted-foreground">
+                  Custom section: {sectionLabel.trim()}
+                </p>
+              )}
             </div>
 
             <Button
               type="submit"
               className="w-full"
-              disabled={sectionLabel.trim().length === 0}
+              disabled={!canSubmitSection}
             >
-              Add Section
+              {filteredSectionPresets.length === 1
+                ? `Add ${filteredSectionPresets[0]}`
+                : "Add Section"}
             </Button>
           </form>
         ) : selectedFood == null ? (
