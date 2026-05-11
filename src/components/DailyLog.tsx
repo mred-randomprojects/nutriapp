@@ -61,8 +61,6 @@ import type { PendingAction } from "./ConfirmDialog";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 
-const SEPARATOR_PRESETS = ["Breakfast", "Lunch", "Merienda", "Dinner", "Snack"];
-
 interface DailyLogProps {
   appData: AppDataHandle;
 }
@@ -1310,7 +1308,6 @@ export function DailyLog({ appData }: DailyLogProps) {
   const {
     activeProfile,
     foodsMap,
-    addSeparator,
     removeLogEntry,
     reorderLogEntries,
     updateLogEntry,
@@ -1324,14 +1321,12 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [addEntryInsertIndex, setAddEntryInsertIndex] = useState<
     number | undefined
   >(undefined);
-  const [sectionMenuOpen, setSectionMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [planMenuOpen, setPlanMenuOpen] = useState(false);
   const [savePlanDialogOpen, setSavePlanDialogOpen] = useState(false);
   const [savePlanDiscardOpen, setSavePlanDiscardOpen] = useState(false);
   const [planName, setPlanName] = useState("");
   const [planSearch, setPlanSearch] = useState("");
-  const [customLabel, setCustomLabel] = useState("");
   const [unlockedDates, setUnlockedDates] = useState<Set<string>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
@@ -1381,7 +1376,6 @@ export function DailyLog({ appData }: DailyLogProps) {
           pendingDelete != null ||
           copyMenuOpen ||
           planMenuOpen ||
-          sectionMenuOpen ||
           isInteractiveShortcutTarget(e.target)
         ) {
           return;
@@ -1416,7 +1410,6 @@ export function DailyLog({ appData }: DailyLogProps) {
     planMenuOpen,
     savePlanDialogOpen,
     savePlanDiscardOpen,
-    sectionMenuOpen,
   ]);
 
   useEffect(() => {
@@ -1871,67 +1864,9 @@ export function DailyLog({ appData }: DailyLogProps) {
             <Save className="mr-1 h-4 w-4" />
             Save Plan
           </Button>
-          <div className="relative">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setSectionMenuOpen(!sectionMenuOpen)}
-            >
-              Section
-              <ChevronDown className="ml-1 h-3.5 w-3.5" />
-            </Button>
-            {sectionMenuOpen && (
-              <div className="absolute right-0 z-10 mt-1 w-52 rounded-lg border bg-popover p-2 shadow-lg">
-                {SEPARATOR_PRESETS.map((label) => (
-                  <button
-                    key={label}
-                    className="w-full rounded px-3 py-1.5 text-left text-sm hover:bg-accent"
-                    onClick={() => {
-                      addSeparator(
-                        activeProfile.id as ProfileId,
-                        dateStr,
-                        label,
-                      );
-                      setSectionMenuOpen(false);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <div className="mt-1 border-t pt-1">
-                  <form
-                    className="flex gap-1"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const trimmed = customLabel.trim();
-                      if (trimmed.length === 0) return;
-                      addSeparator(
-                        activeProfile.id as ProfileId,
-                        dateStr,
-                        trimmed,
-                      );
-                      setCustomLabel("");
-                      setSectionMenuOpen(false);
-                    }}
-                  >
-                    <Input
-                      value={customLabel}
-                      onChange={(e) => setCustomLabel(e.target.value)}
-                      placeholder="Custom..."
-                      className="h-7 text-sm"
-                      autoFocus
-                    />
-                    <Button type="submit" size="sm" className="h-7 px-2">
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
           <Button size="sm" onClick={() => openAddEntry()}>
             <Plus className="mr-1 h-4 w-4" />
-            Add Entry
+            Add
           </Button>
         </>
         )}

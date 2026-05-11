@@ -443,13 +443,18 @@ export function useAppData() {
   );
 
   const addSeparator = useCallback(
-    (profileId: ProfileId, date: string, label: string) => {
+    (
+      profileId: ProfileId,
+      date: string,
+      label: string,
+      insertIndex?: number,
+    ) => {
       const separator: SectionSeparator = {
         type: "separator",
         id: generateId() as LogEntryId,
         label,
       };
-      appendToDayLog(profileId, date, separator);
+      appendToDayLog(profileId, date, separator, insertIndex);
     },
     [appendToDayLog],
   );

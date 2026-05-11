@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { CalendarCheck, Utensils } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import type { FoodId, NutritionValues, ProfileId } from "../types";
@@ -17,7 +18,25 @@ import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useUnsavedChanges } from "../unsavedChanges";
 
 type InputMode = "grams" | "units";
-type AddMode = "search" | "quick-add";
+type AddMode = "search" | "quick-add" | "section";
+
+const SEPARATOR_PRESETS = ["Breakfast", "Lunch", "Merienda", "Dinner", "Snack"];
+
+const ADD_MODE_OPTIONS: Array<{
+  mode: AddMode;
+  label: string;
+  shortcut: string;
+}> = [
+  { mode: "search", label: "Foods", shortcut: "1" },
+  { mode: "quick-add", label: "Quick Add", shortcut: "2" },
+  { mode: "section", label: "Section", shortcut: "3" },
+];
+
+const ADD_MODE_SHORTCUTS: Partial<Record<string, AddMode>> = {
+  "1": "search",
+  "2": "quick-add",
+  "3": "section",
+};
 
 interface AddEntryDialogProps {
   open: boolean;
@@ -36,7 +55,7 @@ export function AddEntryDialog({
   date,
   insertIndex,
 }: AddEntryDialogProps) {
-  const { allFoods, addLogEntry, addQuickAddEntry } = appData;
+  const { allFoods, addLogEntry, addQuickAddEntry, addSeparator } = appData;
   const [addMode, setAddMode] = useState<AddMode>("search");
   const [selectedFoodId, setSelectedFoodId] = useState<FoodId | null>(null);
   const [inputMode, setInputMode] = useState<InputMode>("grams");
@@ -48,8 +67,12 @@ export function AddEntryDialog({
   const [quickProtein, setQuickProtein] = useState("");
   const [quickSaturatedFat, setQuickSaturatedFat] = useState("");
   const [quickFiber, setQuickFiber] = useState("");
+  const [sectionLabel, setSectionLabel] = useState("");
   const [isBudgeted, setIsBudgeted] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const quickNameInputRef = useRef<HTMLInputElement>(null);
+  const sectionLabelInputRef = useRef<HTMLInputElement>(null);
 
   const filteredFoods = allFoods.filter((f) =>
     normalizeForSearch(f.name).includes(normalizeForSearch(search)),
@@ -100,14 +123,27 @@ export function AddEntryDialog({
       quickCalories.trim().length > 0 ||
       quickProtein.trim().length > 0 ||
       quickSaturatedFat.trim().length > 0 ||
-      quickFiber.trim().length > 0);
+      quickFiber.trim().length > 0 ||
+      sectionLabel.trim().length > 0);
 
   useUnsavedChanges(isDirty, {
-    title: "Discard log entry?",
+    title: "Discard add draft?",
     description:
-      "Leaving now will lose the food entry you have not added to the log.",
+      "Leaving now will lose the item you have not added to the log.",
     onDiscard: resetDraft,
   });
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (addMode === "search") {
+      searchInputRef.current?.focus();
+    } else if (addMode === "quick-add") {
+      quickNameInputRef.current?.focus();
+    } else {
+      sectionLabelInputRef.current?.focus();
+    }
+  }, [addMode, open]);
 
   function resetDraft() {
     setAddMode("search");
@@ -121,7 +157,15 @@ export function AddEntryDialog({
     setQuickProtein("");
     setQuickSaturatedFat("");
     setQuickFiber("");
+    setSectionLabel("");
     setIsBudgeted(false);
+  }
+
+  function selectAddMode(nextMode: AddMode) {
+    setAddMode(nextMode);
+    if (nextMode !== "search") {
+      setSelectedFoodId(null);
+    }
   }
 
   function handleAdd() {
@@ -183,6 +227,14 @@ export function AddEntryDialog({
     closeWithoutPrompt();
   }
 
+  function handleSectionAdd(label = sectionLabel) {
+    const trimmedLabel = label.trim();
+    if (trimmedLabel.length === 0) return;
+
+    addSeparator(profileId, date, trimmedLabel, insertIndex);
+    closeWithoutPrompt();
+  }
+
   function closeWithoutPrompt() {
     resetDraft();
     setDiscardDialogOpen(false);
@@ -209,6 +261,40 @@ export function AddEntryDialog({
     }
 
     closeWithoutPrompt();
+  }
+
+  function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (
+      event.defaultPrevented ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    ) {
+      return;
+    }
+
+    const shortcutMode = ADD_MODE_SHORTCUTS[event.key];
+    if (shortcutMode == null) {
+      return;
+    }
+
+    const target = event.target;
+    const isEditableTarget =
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement);
+    const isEmptySearchInput =
+      target === searchInputRef.current && search.trim().length === 0;
+
+    if (isEditableTarget && !isEmptySearchInput) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    selectAddMode(shortcutMode);
   }
 
   const statusToggle = (
@@ -238,39 +324,36 @@ export function AddEntryDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-h-[85dvh] overflow-x-hidden overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Add Entry</DialogTitle>
-          <DialogDescription>
-            Search for a saved food or add one estimated entry.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogContent
+          className="max-h-[85dvh] overflow-x-hidden overflow-y-auto"
+          onKeyDownCapture={handleDialogKeyDown}
+        >
+          <DialogHeader>
+            <DialogTitle>Add</DialogTitle>
+            <DialogDescription>
+              Add a saved food, a one-off estimate, or a section.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-2 rounded-lg bg-secondary p-1">
-          <button
-            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-              addMode === "search"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setAddMode("search")}
-          >
-            Search
-          </button>
-          <button
-            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-              addMode === "quick-add"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => {
-              setAddMode("quick-add");
-              setSelectedFoodId(null);
-            }}
-          >
-            Quick Add
-          </button>
-        </div>
+          <div className="grid grid-cols-3 gap-2 rounded-lg bg-secondary p-1">
+            {ADD_MODE_OPTIONS.map((option) => (
+              <button
+                key={option.mode}
+                type="button"
+                className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                  addMode === option.mode
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => selectAddMode(option.mode)}
+              >
+                <span className="truncate">{option.label}</span>
+                <span className="rounded bg-muted px-1 text-[10px] leading-4 text-muted-foreground">
+                  {option.shortcut}
+                </span>
+              </button>
+            ))}
+          </div>
 
         {addMode === "quick-add" ? (
           <div className="space-y-4">
@@ -280,6 +363,7 @@ export function AddEntryDialog({
               <Label htmlFor="quick-name">Name</Label>
               <Input
                 id="quick-name"
+                ref={quickNameInputRef}
                 value={quickName}
                 onChange={(e) => setQuickName(e.target.value)}
                 placeholder="e.g. Restaurant pasta"
@@ -390,9 +474,51 @@ export function AddEntryDialog({
               {isBudgeted ? "Add Budgeted" : "Add to Log"}
             </Button>
           </div>
+        ) : addMode === "section" ? (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSectionAdd();
+            }}
+          >
+            <div>
+              <Label htmlFor="section-label">Section name</Label>
+              <Input
+                id="section-label"
+                ref={sectionLabelInputRef}
+                value={sectionLabel}
+                onChange={(e) => setSectionLabel(e.target.value)}
+                placeholder="e.g. Late snack"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {SEPARATOR_PRESETS.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="rounded-lg border border-input px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                  onClick={() => handleSectionAdd(label)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={sectionLabel.trim().length === 0}
+            >
+              Add Section
+            </Button>
+          </form>
         ) : selectedFood == null ? (
           <div className="min-w-0 space-y-3">
             <Input
+              ref={searchInputRef}
               placeholder="Search foods..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -583,8 +709,8 @@ export function AddEntryDialog({
       </Dialog>
       <DiscardChangesDialog
         open={discardDialogOpen}
-        title="Discard log entry?"
-        description="Closing now will lose the food entry you have not added to the log."
+        title="Discard add draft?"
+        description="Closing now will lose the item you have not added to the log."
         onStay={() => setDiscardDialogOpen(false)}
         onDiscard={closeWithoutPrompt}
       />
