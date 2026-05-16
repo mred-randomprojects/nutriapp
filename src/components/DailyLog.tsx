@@ -946,84 +946,87 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
       <>
         <Card ref={editCardRef}>
           <CardContent className="p-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-xs font-medium">
-                QA
-              </div>
-              <Input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="h-8 min-w-0 flex-1 text-sm"
-                autoFocus
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove();
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5 text-destructive" />
-              </Button>
-            </div>
             <form
-              className="mt-3 space-y-2"
+              className="space-y-3"
               onSubmit={(e) => {
                 e.preventDefault();
                 commitEdit();
               }}
             >
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-xs font-medium">
+                  QA
+                </div>
                 <Input
-                  type="number"
-                  value={editCalories}
-                  onChange={(e) => setEditCalories(e.target.value)}
-                  className="h-8 text-sm"
-                  step="any"
-                  min="0"
-                  placeholder="kcal"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="h-8 min-w-0 flex-1 text-sm"
+                  autoFocus
                 />
-                <Input
-                  type="number"
-                  value={editProtein}
-                  onChange={(e) => setEditProtein(e.target.value)}
-                  className="h-8 text-sm"
-                  step="any"
-                  min="0"
-                  placeholder="protein g"
-                />
-                <Input
-                  type="number"
-                  value={editSaturatedFat}
-                  onChange={(e) => setEditSaturatedFat(e.target.value)}
-                  className="h-8 text-sm"
-                  step="any"
-                  min="0"
-                  placeholder="sat fat g"
-                />
-                <Input
-                  type="number"
-                  value={editFiber}
-                  onChange={(e) => setEditFiber(e.target.value)}
-                  className="h-8 text-sm"
-                  step="any"
-                  min="0"
-                  placeholder="fiber g"
-                />
-              </div>
-              <textarea
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="Add a note..."
-                className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                rows={2}
-              />
-              <div className="flex justify-end">
-                <Button type="submit" size="sm" className="h-8">
-                  Save
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove();
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
                 </Button>
+              </div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    type="number"
+                    value={editCalories}
+                    onChange={(e) => setEditCalories(e.target.value)}
+                    className="h-8 text-sm"
+                    step="any"
+                    min="0"
+                    placeholder="kcal"
+                  />
+                  <Input
+                    type="number"
+                    value={editProtein}
+                    onChange={(e) => setEditProtein(e.target.value)}
+                    className="h-8 text-sm"
+                    step="any"
+                    min="0"
+                    placeholder="protein g"
+                  />
+                  <Input
+                    type="number"
+                    value={editSaturatedFat}
+                    onChange={(e) => setEditSaturatedFat(e.target.value)}
+                    className="h-8 text-sm"
+                    step="any"
+                    min="0"
+                    placeholder="sat fat g"
+                  />
+                  <Input
+                    type="number"
+                    value={editFiber}
+                    onChange={(e) => setEditFiber(e.target.value)}
+                    className="h-8 text-sm"
+                    step="any"
+                    min="0"
+                    placeholder="fiber g"
+                  />
+                </div>
+                <textarea
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Add a note..."
+                  className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  rows={2}
+                />
+                <div className="flex justify-end">
+                  <Button type="submit" size="sm" className="h-8">
+                    Save
+                  </Button>
+                </div>
               </div>
             </form>
           </CardContent>

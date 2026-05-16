@@ -198,11 +198,18 @@ function GoalsEditor({ goals, schedule, userMetrics, weightLossPlan, onSave, onS
 
   return (
     <div className="mt-3 space-y-3 border-t pt-3">
-      {/* Body Metrics */}
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Body Metrics
-      </p>
-      <div className="grid grid-cols-2 gap-2">
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSave();
+        }}
+      >
+        {/* Body Metrics */}
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Body Metrics
+        </p>
+        <div className="grid grid-cols-2 gap-2">
         <div>
           <Label htmlFor="metric-sex" className="text-xs">Sex</Label>
           <select
@@ -323,18 +330,19 @@ function GoalsEditor({ goals, schedule, userMetrics, weightLossPlan, onSave, onS
             />
           </div>
         )}
-      </div>
+        </div>
 
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={handleCalculate}
-        disabled={parsedMetrics == null}
-        className="w-full"
-      >
-        <Calculator className="mr-1.5 h-3.5 w-3.5" />
-        Calculate Recommended Goals
-      </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={handleCalculate}
+          disabled={parsedMetrics == null}
+          className="w-full"
+        >
+          <Calculator className="mr-1.5 h-3.5 w-3.5" />
+          Calculate Recommended Goals
+        </Button>
 
       {/* Deficit / Weight Goal Info */}
       {deficitInfo != null && (
@@ -463,9 +471,10 @@ function GoalsEditor({ goals, schedule, userMetrics, weightLossPlan, onSave, onS
           />
         </div>
       </div>
-      <p className="text-[10px] text-muted-foreground">
-        The daily budget grows linearly from wake to sleep hour.
-      </p>
+        <p className="text-[10px] text-muted-foreground">
+          The daily budget grows linearly from wake to sleep hour.
+        </p>
+      </form>
 
       {/* Weight Loss Plan */}
       <WeightLossPlanSection
@@ -475,10 +484,10 @@ function GoalsEditor({ goals, schedule, userMetrics, weightLossPlan, onSave, onS
       />
 
       <div className="flex gap-2">
-        <Button size="sm" onClick={handleSave}>
+        <Button type="button" size="sm" onClick={handleSave}>
           Save Goals
         </Button>
-        <Button size="sm" variant="outline" onClick={requestClose}>
+        <Button type="button" size="sm" variant="outline" onClick={requestClose}>
           Cancel
         </Button>
       </div>
@@ -573,6 +582,7 @@ function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanS
             ETA: {formatDate(estimatedEndDate)}
           </p>
           <Button
+            type="button"
             size="sm"
             variant="outline"
             className="mt-2 h-7 text-xs"
@@ -588,7 +598,13 @@ function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanS
 
   if (isCreating) {
     return (
-      <>
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleCreate();
+        }}
+      >
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Start Weight Loss Plan
         </p>
@@ -634,14 +650,19 @@ function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanS
           </div>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" onClick={handleCreate}>
+          <Button type="submit" size="sm">
             Start Plan
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setIsCreating(false)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setIsCreating(false)}
+          >
             Cancel
           </Button>
         </div>
-      </>
+      </form>
     );
   }
 
@@ -651,6 +672,7 @@ function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanS
         Weight Loss Plan
       </p>
       <Button
+        type="button"
         size="sm"
         variant="outline"
         className="w-full"
@@ -718,20 +740,23 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
           <CardTitle>Create Profile</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2">
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleCreate();
+            }}
+          >
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="e.g. My Diet, Summer Plan..."
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreate();
-              }}
             />
-            <Button onClick={handleCreate}>
+            <Button type="submit">
               <Plus className="mr-1 h-4 w-4" />
               Create
             </Button>
-          </div>
+          </form>
           <p className="mt-2 text-xs text-muted-foreground">
             Each profile is an independent tracking context — like a separate
             notebook for tracking your intake.
@@ -766,24 +791,27 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
                     {isEditing ? (
-                      <div className="flex gap-2">
+                      <form
+                        className="flex gap-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          finishEditing();
+                        }}
+                      >
                         <Input
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") finishEditing();
-                          }}
                           autoFocus
                           className="h-8"
                         />
                         <Button
+                          type="submit"
                           size="sm"
                           variant="ghost"
-                          onClick={finishEditing}
                         >
                           <Check className="h-4 w-4" />
                         </Button>
-                      </div>
+                      </form>
                     ) : (
                       <>
                         <div className="flex items-center gap-2">

@@ -181,6 +181,7 @@ function IngredientRow({
           />
           <span className="shrink-0 text-xs text-muted-foreground">g</span>
           <Button
+            type="button"
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
@@ -433,6 +434,7 @@ export function FoodForm({ appData }: FoodFormProps) {
   }
 
   function handleSubmit() {
+    if (readonly) return;
     if (name.trim().length === 0) return;
 
     const base = {
@@ -500,6 +502,7 @@ export function FoodForm({ appData }: FoodFormProps) {
     <div className="p-4">
       <div className="mb-4 flex items-center gap-2">
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           onClick={() => navigate("/foods")}
@@ -526,7 +529,13 @@ export function FoodForm({ appData }: FoodFormProps) {
         />
       )}
 
-      <div className="space-y-4">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSubmit();
+        }}
+      >
         <Card>
           <CardHeader>
             <CardTitle>Basic Info</CardTitle>
@@ -569,6 +578,7 @@ export function FoodForm({ appData }: FoodFormProps) {
         {!readonly && (
           <div className="flex gap-2">
             <button
+              type="button"
               className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                 !isCombo
                   ? "border-primary bg-primary/10 text-primary"
@@ -579,6 +589,7 @@ export function FoodForm({ appData }: FoodFormProps) {
               Simple Food
             </button>
             <button
+              type="button"
               className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                 isCombo
                   ? "border-primary bg-primary/10 text-primary"
@@ -643,6 +654,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                       <div className="max-h-40 space-y-1 overflow-y-auto">
                         {availableFoods.map((food) => (
                           <button
+                            type="button"
                             key={food.id}
                             className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm transition-colors hover:bg-accent"
                             onClick={() => handleAddIngredient(food)}
@@ -674,6 +686,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                         )}
                       </div>
                       <Button
+                        type="button"
                         variant="ghost"
                         size="sm"
                         className="w-full"
@@ -687,6 +700,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                     </div>
                   ) : (
                     <Button
+                      type="button"
                       variant="outline"
                       size="sm"
                       className="mt-2 w-full"
@@ -752,6 +766,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                   <>
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                           referenceType === "grams"
                             ? "border-primary bg-primary/10 text-primary"
@@ -762,6 +777,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                         Per grams
                       </button>
                       <button
+                        type="button"
                         className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                           referenceType === "unit"
                             ? "border-primary bg-primary/10 text-primary"
@@ -895,15 +911,15 @@ export function FoodForm({ appData }: FoodFormProps) {
 
         {!readonly && (
           <Button
+            type="submit"
             className="w-full"
             size="lg"
-            onClick={handleSubmit}
             disabled={isCombo && ingredients.length === 0}
           >
             {existing != null ? "Save Changes" : "Add Food"}
           </Button>
         )}
-      </div>
+      </form>
     </div>
   );
 }

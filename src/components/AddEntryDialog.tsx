@@ -397,7 +397,13 @@ export function AddEntryDialog({
           </div>
 
         {addMode === "quick-add" ? (
-          <div className="space-y-4">
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleQuickAdd();
+            }}
+          >
             {statusToggle}
 
             <div>
@@ -508,13 +514,13 @@ export function AddEntryDialog({
             </div>
 
             <Button
+              type="submit"
               className="w-full"
-              onClick={handleQuickAdd}
               disabled={quickName.trim().length === 0 || !quickHasNutrition}
             >
               {isBudgeted ? "Add Budgeted" : "Add to Log"}
             </Button>
-          </div>
+          </form>
         ) : addMode === "section" ? (
           <form
             className="space-y-4"
@@ -626,7 +632,13 @@ export function AddEntryDialog({
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAdd();
+            }}
+          >
             {statusToggle}
 
             <div className="flex items-center gap-3">
@@ -644,6 +656,7 @@ export function AddEntryDialog({
               <div>
                 <p className="font-medium">{selectedFood.name}</p>
                 <button
+                  type="button"
                   className="text-xs text-primary hover:underline"
                   onClick={() => setSelectedFoodId(null)}
                 >
@@ -660,6 +673,7 @@ export function AddEntryDialog({
               selectedFood.gramsPerUnit != null && (
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                       inputMode === "grams"
                         ? "border-primary bg-primary/10 text-primary"
@@ -670,6 +684,7 @@ export function AddEntryDialog({
                     Grams
                   </button>
                   <button
+                    type="button"
                     className={`flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                       inputMode === "units"
                         ? "border-primary bg-primary/10 text-primary"
@@ -763,10 +778,10 @@ export function AddEntryDialog({
               />
             </div>
 
-            <Button className="w-full" onClick={handleAdd}>
+            <Button type="submit" className="w-full">
               {isBudgeted ? "Add Budgeted" : "Add to Log"}
             </Button>
-          </div>
+          </form>
         )}
         </DialogContent>
       </Dialog>

@@ -13,6 +13,7 @@ import { AccountPage } from "./components/AccountPage";
 import { LoginPage } from "./components/LoginPage";
 import { CloudUpload, Loader2 } from "lucide-react";
 import { UnsavedChangesProvider } from "./UnsavedChangesProvider";
+import { submitClosestFormFromShortcut } from "./formSubmitShortcut";
 
 const NAV_SHORTCUTS = {
   "1": "/foods",
@@ -54,6 +55,12 @@ function AuthenticatedApp() {
   const appData = useAppData();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    window.addEventListener("keydown", submitClosestFormFromShortcut);
+    return () =>
+      window.removeEventListener("keydown", submitClosestFormFromShortcut);
+  }, []);
 
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
