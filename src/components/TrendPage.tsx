@@ -62,6 +62,7 @@ interface WeightDataPoint {
   date: string;
   label: string;
   weight: number | null;
+  interpolatedWeight: number | null;
   expected: number | null;
 }
 
@@ -128,73 +129,113 @@ function buildWeightData(
   excludedDate: string | null,
 ): WeightDataPoint[] {
   const cutoffDate = getRangeCutoffDate(range);
+  const cutoffKey = cutoffDate != null ? formatDateKey(cutoffDate) : null;
+  const currentEndDate =
+    excludedDate != null ? subDays(parseISO(excludedDate), 1) : new Date();
+  const currentEndKey = formatDateKey(currentEndDate);
 
-  const pointsByDate = new Map<string, WeightDataPoint>();
+  const weightsByDate = new Map<string, number>();
 
   for (const dl of dayLogs) {
     if (dl.date === excludedDate) continue;
     if (dl.weightKg == null) continue;
-
-    const parsed = parseISO(dl.date);
-    if (cutoffDate != null && parsed < cutoffDate) continue;
-
-    const expected =
-      weightLossPlan != null
-        ? computeExpectedWeight(weightLossPlan, dl.date)
-        : null;
-
-    pointsByDate.set(dl.date, {
-      date: dl.date,
-      label: format(parsed, "MMM d"),
-      weight: dl.weightKg,
-      expected,
-    });
+    weightsByDate.set(dl.date, dl.weightKg);
   }
 
-  if (extendToGoalDate && weightLossPlan != null) {
-    const goalDate = getWeightPlanGoalDate(weightLossPlan);
-    const latestActualDate = getLatestDateKey(Array.from(pointsByDate.keys()));
-    const projectionAnchorDate =
-      excludedDate != null ? addDays(parseISO(excludedDate), 1) : new Date();
-    const projectionStartDate = getLatestDateKey([
-      weightLossPlan.startDate,
-      formatDateKey(projectionAnchorDate),
-      cutoffDate != null ? formatDateKey(cutoffDate) : null,
-      latestActualDate,
-    ]);
+  const actualDates = Array.from(weightsByDate.keys()).sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const visibleActualDates = actualDates.filter(
+    (date) => cutoffKey == null || date.localeCompare(cutoffKey) >= 0,
+  );
+  const goalDate =
+    extendToGoalDate && weightLossPlan != null
+      ? getWeightPlanGoalDate(weightLossPlan)
+      : null;
+  const firstActualDate = actualDates[0] ?? null;
+  const latestVisibleActualDate = getLatestDateKey(visibleActualDates);
+  const firstExpectedDate =
+    weightLossPlan != null ? weightLossPlan.startDate : null;
+  const startDateKey =
+    cutoffKey ?? getEarliestDateKey([firstActualDate, firstExpectedDate]);
+  const endDateKey = getLatestDateKey([
+    currentEndKey,
+    latestVisibleActualDate,
+    goalDate,
+  ]);
 
-    if (
-      goalDate != null &&
-      projectionStartDate != null &&
-      projectionStartDate.localeCompare(goalDate) <= 0
-    ) {
-      let currentDate = parseISO(projectionStartDate);
-      const endDate = parseISO(goalDate);
+  if (
+    startDateKey == null ||
+    endDateKey == null ||
+    startDateKey.localeCompare(endDateKey) > 0
+  ) {
+    return [];
+  }
 
-      while (currentDate <= endDate) {
-        const date = formatDateKey(currentDate);
-        if (date === excludedDate) {
-          currentDate = addDays(currentDate, 1);
-          continue;
-        }
+  const points: WeightDataPoint[] = [];
+  let currentDate = parseISO(startDateKey);
+  const endDate = parseISO(endDateKey);
 
-        const existing = pointsByDate.get(date);
+  while (currentDate <= endDate) {
+    const date = formatDateKey(currentDate);
+    if (date !== excludedDate) {
+      points.push({
+        date,
+        label: format(currentDate, "MMM d"),
+        weight: weightsByDate.get(date) ?? null,
+        interpolatedWeight: null,
+        expected:
+          weightLossPlan != null ? computeExpectedWeight(weightLossPlan, date) : null,
+      });
+    }
 
-        pointsByDate.set(date, {
-          date,
-          label: format(currentDate, "MMM d"),
-          weight: existing?.weight ?? null,
-          expected: computeExpectedWeight(weightLossPlan, date),
-        });
+    currentDate = addDays(currentDate, 1);
+  }
 
-        currentDate = addDays(currentDate, 1);
+  if (actualDates.length >= 2) {
+    for (const point of points) {
+      const actualWeight = weightsByDate.get(point.date);
+      if (actualWeight != null) {
+        point.interpolatedWeight = actualWeight;
+        continue;
       }
+
+      const nextActualIndex = actualDates.findIndex(
+        (date) => date.localeCompare(point.date) > 0,
+      );
+      if (nextActualIndex <= 0) continue;
+
+      const previousDate = actualDates[nextActualIndex - 1];
+      const nextDate = actualDates[nextActualIndex];
+      const previousWeight = weightsByDate.get(previousDate);
+      const nextWeight = weightsByDate.get(nextDate);
+      if (previousWeight == null || nextWeight == null) continue;
+
+      const totalDays = differenceInCalendarDays(
+        parseISO(nextDate),
+        parseISO(previousDate),
+      );
+      const elapsedDays = differenceInCalendarDays(
+        parseISO(point.date),
+        parseISO(previousDate),
+      );
+      if (totalDays <= 0 || elapsedDays <= 0 || elapsedDays >= totalDays) {
+        continue;
+      }
+
+      point.interpolatedWeight =
+        previousWeight + ((nextWeight - previousWeight) * elapsedDays) / totalDays;
     }
   }
 
-  return Array.from(pointsByDate.values()).sort((a, b) =>
-    a.date.localeCompare(b.date),
+  const hasVisibleWeightData = points.some(
+    (point) =>
+      point.weight != null ||
+      point.interpolatedWeight != null ||
+      point.expected != null,
   );
+
+  return hasVisibleWeightData ? points : [];
 }
 
 const KCAL_PER_GRAM_FAT = 9;
@@ -239,6 +280,19 @@ function getLatestDateKey(dates: ReadonlyArray<string | null>): string | null {
   }
 
   return latestDate;
+}
+
+function getEarliestDateKey(dates: ReadonlyArray<string | null>): string | null {
+  let earliestDate: string | null = null;
+
+  for (const date of dates) {
+    if (date == null) continue;
+    if (earliestDate == null || date.localeCompare(earliestDate) < 0) {
+      earliestDate = date;
+    }
+  }
+
+  return earliestDate;
 }
 
 function buildGoalReferenceLines(
@@ -435,6 +489,52 @@ function MetricTooltip({
   );
 }
 
+function WeightTooltip({
+  active,
+  payload,
+  label,
+}: TooltipContentProps<TooltipValueType, string | number>) {
+  if (!active || payload.length === 0) return null;
+
+  const point = payload[0]?.payload as WeightDataPoint | undefined;
+  if (point == null) return null;
+
+  const measured = point.weight;
+  const interpolated = point.interpolatedWeight;
+  const expected = point.expected;
+
+  if (measured == null && interpolated == null && expected == null) {
+    return null;
+  }
+
+  return (
+    <div
+      className="rounded-lg border border-[hsl(240,10%,18%)] bg-[hsl(240,12%,8%)] px-3 py-2 text-xs text-[hsl(210,20%,95%)] shadow-lg"
+      style={{ minWidth: 160 }}
+    >
+      <p className="mb-1 text-[11px] text-muted-foreground">{label}</p>
+      {measured != null ? (
+        <p>
+          <span className="text-muted-foreground">Measured:</span>{" "}
+          <span className="font-medium">{measured.toFixed(1)} kg</span>
+        </p>
+      ) : interpolated != null ? (
+        <p>
+          <span className="text-muted-foreground">Interpolated:</span>{" "}
+          <span className="font-medium">{interpolated.toFixed(1)} kg</span>
+        </p>
+      ) : (
+        <p className="text-muted-foreground">No weigh-in logged</p>
+      )}
+      {expected != null && (
+        <p style={{ color: "hsl(215, 15%, 65%)" }}>
+          Expected: {expected.toFixed(1)} kg
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface MetricChartProps {
   title: string;
   data: NutritionDataPoint[];
@@ -599,6 +699,10 @@ function WeightChart({
   }
 
   const hasActual = data.some((d) => d.weight != null);
+  const hasInterpolated = data.some(
+    (d) => d.weight == null && d.interpolatedWeight != null,
+  );
+  const hasTrend = data.some((d) => d.interpolatedWeight != null);
   const hasExpected = data.some((d) => d.expected != null);
 
   return (
@@ -621,31 +725,31 @@ function WeightChart({
               width={45}
               domain={["auto", "auto"]}
             />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(240, 12%, 8%)",
-                border: "1px solid hsl(240, 10%, 18%)",
-                borderRadius: "8px",
-                fontSize: "12px",
-                color: "hsl(210, 20%, 95%)",
-              }}
-              formatter={(value, name) => [
-                typeof value === "number" ? `${value.toFixed(1)} kg` : "",
-                name === "weight" ? "Actual" : "Expected",
-              ]}
-            />
+            <Tooltip content={(props) => <WeightTooltip {...props} />} />
+            {hasTrend && hasInterpolated && (
+              <Line
+                type="linear"
+                dataKey="interpolatedWeight"
+                stroke="hsl(152, 76%, 42%)"
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                dot={false}
+                activeDot={false}
+                connectNulls={false}
+              />
+            )}
             <Line
-              type="monotone"
+              type="linear"
               dataKey="weight"
               stroke="hsl(152, 76%, 42%)"
-              strokeWidth={2}
+              strokeWidth={hasInterpolated ? 0 : 2}
               dot={{ r: 3, fill: "hsl(152, 76%, 42%)" }}
               activeDot={{ r: 5, fill: "hsl(152, 76%, 42%)" }}
-              connectNulls
+              connectNulls={false}
             />
             {hasExpected && (
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="expected"
                 stroke="hsl(215, 15%, 55%)"
                 strokeWidth={1.5}
@@ -656,15 +760,24 @@ function WeightChart({
             )}
           </LineChart>
         </ResponsiveContainer>
-        {(hasActual || hasExpected) && (
+        {(hasActual || hasInterpolated || hasExpected) && (
           <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
             {hasActual && (
               <span className="flex items-center gap-1.5">
                 <span
-                  className="inline-block h-0.5 w-4 rounded"
+                  className="inline-block h-2 w-2 rounded-full"
                   style={{ backgroundColor: "hsl(152, 76%, 42%)" }}
                 />
-                Actual
+                Measured
+              </span>
+            )}
+            {hasInterpolated && (
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="inline-block h-0.5 w-4 rounded border-t border-dashed"
+                  style={{ borderColor: "hsl(152, 76%, 42%)" }}
+                />
+                Interpolated
               </span>
             )}
             {hasExpected && (
