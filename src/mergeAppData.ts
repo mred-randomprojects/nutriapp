@@ -15,11 +15,16 @@ import {
   filterDeletedDayLogEntriesFromDayLogs,
   mergeDeletedDayLogEntries,
 } from "./deletedDayLogEntries";
+import {
+  filterDeletedAppEntitiesFromAppData,
+  mergeDeletedFoods,
+  mergeDeletedProfiles,
+} from "./deletedAppEntities";
 
 /**
  * Merges local and cloud AppData so that no live data is ever lost.
  * Mostly additive: items that exist in either source are kept unless an exact
- * day-log deletion tombstone says that entry was intentionally removed.
+ * deletion tombstone says that entry, food, or profile was intentionally removed.
  * For items with the same ID in both, cloud wins (most recently synced).
  */
 export function mergeAppData(local: AppData, cloud: AppData): AppData {
@@ -27,11 +32,19 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     local.deletedDayLogEntries ?? [],
     cloud.deletedDayLogEntries ?? [],
   );
+  const deletedFoods = mergeDeletedFoods(
+    local.deletedFoods ?? [],
+    cloud.deletedFoods ?? [],
+  );
+  const deletedProfiles = mergeDeletedProfiles(
+    local.deletedProfiles ?? [],
+    cloud.deletedProfiles ?? [],
+  );
   const deletedDayLogEntrySet = buildDeletedDayLogEntrySet(
     deletedDayLogEntries,
   );
 
-  return {
+  return filterDeletedAppEntitiesFromAppData({
     foods: mergeFoods(local.foods, cloud.foods),
     profiles: mergeProfiles(
       local.profiles,
@@ -40,7 +53,9 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
     ),
     activeProfileId: cloud.activeProfileId ?? local.activeProfileId,
     deletedDayLogEntries,
-  };
+    deletedFoods,
+    deletedProfiles,
+  });
 }
 
 function mergeFoods(

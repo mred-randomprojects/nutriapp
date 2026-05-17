@@ -130,7 +130,8 @@ export function FoodList({ appData }: FoodListProps) {
                       e.stopPropagation();
                       setPendingDelete({
                         title: "Delete food",
-                        description: `Delete "${food.name}"? This will also remove it from all logs.`,
+                        description: `Delete "${food.name}" from all devices? This will also remove it from all logs.`,
+                        confirmLabel: "Delete from all devices",
                         onConfirm: () => deleteFood(food.id as FoodId),
                       });
                     }}

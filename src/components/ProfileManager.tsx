@@ -875,7 +875,8 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                         onClick={() =>
                           setPendingDelete({
                             title: "Delete profile",
-                            description: `Delete profile "${profile.name}"? All its logs will be lost.`,
+                            description: `Delete profile "${profile.name}" from all devices? All its logs will be lost.`,
+                            confirmLabel: "Delete from all devices",
                             onConfirm: () =>
                               deleteProfile(profile.id as ProfileId),
                           })

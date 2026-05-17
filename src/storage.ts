@@ -1,4 +1,5 @@
 import type { AppData, ProfileId } from "./types";
+import { filterDeletedAppEntitiesFromAppData } from "./deletedAppEntities";
 
 const STORAGE_KEY = "nutriapp-data";
 const BACKUP_KEY = "nutriapp-data-backup";
@@ -33,7 +34,20 @@ const DEFAULT_APP_DATA: AppData = {
   profiles: [],
   activeProfileId: null,
   deletedDayLogEntries: [],
+  deletedFoods: [],
+  deletedProfiles: [],
 };
+
+function normalizeAppData(data: AppData): AppData {
+  return filterDeletedAppEntitiesFromAppData({
+    foods: data.foods ?? [],
+    profiles: data.profiles ?? [],
+    activeProfileId: data.activeProfileId ?? null,
+    deletedDayLogEntries: data.deletedDayLogEntries ?? [],
+    deletedFoods: data.deletedFoods ?? [],
+    deletedProfiles: data.deletedProfiles ?? [],
+  });
+}
 
 export function loadAppData(): AppData {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -41,12 +55,7 @@ export function loadAppData(): AppData {
 
   try {
     const parsed = JSON.parse(raw) as AppData;
-    return {
-      foods: parsed.foods ?? [],
-      profiles: parsed.profiles ?? [],
-      activeProfileId: parsed.activeProfileId ?? null,
-      deletedDayLogEntries: parsed.deletedDayLogEntries ?? [],
-    };
+    return normalizeAppData(parsed);
   } catch {
     // Data exists but is corrupt — stash the raw string so it can be recovered
     // manually via devtools, then fall back to the backup if available.
@@ -60,12 +69,7 @@ export function loadAppData(): AppData {
     if (backup != null) {
       try {
         const parsed = JSON.parse(backup) as AppData;
-        return {
-          foods: parsed.foods ?? [],
-          profiles: parsed.profiles ?? [],
-          activeProfileId: parsed.activeProfileId ?? null,
-          deletedDayLogEntries: parsed.deletedDayLogEntries ?? [],
-        };
+        return normalizeAppData(parsed);
       } catch {
         // Backup also corrupt — nothing we can do.
       }

@@ -2,6 +2,8 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type {
   AppData,
   DeletedDayLogEntry,
+  DeletedFood,
+  DeletedProfile,
   Food,
   FoodId,
   NutritionGoals,
@@ -28,6 +30,10 @@ import { useAuth } from "./auth";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
 import { upsertDeletedDayLogEntry } from "./deletedDayLogEntries";
+import {
+  upsertDeletedFood,
+  upsertDeletedProfile,
+} from "./deletedAppEntities";
 
 function clonePlanEntries(entries: ReadonlyArray<DayLogItem>): DayLogItem[] {
   return entries.map((entry) => ({ ...entry }));
@@ -277,8 +283,13 @@ export function useAppData() {
 
   const deleteFood = useCallback(
     (foodId: FoodId) => {
+      const deletedFood: DeletedFood = {
+        foodId,
+        deletedAt: new Date().toISOString(),
+      };
       persist({
         ...data,
+        deletedFoods: upsertDeletedFood(data.deletedFoods ?? [], deletedFood),
         foods: data.foods
           .filter((f) => f.id !== foodId)
           .map((f) => {
@@ -348,6 +359,10 @@ export function useAppData() {
 
   const deleteProfile = useCallback(
     (profileId: ProfileId) => {
+      const deletedProfile: DeletedProfile = {
+        profileId,
+        deletedAt: new Date().toISOString(),
+      };
       const remaining = data.profiles.filter((p) => p.id !== profileId);
       const nextActiveId =
         data.activeProfileId === profileId
@@ -355,6 +370,10 @@ export function useAppData() {
           : data.activeProfileId;
       persist({
         ...data,
+        deletedProfiles: upsertDeletedProfile(
+          data.deletedProfiles ?? [],
+          deletedProfile,
+        ),
         profiles: remaining,
         activeProfileId: nextActiveId,
       });

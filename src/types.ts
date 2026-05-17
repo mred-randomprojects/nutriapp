@@ -105,6 +105,16 @@ export interface DeletedDayLogEntry {
   deletedAt: string;
 }
 
+export interface DeletedFood {
+  foodId: FoodId;
+  deletedAt: string;
+}
+
+export interface DeletedProfile {
+  profileId: ProfileId;
+  deletedAt: string;
+}
+
 export type WeeklyMealPlan = Partial<Record<PlanWeekday, DayLogItem[]>>;
 
 export interface SavedMealPlan {
@@ -201,4 +211,6 @@ export interface AppData {
   profiles: Profile[];
   activeProfileId: ProfileId | null;
   deletedDayLogEntries: DeletedDayLogEntry[];
+  deletedFoods: DeletedFood[];
+  deletedProfiles: DeletedProfile[];
 }

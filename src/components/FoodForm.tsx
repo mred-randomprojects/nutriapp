@@ -23,6 +23,8 @@ interface FoodFormProps {
 
 type ReferenceType = "grams" | "unit";
 
+const NUTRITION_INPUT_STEP = 0.01;
+
 interface FoodFormDraft {
   version: 1;
   name: string;
@@ -822,7 +824,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                       value={calories}
                       onChange={(e) => setCalories(e.target.value)}
                       min={0}
-                      step={0.1}
+                      step={NUTRITION_INPUT_STEP}
                       readOnly={readonly}
                     />
                   </div>
@@ -834,7 +836,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                       value={protein}
                       onChange={(e) => setProtein(e.target.value)}
                       min={0}
-                      step={0.1}
+                      step={NUTRITION_INPUT_STEP}
                       readOnly={readonly}
                     />
                   </div>
@@ -846,7 +848,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                       value={saturatedFat}
                       onChange={(e) => setSaturatedFat(e.target.value)}
                       min={0}
-                      step={0.1}
+                      step={NUTRITION_INPUT_STEP}
                       readOnly={readonly}
                     />
                   </div>
@@ -858,7 +860,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                       value={fiber}
                       onChange={(e) => setFiber(e.target.value)}
                       min={0}
-                      step={0.1}
+                      step={NUTRITION_INPUT_STEP}
                       readOnly={readonly}
                     />
                   </div>

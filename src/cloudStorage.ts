@@ -2,9 +2,11 @@ import { doc, getDoc, runTransaction } from "firebase/firestore";
 import { db } from "./firebase";
 import type { AppData } from "./types";
 import {
-  filterDeletedDayLogEntriesFromAppData,
-  mergeDeletedDayLogEntries,
-} from "./deletedDayLogEntries";
+  filterDeletedAppEntitiesFromAppData,
+  mergeDeletedFoods,
+  mergeDeletedProfiles,
+} from "./deletedAppEntities";
+import { mergeDeletedDayLogEntries } from "./deletedDayLogEntries";
 
 /**
  * Recursively strips keys whose value is `undefined` so that
@@ -32,6 +34,8 @@ function appDataFromRaw(raw: Record<string, unknown>): AppData {
     profiles: raw.profiles ?? [],
     activeProfileId: raw.activeProfileId ?? null,
     deletedDayLogEntries: raw.deletedDayLogEntries ?? [],
+    deletedFoods: raw.deletedFoods ?? [],
+    deletedProfiles: raw.deletedProfiles ?? [],
   } as AppData;
 }
 
@@ -41,6 +45,8 @@ function payloadFromAppData(data: AppData): Record<string, unknown> {
     profiles: data.profiles,
     activeProfileId: data.activeProfileId,
     deletedDayLogEntries: data.deletedDayLogEntries,
+    deletedFoods: data.deletedFoods,
+    deletedProfiles: data.deletedProfiles,
   }) as Record<string, unknown>;
 }
 
@@ -61,18 +67,25 @@ export async function saveCloudData(
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(ref);
     const cloudData = snap.exists() ? appDataFromRaw(snap.data()) : null;
-    // Preserve remote tombstones so stale devices cannot resurrect deleted entries.
+    // Preserve remote tombstones so stale devices cannot resurrect deleted data.
     const deletedDayLogEntries = mergeDeletedDayLogEntries(
       data.deletedDayLogEntries ?? [],
       cloudData?.deletedDayLogEntries ?? [],
     );
-    const filteredData = filterDeletedDayLogEntriesFromAppData(
-      {
-        ...data,
-        deletedDayLogEntries,
-      },
-      deletedDayLogEntries,
+    const deletedFoods = mergeDeletedFoods(
+      data.deletedFoods ?? [],
+      cloudData?.deletedFoods ?? [],
     );
+    const deletedProfiles = mergeDeletedProfiles(
+      data.deletedProfiles ?? [],
+      cloudData?.deletedProfiles ?? [],
+    );
+    const filteredData = filterDeletedAppEntitiesFromAppData({
+      ...data,
+      deletedDayLogEntries,
+      deletedFoods,
+      deletedProfiles,
+    });
 
     transaction.set(ref, payloadFromAppData(filteredData));
   });
