@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { Check, Plus, Trash2, Pencil, Target, HelpCircle, Calculator, TrendingDown } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import type { AppDataHandle } from "../appDataType";
 import type {
   ActivityLevel,
@@ -692,11 +693,12 @@ interface ProfileManagerProps {
 export function ProfileManager({ appData }: ProfileManagerProps) {
   const { data, addProfile, setActiveProfile, deleteProfile, renameProfile, updateProfileGoals, setWeightLossPlan } =
     appData;
+  const [searchParams, setSearchParams] = useSearchParams();
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<ProfileId | null>(null);
   const [editName, setEditName] = useState("");
-  const [goalsEditingId, setGoalsEditingId] = useState<ProfileId | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
+  const goalsEditingId = searchParams.get("goals");
   const editingProfile =
     editingId != null
       ? data.profiles.find((profile) => profile.id === editingId)
@@ -729,6 +731,18 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
     }
     setEditingId(null);
     setEditName("");
+  }
+
+  function setGoalsEditingId(profileId: ProfileId | null) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (profileId != null) {
+        next.set("goals", profileId);
+      } else {
+        next.delete("goals");
+      }
+      return next;
+    });
   }
 
   return (

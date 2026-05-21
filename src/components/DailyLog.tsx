@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { format, addDays, subDays } from "date-fns";
+import { format, addDays, subDays, parseISO, isValid } from "date-fns";
 import {
   ChevronLeft,
   ChevronRight,
@@ -22,7 +22,7 @@ import {
   Save,
   MoreVertical,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   DndContext,
   closestCenter,
@@ -67,6 +67,15 @@ interface DailyLogProps {
 
 function formatDate(date: Date): string {
   return format(date, "yyyy-MM-dd");
+}
+
+function parseRouteDate(dateParam: string | undefined): Date | null {
+  if (dateParam == null || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+    return null;
+  }
+
+  const parsed = parseISO(dateParam);
+  return isValid(parsed) && formatDate(parsed) === dateParam ? parsed : null;
 }
 
 function formatNumber(value: number): string {
@@ -1308,6 +1317,7 @@ function WeightInput({
 
 export function DailyLog({ appData }: DailyLogProps) {
   const navigate = useNavigate();
+  const { date: routeDateParam } = useParams<{ date: string }>();
   const {
     activeProfile,
     foodsMap,
@@ -1319,7 +1329,11 @@ export function DailyLog({ appData }: DailyLogProps) {
     applyMealPlanToDay,
     updateDayLogWeight,
   } = appData;
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const routeDate = useMemo(
+    () => parseRouteDate(routeDateParam),
+    [routeDateParam],
+  );
+  const selectedDate = useMemo(() => routeDate ?? new Date(), [routeDate]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addEntryInsertIndex, setAddEntryInsertIndex] = useState<
     number | undefined
@@ -1347,7 +1361,14 @@ export function DailyLog({ appData }: DailyLogProps) {
   });
   const sensors = useSensors(pointerSensor, touchSensor);
 
-  const goToToday = useCallback(() => setSelectedDate(new Date()), []);
+  const navigateToDate = useCallback(
+    (date: Date) => navigate(`/log/${formatDate(date)}`),
+    [navigate],
+  );
+  const goToToday = useCallback(
+    () => navigateToDate(new Date()),
+    [navigateToDate],
+  );
   const openAddEntry = useCallback((insertIndex?: number) => {
     setAddEntryInsertIndex(insertIndex);
     setAddDialogOpen(true);
@@ -1362,6 +1383,11 @@ export function DailyLog({ appData }: DailyLogProps) {
     description:
       "Leaving now will lose the meal plan name you have not saved.",
   });
+
+  useEffect(() => {
+    if (routeDate != null) return;
+    navigate(`/log/${formatDate(new Date())}`, { replace: true });
+  }, [navigate, routeDate]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -1394,9 +1420,9 @@ export function DailyLog({ appData }: DailyLogProps) {
       if (e.key === "t" || e.key === "T") {
         goToToday();
       } else if (e.key === "ArrowLeft") {
-        setSelectedDate((prev) => subDays(prev, 1));
+        navigateToDate(subDays(selectedDate, 1));
       } else if (e.key === "ArrowRight") {
-        setSelectedDate((prev) => addDays(prev, 1));
+        navigateToDate(addDays(selectedDate, 1));
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -1408,11 +1434,13 @@ export function DailyLog({ appData }: DailyLogProps) {
     goToToday,
     hasUnsavedChanges,
     isLocked,
+    navigateToDate,
     openAddEntry,
     pendingDelete,
     planMenuOpen,
     savePlanDialogOpen,
     savePlanDiscardOpen,
+    selectedDate,
   ]);
 
   useEffect(() => {
@@ -1662,7 +1690,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setSelectedDate(subDays(selectedDate, 1))}
+          onClick={() => navigateToDate(subDays(selectedDate, 1))}
         >
           <ChevronLeft className="h-5 w-5" />
         </Button>
@@ -1698,7 +1726,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setSelectedDate(addDays(selectedDate, 1))}
+          onClick={() => navigateToDate(addDays(selectedDate, 1))}
         >
           <ChevronRight className="h-5 w-5" />
         </Button>

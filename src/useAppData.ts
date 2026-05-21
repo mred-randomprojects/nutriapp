@@ -131,12 +131,10 @@ export function useAppData() {
   const [cloudSynced, setCloudSynced] = useState(false);
   const cloudSaveInFlight = useRef(false);
   const pendingCloudSave = useRef<AppData | null>(null);
-  const [cloudSyncing, setCloudSyncing] = useState(false);
 
   const flushCloudSave = useCallback(
     (uid: string, dataToSave: AppData) => {
       cloudSaveInFlight.current = true;
-      setCloudSyncing(true);
       console.log("[cloud-sync] save started");
       saveCloudData(uid, dataToSave)
         .then(() => {
@@ -153,7 +151,6 @@ export function useAppData() {
             flushCloudSave(uid, queued);
           } else {
             cloudSaveInFlight.current = false;
-            setCloudSyncing(false);
           }
         });
     },
@@ -221,15 +218,6 @@ export function useAppData() {
     },
     [user, flushCloudSave],
   );
-
-  const forceCloudSync = useCallback(() => {
-    if (user == null) {
-      console.warn("[cloud-sync] force sync skipped: no user");
-      return;
-    }
-    console.log("[cloud-sync] force sync triggered");
-    flushCloudSave(user.uid, data);
-  }, [user, data, flushCloudSave]);
 
   const rawFoods = useMemo(
     () => [...builtinFoods, ...data.foods],
@@ -725,8 +713,6 @@ export function useAppData() {
     storageError,
     foodsMap,
     activeProfile,
-    cloudSyncing,
-    forceCloudSync,
     addFood,
     updateFood,
     deleteFood,

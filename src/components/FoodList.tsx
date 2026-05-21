@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import type { FoodId } from "../types";
@@ -18,9 +18,25 @@ interface FoodListProps {
 
 export function FoodList({ appData }: FoodListProps) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { allFoods, deleteFood } = appData;
-  const [search, setSearch] = useState("");
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
+  const search = searchParams.get("q") ?? "";
+
+  function setSearch(value: string) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value.trim().length > 0) {
+          next.set("q", value);
+        } else {
+          next.delete("q");
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  }
 
   const filteredFoods = allFoods.filter((f) =>
     normalizeForSearch(f.name).includes(normalizeForSearch(search)),

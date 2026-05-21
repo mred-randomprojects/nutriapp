@@ -24,7 +24,10 @@ export function NavBar() {
           return (
             <button
               key={item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => {
+                if (isActive) return;
+                navigate(item.path);
+              }}
               aria-label={`${item.label} (${item.shortcut})`}
               className={cn(
                 "flex flex-1 flex-col items-center gap-1 py-2 text-xs transition-colors",

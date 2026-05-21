@@ -1,4 +1,4 @@
-import { useState, useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import {
   addDays,
   differenceInCalendarDays,
@@ -16,7 +16,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { TooltipContentProps, TooltipValueType } from "recharts";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { AppDataHandle } from "../appDataType";
 import type {
   DayLog,
@@ -46,6 +46,24 @@ const TIME_RANGE_DAYS: Record<TimeRange, number | null> = {
   "90d": 90,
   all: null,
 };
+
+function getTimeRangeParam(value: string | null): TimeRange {
+  return TIME_RANGE_OPTIONS.some((option) => option.value === value)
+    ? (value as TimeRange)
+    : "30d";
+}
+
+function getCalorieComparisonTargetParam(
+  value: string | null,
+): CalorieComparisonTarget {
+  return value === "goal" || value === "maintenance" ? value : "maintenance";
+}
+
+function getBooleanParam(value: string | null, defaultValue: boolean): boolean {
+  if (value === "1") return true;
+  if (value === "0") return false;
+  return defaultValue;
+}
 
 const DATE_KEY_FORMAT = "yyyy-MM-dd";
 
@@ -807,13 +825,60 @@ interface TrendPageProps {
 
 export function TrendPage({ appData }: TrendPageProps) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { activeProfile, foodsMap } = appData;
-  const [range, setRange] = useState<TimeRange>("30d");
-  const [excludeToday, setExcludeToday] = useState(false);
-  const [calorieComparisonTarget, setCalorieComparisonTarget] =
-    useState<CalorieComparisonTarget>("maintenance");
-  const [extendWeightToGoal, setExtendWeightToGoal] = useState(true);
+  const range = getTimeRangeParam(searchParams.get("range"));
+  const excludeToday = getBooleanParam(searchParams.get("excludeToday"), false);
+  const calorieComparisonTarget = getCalorieComparisonTargetParam(
+    searchParams.get("compare"),
+  );
+  const extendWeightToGoal = getBooleanParam(
+    searchParams.get("extendWeight"),
+    true,
+  );
   const excludedDate = excludeToday ? formatDateKey(new Date()) : null;
+
+  const updateTrendSearch = useCallback(
+    (
+      updates: Partial<{
+        range: TimeRange;
+        excludeToday: boolean;
+        compare: CalorieComparisonTarget;
+        extendWeight: boolean;
+      }>,
+    ) => {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+
+        if (updates.range != null) {
+          next.set("range", updates.range);
+        }
+
+        if (updates.excludeToday != null) {
+          if (updates.excludeToday) {
+            next.set("excludeToday", "1");
+          } else {
+            next.delete("excludeToday");
+          }
+        }
+
+        if (updates.compare != null) {
+          next.set("compare", updates.compare);
+        }
+
+        if (updates.extendWeight != null) {
+          if (updates.extendWeight) {
+            next.delete("extendWeight");
+          } else {
+            next.set("extendWeight", "0");
+          }
+        }
+
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
 
   const nutritionData = useMemo(() => {
     if (activeProfile == null) return [];
@@ -910,7 +975,7 @@ export function TrendPage({ appData }: TrendPageProps) {
           {TIME_RANGE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
-              onClick={() => setRange(opt.value)}
+              onClick={() => updateTrendSearch({ range: opt.value })}
               className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
                 range === opt.value
                   ? "border-primary bg-primary/10 text-primary"
@@ -927,7 +992,7 @@ export function TrendPage({ appData }: TrendPageProps) {
           variant={excludeToday ? "secondary" : "outline"}
           className="h-8 text-xs"
           aria-pressed={excludeToday}
-          onClick={() => setExcludeToday((value) => !value)}
+          onClick={() => updateTrendSearch({ excludeToday: !excludeToday })}
         >
           Exclude today
         </Button>
@@ -977,11 +1042,12 @@ export function TrendPage({ appData }: TrendPageProps) {
               variant="outline"
               className="h-8 shrink-0 px-2.5 text-xs"
               onClick={() =>
-                setCalorieComparisonTarget(
-                  selectedCalorieComparisonTarget === "maintenance"
-                    ? "goal"
-                    : "maintenance",
-                )
+                updateTrendSearch({
+                  compare:
+                    selectedCalorieComparisonTarget === "maintenance"
+                      ? "goal"
+                      : "maintenance",
+                })
               }
             >
               Compare: {selectedCalorieComparisonLabel}
@@ -1026,7 +1092,9 @@ export function TrendPage({ appData }: TrendPageProps) {
         daysUntilGoal={daysUntilWeightGoal}
         extendToGoal={extendWeightToGoal && canExtendWeightToGoal}
         goalDate={weightGoalDate}
-        onToggleExtendToGoal={() => setExtendWeightToGoal((value) => !value)}
+        onToggleExtendToGoal={() =>
+          updateTrendSearch({ extendWeight: !extendWeightToGoal })
+        }
       />
     </div>
   );

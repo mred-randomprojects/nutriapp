@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { format } from "date-fns";
 import { useAppData } from "./useAppData";
 import { AuthProvider, useAuth } from "./auth";
 import { NavBar } from "./components/NavBar";
@@ -11,7 +12,7 @@ import { TrendPage } from "./components/TrendPage";
 import { StorageUsage } from "./components/StorageUsage";
 import { AccountPage } from "./components/AccountPage";
 import { LoginPage } from "./components/LoginPage";
-import { CloudUpload, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { UnsavedChangesProvider } from "./UnsavedChangesProvider";
 import { submitClosestFormFromShortcut } from "./formSubmitShortcut";
 
@@ -22,6 +23,10 @@ const NAV_SHORTCUTS = {
   "4": "/profiles",
   "5": "/account",
 } as const;
+
+function todayLogPath(): string {
+  return `/log/${format(new Date(), "yyyy-MM-dd")}`;
+}
 
 export default function App() {
   return (
@@ -90,12 +95,15 @@ function AuthenticatedApp() {
 
       const destination =
         NAV_SHORTCUTS[event.key as keyof typeof NAV_SHORTCUTS];
-      if (location.pathname === destination) {
+      if (
+        location.pathname === destination ||
+        location.pathname.startsWith(destination + "/")
+      ) {
         return;
       }
 
       event.preventDefault();
-      navigate(destination);
+      navigate(destination === "/log" ? todayLogPath() : destination);
     }
 
     window.addEventListener("keydown", handleKeydown);
@@ -105,7 +113,7 @@ function AuthenticatedApp() {
   return (
     <div className="mx-auto min-h-dvh max-w-lg pb-20">
       <Routes>
-        <Route path="/" element={<Navigate to="/log" replace />} />
+        <Route path="/" element={<Navigate to={todayLogPath()} replace />} />
         <Route
           path="/foods"
           element={<FoodList appData={appData} />}
@@ -120,6 +128,10 @@ function AuthenticatedApp() {
         />
         <Route
           path="/log"
+          element={<Navigate to={todayLogPath()} replace />}
+        />
+        <Route
+          path="/log/:date"
           element={<DailyLog appData={appData} />}
         />
         <Route
@@ -148,19 +160,6 @@ function AuthenticatedApp() {
       <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">
         <StorageUsage />
       </div>
-
-      <button
-        onClick={appData.forceCloudSync}
-        disabled={appData.cloudSyncing}
-        className="fixed bottom-20 right-3 z-40 flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg active:scale-95 disabled:opacity-50"
-      >
-        {appData.cloudSyncing ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <CloudUpload className="h-3.5 w-3.5" />
-        )}
-        Sync to Cloud
-      </button>
 
       <NavBar />
     </div>
