@@ -1377,6 +1377,17 @@ export function DailyLog({ appData }: DailyLogProps) {
   const savePlanDirty = savePlanDialogOpen && planName.trim().length > 0;
   const dateStr = formatDate(selectedDate);
   const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
+  const toggleLock = useCallback(() => {
+    setUnlockedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateStr)) {
+        next.delete(dateStr);
+      } else {
+        next.add(dateStr);
+      }
+      return next;
+    });
+  }, [dateStr]);
 
   useUnsavedChanges(savePlanDirty, {
     title: "Discard saved plan?",
@@ -1417,7 +1428,12 @@ export function DailyLog({ appData }: DailyLogProps) {
         return;
       }
 
-      if (e.key === "t" || e.key === "T") {
+      if ((e.key === "e" || e.key === "E") && !isToday(selectedDate)) {
+        e.preventDefault();
+        if (!e.repeat) {
+          toggleLock();
+        }
+      } else if (e.key === "t" || e.key === "T") {
         goToToday();
       } else if (e.key === "ArrowLeft") {
         navigateToDate(subDays(selectedDate, 1));
@@ -1441,6 +1457,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     savePlanDialogOpen,
     savePlanDiscardOpen,
     selectedDate,
+    toggleLock,
   ]);
 
   useEffect(() => {
@@ -1486,18 +1503,6 @@ export function DailyLog({ appData }: DailyLogProps) {
     const timeout = window.setTimeout(() => setPlanFeedback(null), 2500);
     return () => window.clearTimeout(timeout);
   }, [planFeedback]);
-
-  function toggleLock() {
-    setUnlockedDates((prev) => {
-      const next = new Set(prev);
-      if (next.has(dateStr)) {
-        next.delete(dateStr);
-      } else {
-        next.add(dateStr);
-      }
-      return next;
-    });
-  }
 
   const dayLog = useMemo(() => {
     if (activeProfile == null) return undefined;
