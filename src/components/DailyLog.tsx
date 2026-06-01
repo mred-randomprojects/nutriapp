@@ -60,6 +60,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
+import { handleFormEscapeCancel } from "../formEscapeCancel";
 
 interface DailyLogProps {
   appData: AppDataHandle;
@@ -641,6 +642,15 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
       "Leaving now will lose the log entry changes you have not saved.",
   });
 
+  const requestCancel = useCallback(() => {
+    if (isDirty) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+
+    setIsEditing(false);
+  }, [isDirty]);
+
   useEffect(() => {
     if (!isEditing) return;
     function handleClickOutside(e: MouseEvent) {
@@ -648,16 +658,12 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
         editCardRef.current != null &&
         !editCardRef.current.contains(e.target as Node)
       ) {
-        if (isDirty) {
-          setDiscardDialogOpen(true);
-        } else {
-          setIsEditing(false);
-        }
+        requestCancel();
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isDirty, isEditing]);
+  }, [isEditing, requestCancel]);
 
   function startEditing() {
     if (isUnitBased) {
@@ -727,7 +733,10 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
   if (isEditing) {
     return (
       <>
-        <Card ref={editCardRef}>
+        <Card
+          ref={editCardRef}
+          onKeyDown={(event) => handleFormEscapeCancel(event, requestCancel)}
+        >
           <CardContent className="p-3">
             <div className="flex items-center gap-3">
               {foodImage}
@@ -936,6 +945,15 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
       "Leaving now will lose the quick-add changes you have not saved.",
   });
 
+  const requestCancel = useCallback(() => {
+    if (isDirty) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+
+    setIsEditing(false);
+  }, [isDirty]);
+
   useEffect(() => {
     if (!isEditing) return;
     function handleClickOutside(e: MouseEvent) {
@@ -943,16 +961,12 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
         editCardRef.current != null &&
         !editCardRef.current.contains(e.target as Node)
       ) {
-        if (isDirty) {
-          setDiscardDialogOpen(true);
-        } else {
-          setIsEditing(false);
-        }
+        requestCancel();
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isDirty, isEditing]);
+  }, [isEditing, requestCancel]);
 
   function startEditing() {
     setEditName(item.name);
@@ -996,7 +1010,10 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
   if (isEditing) {
     return (
       <>
-        <Card ref={editCardRef}>
+        <Card
+          ref={editCardRef}
+          onKeyDown={(event) => handleFormEscapeCancel(event, requestCancel)}
+        >
           <CardContent className="p-3">
             <form
               className="space-y-3"
@@ -1255,7 +1272,10 @@ function WeightInput({
   if (isEditing) {
     return (
       <>
-        <Card className="mb-4">
+        <Card
+          className="mb-4"
+          onKeyDown={(event) => handleFormEscapeCancel(event, requestCancel)}
+        >
           <CardContent className="p-3">
             <form
               className="flex flex-col gap-2"

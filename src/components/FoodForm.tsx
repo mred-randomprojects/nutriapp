@@ -16,6 +16,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { normalizeForSearch } from "../search";
 import { useUnsavedChanges } from "../unsavedChanges";
+import { handleFormEscapeCancel } from "../formEscapeCancel";
 
 interface FoodFormProps {
   appData: AppDataHandle;
@@ -500,6 +501,15 @@ export function FoodForm({ appData }: FoodFormProps) {
     navigate("/foods");
   }
 
+  function closeIngredientPicker() {
+    setShowIngredientPicker(false);
+    setIngredientSearch("");
+  }
+
+  function requestClose() {
+    navigate("/foods");
+  }
+
   return (
     <div className="p-4">
       <div className="mb-4 flex items-center gap-2">
@@ -507,7 +517,7 @@ export function FoodForm({ appData }: FoodFormProps) {
           type="button"
           variant="ghost"
           size="icon"
-          onClick={() => navigate("/foods")}
+          onClick={requestClose}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -533,6 +543,7 @@ export function FoodForm({ appData }: FoodFormProps) {
 
       <form
         className="space-y-4"
+        onKeyDown={(event) => handleFormEscapeCancel(event, requestClose)}
         onSubmit={(e) => {
           e.preventDefault();
           handleSubmit();
@@ -646,7 +657,12 @@ export function FoodForm({ appData }: FoodFormProps) {
 
                 {!readonly &&
                   (showIngredientPicker ? (
-                    <div className="mt-2 space-y-2 rounded-lg border p-2">
+                    <div
+                      className="mt-2 space-y-2 rounded-lg border p-2"
+                      onKeyDown={(event) =>
+                        handleFormEscapeCancel(event, closeIngredientPicker)
+                      }
+                    >
                       <Input
                         placeholder="Search foods to add..."
                         value={ingredientSearch}
@@ -692,10 +708,7 @@ export function FoodForm({ appData }: FoodFormProps) {
                         variant="ghost"
                         size="sm"
                         className="w-full"
-                        onClick={() => {
-                          setShowIngredientPicker(false);
-                          setIngredientSearch("");
-                        }}
+                        onClick={closeIngredientPicker}
                       >
                         Cancel
                       </Button>

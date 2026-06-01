@@ -30,6 +30,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useUnsavedChanges } from "../unsavedChanges";
+import { handleFormEscapeCancel } from "../formEscapeCancel";
 
 function Tooltip({ text }: { text: string }) {
   return (
@@ -198,7 +199,10 @@ function GoalsEditor({ goals, schedule, userMetrics, weightLossPlan, onSave, onS
   }
 
   return (
-    <div className="mt-3 space-y-3 border-t pt-3">
+    <div
+      className="mt-3 space-y-3 border-t pt-3"
+      onKeyDown={(event) => handleFormEscapeCancel(event, requestClose)}
+    >
       <form
         className="space-y-3"
         onSubmit={(e) => {
@@ -517,6 +521,7 @@ function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanS
   const [startWeight, setStartWeight] = useState("");
   const [targetWeight, setTargetWeight] = useState("");
   const [lossRate, setLossRate] = useState("");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
 
   const isDirty =
     isCreating &&
@@ -550,7 +555,22 @@ function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanS
       targetWeightKg: tw,
       weeklyLossRateKg: lr,
     });
+    setDiscardDialogOpen(false);
     setIsCreating(false);
+  }
+
+  function closeWithoutPrompt() {
+    setDiscardDialogOpen(false);
+    setIsCreating(false);
+  }
+
+  function requestCancel() {
+    if (isDirty) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+
+    closeWithoutPrompt();
   }
 
   if (plan != null) {
@@ -599,71 +619,81 @@ function WeightLossPlanSection({ plan, userMetrics, onSetPlan }: WeightLossPlanS
 
   if (isCreating) {
     return (
-      <form
-        className="space-y-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleCreate();
-        }}
-      >
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Start Weight Loss Plan
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <Label htmlFor="plan-start-weight" className="text-xs">Start (kg)</Label>
-            <Input
-              id="plan-start-weight"
-              type="number"
-              value={startWeight}
-              onChange={(e) => setStartWeight(e.target.value)}
-              placeholder="e.g. 85"
-              className="h-8 text-sm"
-              step="0.1"
-              min={1}
-            />
+      <>
+        <form
+          className="space-y-3"
+          onKeyDown={(event) => handleFormEscapeCancel(event, requestCancel)}
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleCreate();
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Start Weight Loss Plan
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label htmlFor="plan-start-weight" className="text-xs">Start (kg)</Label>
+              <Input
+                id="plan-start-weight"
+                type="number"
+                value={startWeight}
+                onChange={(e) => setStartWeight(e.target.value)}
+                placeholder="e.g. 85"
+                className="h-8 text-sm"
+                step="0.1"
+                min={1}
+              />
+            </div>
+            <div>
+              <Label htmlFor="plan-target-weight" className="text-xs">Target (kg)</Label>
+              <Input
+                id="plan-target-weight"
+                type="number"
+                value={targetWeight}
+                onChange={(e) => setTargetWeight(e.target.value)}
+                placeholder="e.g. 75"
+                className="h-8 text-sm"
+                step="0.1"
+                min={1}
+              />
+            </div>
+            <div>
+              <Label htmlFor="plan-loss-rate" className="text-xs">Rate (kg/wk)</Label>
+              <Input
+                id="plan-loss-rate"
+                type="number"
+                value={lossRate}
+                onChange={(e) => setLossRate(e.target.value)}
+                placeholder="0.5"
+                className="h-8 text-sm"
+                step="0.1"
+                min={0.1}
+              />
+            </div>
           </div>
-          <div>
-            <Label htmlFor="plan-target-weight" className="text-xs">Target (kg)</Label>
-            <Input
-              id="plan-target-weight"
-              type="number"
-              value={targetWeight}
-              onChange={(e) => setTargetWeight(e.target.value)}
-              placeholder="e.g. 75"
-              className="h-8 text-sm"
-              step="0.1"
-              min={1}
-            />
+          <div className="flex gap-2">
+            <Button type="submit" size="sm">
+              Start Plan
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={requestCancel}
+            >
+              Cancel
+            </Button>
           </div>
-          <div>
-            <Label htmlFor="plan-loss-rate" className="text-xs">Rate (kg/wk)</Label>
-            <Input
-              id="plan-loss-rate"
-              type="number"
-              value={lossRate}
-              onChange={(e) => setLossRate(e.target.value)}
-              placeholder="0.5"
-              className="h-8 text-sm"
-              step="0.1"
-              min={0.1}
-            />
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button type="submit" size="sm">
-            Start Plan
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setIsCreating(false)}
-          >
-            Cancel
-          </Button>
-        </div>
-      </form>
+        </form>
+        <DiscardChangesDialog
+          open={discardDialogOpen}
+          title="Discard weight plan?"
+          description="Closing now will lose the weight-loss plan you have not started."
+          onStay={() => setDiscardDialogOpen(false)}
+          onDiscard={closeWithoutPrompt}
+        />
+      </>
     );
   }
 
@@ -698,6 +728,7 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
   const [editingId, setEditingId] = useState<ProfileId | null>(null);
   const [editName, setEditName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const goalsEditingId = searchParams.get("goals");
   const editingProfile =
     editingId != null
@@ -733,6 +764,22 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
     setEditName("");
   }
 
+  function discardProfileChanges() {
+    setNewName("");
+    setEditingId(null);
+    setEditName("");
+    setDiscardDialogOpen(false);
+  }
+
+  function requestCancelProfileChanges() {
+    if (isDirty) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+
+    discardProfileChanges();
+  }
+
   function setGoalsEditingId(profileId: ProfileId | null) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
@@ -756,6 +803,9 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
         <CardContent>
           <form
             className="flex gap-2"
+            onKeyDown={(event) =>
+              handleFormEscapeCancel(event, requestCancelProfileChanges)
+            }
             onSubmit={(e) => {
               e.preventDefault();
               handleCreate();
@@ -807,6 +857,9 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                     {isEditing ? (
                       <form
                         className="flex gap-2"
+                        onKeyDown={(event) =>
+                          handleFormEscapeCancel(event, requestCancelProfileChanges)
+                        }
                         onSubmit={(e) => {
                           e.preventDefault();
                           finishEditing();
@@ -921,6 +974,14 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
           );
         })}
       </div>
+
+      <DiscardChangesDialog
+        open={discardDialogOpen}
+        title="Discard profile changes?"
+        description="Closing now will lose the profile changes you have not saved."
+        onStay={() => setDiscardDialogOpen(false)}
+        onDiscard={discardProfileChanges}
+      />
 
       <ConfirmDialog
         pending={pendingDelete}
