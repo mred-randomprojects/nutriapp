@@ -137,6 +137,49 @@ function isAddEntryShortcut(event: KeyboardEvent): boolean {
   );
 }
 
+function isEditModeShortcut(event: KeyboardEvent): boolean {
+  return event.code === "KeyE" || event.key === "e" || event.key === "E";
+}
+
+function describeShortcutTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return { kind: target == null ? "none" : "non-element" };
+  }
+
+  return {
+    kind: "element",
+    tagName: target.tagName,
+    id: target.id || null,
+    role: target.getAttribute("role"),
+    ariaLabel: target.getAttribute("aria-label"),
+    inputType: target instanceof HTMLInputElement ? target.type : null,
+    isContentEditable:
+      target instanceof HTMLElement ? target.isContentEditable : false,
+  };
+}
+
+function logEditModeShortcut(
+  phase: string,
+  event: KeyboardEvent,
+  details: Record<string, unknown> = {},
+) {
+  if (!isEditModeShortcut(event)) return;
+
+  console.info("[daily-log edit-mode shortcut]", {
+    phase,
+    key: event.key,
+    code: event.code,
+    defaultPrevented: event.defaultPrevented,
+    repeat: event.repeat,
+    altKey: event.altKey,
+    ctrlKey: event.ctrlKey,
+    metaKey: event.metaKey,
+    shiftKey: event.shiftKey,
+    target: describeShortcutTarget(event.target),
+    ...details,
+  });
+}
+
 function describeEntryAmount(entry: LogEntry, food: Food): string {
   if (entry.units != null && food.nutritionPerUnit != null) {
     return `${formatNumber(entry.units)} unit${entry.units === 1 ? "" : "s"}`;
@@ -1344,7 +1387,7 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [savePlanDiscardOpen, setSavePlanDiscardOpen] = useState(false);
   const [planName, setPlanName] = useState("");
   const [planSearch, setPlanSearch] = useState("");
-  const [unlockedDates, setUnlockedDates] = useState<Set<string>>(new Set());
+  const [editModeByDate, setEditModeByDate] = useState<Map<string, boolean>>(new Map());
   const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
@@ -1376,18 +1419,47 @@ export function DailyLog({ appData }: DailyLogProps) {
 
   const savePlanDirty = savePlanDialogOpen && planName.trim().length > 0;
   const dateStr = formatDate(selectedDate);
-  const isLocked = !isToday(selectedDate) && !unlockedDates.has(dateStr);
-  const toggleLock = useCallback(() => {
-    setUnlockedDates((prev) => {
-      const next = new Set(prev);
-      if (next.has(dateStr)) {
-        next.delete(dateStr);
-      } else {
-        next.add(dateStr);
-      }
+  const isSelectedDayToday = isToday(selectedDate);
+  const isEditable = editModeByDate.get(dateStr) ?? isSelectedDayToday;
+  const isLocked = !isEditable;
+  const toggleEditMode = useCallback(() => {
+    setEditModeByDate((prev) => {
+      const next = new Map(prev);
+      const currentValue = next.get(dateStr) ?? isSelectedDayToday;
+      next.set(dateStr, !currentValue);
       return next;
     });
-  }, [dateStr]);
+  }, [dateStr, isSelectedDayToday]);
+  const editModeDiagnostics = useMemo(
+    () => ({
+      dateStr,
+      isSelectedDayToday,
+      isEditable,
+      isLocked,
+      hasUnsavedChanges,
+      activeProfileLoaded: activeProfile != null,
+      addDialogOpen,
+      savePlanDialogOpen,
+      savePlanDiscardOpen,
+      pendingDeleteOpen: pendingDelete != null,
+      copyMenuOpen,
+      planMenuOpen,
+    }),
+    [
+      activeProfile,
+      addDialogOpen,
+      copyMenuOpen,
+      dateStr,
+      hasUnsavedChanges,
+      isEditable,
+      isLocked,
+      isSelectedDayToday,
+      pendingDelete,
+      planMenuOpen,
+      savePlanDialogOpen,
+      savePlanDiscardOpen,
+    ],
+  );
 
   useUnsavedChanges(savePlanDirty, {
     title: "Discard saved plan?",
@@ -1401,10 +1473,50 @@ export function DailyLog({ appData }: DailyLogProps) {
   }, [navigate, routeDate]);
 
   useEffect(() => {
+    console.info("[daily-log edit-mode shortcut]", {
+      phase: "state",
+      marker: "2026-06-01-diagnostics",
+      ...editModeDiagnostics,
+    });
+  }, [editModeDiagnostics]);
+
+  useEffect(() => {
+    function handleDiagnosticKeyDownCapture(e: KeyboardEvent) {
+      logEditModeShortcut("window-capture", e, editModeDiagnostics);
+    }
+
+    window.addEventListener("keydown", handleDiagnosticKeyDownCapture, true);
+    return () =>
+      window.removeEventListener(
+        "keydown",
+        handleDiagnosticKeyDownCapture,
+        true,
+      );
+  }, [editModeDiagnostics]);
+
+  useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.defaultPrevented || hasUnsavedChanges) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isEditableShortcutTarget(e.target)) return;
+      const isEditModeKey = isEditModeShortcut(e);
+      if (isEditModeKey) {
+        logEditModeShortcut("window-bubble", e, editModeDiagnostics);
+      }
+
+      if (e.defaultPrevented) {
+        logEditModeShortcut("blocked-default-prevented", e, editModeDiagnostics);
+        return;
+      }
+      if (hasUnsavedChanges) {
+        logEditModeShortcut("blocked-unsaved-changes", e, editModeDiagnostics);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        logEditModeShortcut("blocked-modifier", e, editModeDiagnostics);
+        return;
+      }
+      if (isEditableShortcutTarget(e.target)) {
+        logEditModeShortcut("blocked-editable-target", e, editModeDiagnostics);
+        return;
+      }
 
       if (isAddEntryShortcut(e)) {
         if (
@@ -1428,11 +1540,31 @@ export function DailyLog({ appData }: DailyLogProps) {
         return;
       }
 
-      if ((e.key === "e" || e.key === "E") && !isToday(selectedDate)) {
+      if (isEditModeKey) {
+        if (
+          activeProfile == null ||
+          addDialogOpen ||
+          savePlanDialogOpen ||
+          savePlanDiscardOpen ||
+          pendingDelete != null ||
+          copyMenuOpen ||
+          planMenuOpen
+        ) {
+          logEditModeShortcut("blocked-ui-state", e, editModeDiagnostics);
+          return;
+        }
+
         e.preventDefault();
         if (!e.repeat) {
-          toggleLock();
+          logEditModeShortcut("toggle", e, {
+            ...editModeDiagnostics,
+            nextIsEditable: !editModeDiagnostics.isEditable,
+          });
+          toggleEditMode();
+        } else {
+          logEditModeShortcut("blocked-repeat", e, editModeDiagnostics);
         }
+        return;
       } else if (e.key === "t" || e.key === "T") {
         goToToday();
       } else if (e.key === "ArrowLeft") {
@@ -1457,7 +1589,8 @@ export function DailyLog({ appData }: DailyLogProps) {
     savePlanDialogOpen,
     savePlanDiscardOpen,
     selectedDate,
-    toggleLock,
+    toggleEditMode,
+    editModeDiagnostics,
   ]);
 
   useEffect(() => {
@@ -1706,24 +1839,23 @@ export function DailyLog({ appData }: DailyLogProps) {
           >
             {format(selectedDate, "EEE, MMM d")}
           </button>
-          {isToday(selectedDate) && (
+          {isSelectedDayToday && (
             <Badge variant="success" className="ml-2">
               Today
             </Badge>
           )}
-          {!isToday(selectedDate) && (
-            <button
-              className="ml-2 inline-flex items-center text-muted-foreground hover:text-foreground"
-              onClick={toggleLock}
-              aria-label={isLocked ? "Unlock this day for editing" : "Lock this day to prevent edits"}
-            >
-              {isLocked ? (
-                <Lock className="h-4 w-4" />
-              ) : (
-                <LockOpen className="h-4 w-4" />
-              )}
-            </button>
-          )}
+          <button
+            className="ml-2 inline-flex items-center text-muted-foreground hover:text-foreground"
+            onClick={toggleEditMode}
+            aria-label={isLocked ? "Enable editing for this day" : "Disable editing for this day"}
+            title="Toggle edit mode (E)"
+          >
+            {isLocked ? (
+              <Lock className="h-4 w-4" />
+            ) : (
+              <LockOpen className="h-4 w-4" />
+            )}
+          </button>
           <p className="text-xs text-muted-foreground">
             {activeProfile.name}
           </p>
@@ -1737,7 +1869,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         </Button>
       </div>
 
-      {!isToday(selectedDate) && (
+      {!isSelectedDayToday && (
         <div className="mb-4 flex justify-center">
           <Button variant="outline" size="sm" onClick={goToToday}>
             Go to Today
@@ -1751,7 +1883,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         budgetedTotals={budgetedTotals}
         goals={activeProfile.goals ?? null}
         schedule={activeProfile.schedule ?? null}
-        isSelectedDayToday={isToday(selectedDate)}
+        isSelectedDayToday={isSelectedDayToday}
       />
 
       {/* Weight */}
