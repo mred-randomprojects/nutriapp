@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { useRef } from "react";
 
 export interface PendingAction {
   title: string;
@@ -22,6 +23,13 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({ pending, onClose }: ConfirmDialogProps) {
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+
+  function confirmPendingAction() {
+    pending?.onConfirm();
+    onClose();
+  }
+
   return (
     <Dialog
       open={pending != null}
@@ -29,7 +37,13 @@ export function ConfirmDialog({ pending, onClose }: ConfirmDialogProps) {
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-xs rounded-xl">
+      <DialogContent
+        className="max-w-xs rounded-xl"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          confirmButtonRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{pending?.title}</DialogTitle>
           <DialogDescription>{pending?.description}</DialogDescription>
@@ -41,12 +55,10 @@ export function ConfirmDialog({ pending, onClose }: ConfirmDialogProps) {
             </Button>
           </DialogClose>
           <Button
+            ref={confirmButtonRef}
             variant="destructive"
             className="w-full sm:w-auto"
-            onClick={() => {
-              pending?.onConfirm();
-              onClose();
-            }}
+            onClick={confirmPendingAction}
           >
             {pending?.confirmLabel ?? "Remove"}
           </Button>

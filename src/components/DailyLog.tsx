@@ -61,6 +61,19 @@ import type { PendingAction } from "./ConfirmDialog";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel } from "../formEscapeCancel";
+import {
+  emptyEntrySelection,
+  getDailyLogKeyboardAction,
+  getDeleteSelectionDescription,
+  getVisibleEntryIds,
+  moveEntrySelection,
+  moveSelectedItems,
+  normalizeEntrySelection,
+  selectAfterRemovingEntries,
+  selectEntry,
+  toggleBudgetedForSelectedItems,
+  type EntrySelectionState,
+} from "./dailyLogKeyboard";
 
 interface DailyLogProps {
   appData: AppDataHandle;
@@ -281,10 +294,20 @@ function buildMarkdownForDay(
 interface SortableItemProps {
   item: DayLogItem;
   isLocked: boolean;
+  isSelected: boolean;
+  isFocused: boolean;
+  onSelect: () => void;
   children: React.ReactNode;
 }
 
-function SortableItem({ item, isLocked, children }: SortableItemProps) {
+function SortableItem({
+  item,
+  isLocked,
+  isSelected,
+  isFocused,
+  onSelect,
+  children,
+}: SortableItemProps) {
   const {
     attributes,
     listeners,
@@ -297,7 +320,15 @@ function SortableItem({ item, isLocked, children }: SortableItemProps) {
   return (
     <div
       ref={setNodeRef}
-      className={`flex items-center gap-1 ${isDragging ? "z-10 opacity-50" : ""}`}
+      className={`flex items-center gap-1 rounded-xl outline-none transition-colors ${
+        isSelected ? "bg-primary/5 ring-1 ring-primary/35" : ""
+      } ${isFocused ? "ring-2 ring-primary" : ""} ${
+        isDragging ? "z-10 opacity-50" : ""
+      }`}
+      data-selected={isSelected ? "true" : undefined}
+      tabIndex={isFocused ? 0 : -1}
+      onFocus={onSelect}
+      onMouseDown={onSelect}
       style={{
         transform: CSS.Transform.toString(transform),
         transition: transition ?? undefined,
@@ -1385,6 +1416,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     activeProfile,
     foodsMap,
     removeLogEntry,
+    removeLogEntries,
     reorderLogEntries,
     updateLogEntry,
     updateQuickAddEntry,
@@ -1409,6 +1441,8 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [planSearch, setPlanSearch] = useState("");
   const [editModeByDate, setEditModeByDate] = useState<Map<string, boolean>>(new Map());
   const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
+  const [entrySelection, setEntrySelection] =
+    useState<EntrySelectionState>(emptyEntrySelection);
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [planFeedback, setPlanFeedback] = useState<string | null>(null);
@@ -1442,6 +1476,14 @@ export function DailyLog({ appData }: DailyLogProps) {
   const isSelectedDayToday = isToday(selectedDate);
   const isEditable = editModeByDate.get(dateStr) ?? isSelectedDayToday;
   const isLocked = !isEditable;
+  const dayLog = useMemo(() => {
+    if (activeProfile == null) return undefined;
+    return activeProfile.dayLogs.find((dl) => dl.date === dateStr);
+  }, [activeProfile, dateStr]);
+  const visibleEntryIds = useMemo(
+    () => getVisibleEntryIds(dayLog?.entries ?? [], collapsedSections),
+    [collapsedSections, dayLog?.entries],
+  );
   const toggleEditMode = useCallback(() => {
     setEditModeByDate((prev) => {
       const next = new Map(prev);
@@ -1515,6 +1557,136 @@ export function DailyLog({ appData }: DailyLogProps) {
   }, [editModeDiagnostics]);
 
   useEffect(() => {
+    setEntrySelection((prev) => normalizeEntrySelection(prev, visibleEntryIds));
+  }, [visibleEntryIds]);
+
+  const selectedEntryIds = entrySelection.selectedIds;
+  const selectedVisibleItems = useMemo(() => {
+    if (dayLog == null || selectedEntryIds.length === 0) return [];
+    const selectedIdSet = new Set(selectedEntryIds);
+    const visibleIdSet = new Set(visibleEntryIds);
+    return dayLog.entries.filter(
+      (item) => selectedIdSet.has(item.id) && visibleIdSet.has(item.id),
+    );
+  }, [dayLog, selectedEntryIds, visibleEntryIds]);
+  const selectedEntryIdSet = useMemo(
+    () => new Set(selectedEntryIds),
+    [selectedEntryIds],
+  );
+
+  const selectVisibleEntry = useCallback(
+    (entryId: LogEntryId) => {
+      setEntrySelection(selectEntry(entryId, visibleEntryIds));
+    },
+    [visibleEntryIds],
+  );
+
+  const requestDeleteSelectedEntries = useCallback(() => {
+    if (
+      activeProfile == null ||
+      dayLog == null ||
+      isLocked ||
+      selectedVisibleItems.length === 0
+    ) {
+      return;
+    }
+
+    const idsToDelete = selectedVisibleItems.map((item) => item.id);
+    const removedIds = new Set(idsToDelete);
+    const title =
+      selectedVisibleItems.length === 1
+        ? selectedVisibleItems[0].type === "separator"
+          ? "Remove section"
+          : "Remove entry"
+        : "Remove selected rows";
+    const description = getDeleteSelectionDescription(
+      selectedVisibleItems.length,
+    );
+
+    setPendingDelete({
+      title,
+      description,
+      confirmLabel: "Delete from all devices",
+      onConfirm: () => {
+        removeLogEntries(activeProfile.id as ProfileId, dateStr, idsToDelete);
+        setEntrySelection((prev) =>
+          selectAfterRemovingEntries(prev, visibleEntryIds, removedIds),
+        );
+      },
+    });
+  }, [
+    activeProfile,
+    dateStr,
+    dayLog,
+    isLocked,
+    removeLogEntries,
+    selectedVisibleItems,
+    visibleEntryIds,
+  ]);
+
+  const moveSelectedEntries = useCallback(
+    (direction: "up" | "down") => {
+      if (
+        activeProfile == null ||
+        dayLog == null ||
+        isLocked ||
+        selectedVisibleItems.length === 0
+      ) {
+        return;
+      }
+
+      const reordered = moveSelectedItems(
+        dayLog.entries,
+        selectedEntryIds,
+        direction,
+      );
+      const orderChanged = reordered.some(
+        (item, index) => item.id !== dayLog.entries[index].id,
+      );
+      if (!orderChanged) return;
+      reorderLogEntries(activeProfile.id as ProfileId, dateStr, reordered);
+    },
+    [
+      activeProfile,
+      dateStr,
+      dayLog,
+      isLocked,
+      reorderLogEntries,
+      selectedEntryIds,
+      selectedVisibleItems.length,
+    ],
+  );
+
+  const toggleBudgetedForSelectedEntries = useCallback(() => {
+    if (
+      activeProfile == null ||
+      dayLog == null ||
+      isLocked ||
+      selectedVisibleItems.length === 0
+    ) {
+      return;
+    }
+
+    const updatedEntries = toggleBudgetedForSelectedItems(
+      dayLog.entries,
+      selectedEntryIds,
+    );
+    const changed = updatedEntries.some(
+      (item, index) => item !== dayLog.entries[index],
+    );
+    if (!changed) return;
+    reorderLogEntries(activeProfile.id as ProfileId, dateStr, updatedEntries);
+  }, [
+    activeProfile,
+    dateStr,
+    dayLog,
+    isLocked,
+    reorderLogEntries,
+    selectedEntryIds,
+    selectedVisibleItems.length,
+  ]);
+
+  useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const isEditModeKey = isEditModeShortcut(e);
       if (isEditModeKey) {
@@ -1529,12 +1701,50 @@ export function DailyLog({ appData }: DailyLogProps) {
         logEditModeShortcut("blocked-unsaved-changes", e, editModeDiagnostics);
         return;
       }
-      if (e.metaKey || e.ctrlKey || e.altKey) {
-        logEditModeShortcut("blocked-modifier", e, editModeDiagnostics);
-        return;
-      }
       if (isEditableShortcutTarget(e.target)) {
         logEditModeShortcut("blocked-editable-target", e, editModeDiagnostics);
+        return;
+      }
+
+      const keyboardAction = getDailyLogKeyboardAction(e);
+      if (keyboardAction != null) {
+        if (
+          activeProfile == null ||
+          addDialogOpen ||
+          savePlanDialogOpen ||
+          savePlanDiscardOpen ||
+          pendingDelete != null ||
+          copyMenuOpen ||
+          planMenuOpen ||
+          isInteractiveShortcutTarget(e.target)
+        ) {
+          return;
+        }
+
+        e.preventDefault();
+        if (e.repeat) return;
+
+        if (keyboardAction.type === "select") {
+          setEntrySelection((prev) =>
+            moveEntrySelection(
+              prev,
+              visibleEntryIds,
+              keyboardAction.direction,
+              keyboardAction.extend,
+            ),
+          );
+        } else if (keyboardAction.type === "move-selection") {
+          moveSelectedEntries(keyboardAction.direction);
+        } else if (keyboardAction.type === "delete-selection") {
+          requestDeleteSelectedEntries();
+        } else {
+          toggleBudgetedForSelectedEntries();
+        }
+        return;
+      }
+
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        logEditModeShortcut("blocked-modifier", e, editModeDiagnostics);
         return;
       }
 
@@ -1606,11 +1816,15 @@ export function DailyLog({ appData }: DailyLogProps) {
     openAddEntry,
     pendingDelete,
     planMenuOpen,
+    requestDeleteSelectedEntries,
     savePlanDialogOpen,
     savePlanDiscardOpen,
     selectedDate,
+    moveSelectedEntries,
+    toggleBudgetedForSelectedEntries,
     toggleEditMode,
     editModeDiagnostics,
+    visibleEntryIds,
   ]);
 
   useEffect(() => {
@@ -1656,11 +1870,6 @@ export function DailyLog({ appData }: DailyLogProps) {
     const timeout = window.setTimeout(() => setPlanFeedback(null), 2500);
     return () => window.clearTimeout(timeout);
   }, [planFeedback]);
-
-  const dayLog = useMemo(() => {
-    if (activeProfile == null) return undefined;
-    return activeProfile.dayLogs.find((dl) => dl.date === dateStr);
-  }, [activeProfile, dateStr]);
 
   const entryIds = useMemo(
     () => dayLog?.entries.map((e) => e.id) ?? [],
@@ -2100,7 +2309,14 @@ export function DailyLog({ appData }: DailyLogProps) {
                 const sectionCollapsed = collapsedSections.has(separatorId);
                 const sectionTotals = sectionSubtotals.get(separatorId);
                 return (
-                  <SortableItem key={item.id} item={item} isLocked={isLocked}>
+                  <SortableItem
+                    key={item.id}
+                    item={item}
+                    isLocked={isLocked}
+                    isSelected={selectedEntryIdSet.has(item.id)}
+                    isFocused={entrySelection.focusedId === item.id}
+                    onSelect={() => selectVisibleEntry(item.id)}
+                  >
                     <button
                       className="flex w-full items-center gap-2 pt-2 first:pt-0"
                       onClick={() =>
@@ -2134,7 +2350,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                             e.stopPropagation();
                             setPendingDelete({
                               title: "Remove section",
-                              description: `Delete only the "${item.label}" section separator from all devices?`,
+                              description: getDeleteSelectionDescription(1),
                               confirmLabel: "Delete from all devices",
                               onConfirm: () =>
                                 removeLogEntry(
@@ -2160,7 +2376,14 @@ export function DailyLog({ appData }: DailyLogProps) {
 
               if (item.type === "quick-add") {
                 return (
-                  <SortableItem key={item.id} item={item} isLocked={isLocked}>
+                  <SortableItem
+                    key={item.id}
+                    item={item}
+                    isLocked={isLocked}
+                    isSelected={selectedEntryIdSet.has(item.id)}
+                    isFocused={entrySelection.focusedId === item.id}
+                    onSelect={() => selectVisibleEntry(item.id)}
+                  >
                     <QuickAddEntryCard
                       item={item}
                       isLocked={isLocked}
@@ -2169,7 +2392,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                       onRemove={() =>
                         setPendingDelete({
                           title: "Remove entry",
-                          description: `Delete only "${item.name}" from this day's log on all devices?`,
+                          description: getDeleteSelectionDescription(1),
                           confirmLabel: "Delete from all devices",
                           onConfirm: () =>
                             removeLogEntry(
@@ -2206,7 +2429,14 @@ export function DailyLog({ appData }: DailyLogProps) {
               const food = foodsMap.get(item.foodId);
               if (food == null) {
                 return (
-                  <SortableItem key={item.id} item={item} isLocked={isLocked}>
+                  <SortableItem
+                    key={item.id}
+                    item={item}
+                    isLocked={isLocked}
+                    isSelected={selectedEntryIdSet.has(item.id)}
+                    isFocused={entrySelection.focusedId === item.id}
+                    onSelect={() => selectVisibleEntry(item.id)}
+                  >
                     <Card className="border-dashed opacity-60">
                       <CardContent className="flex items-center gap-3 p-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
@@ -2226,8 +2456,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                             onClick={() =>
                               setPendingDelete({
                                 title: "Remove entry",
-                                description:
-                                  "Delete only this log entry from all devices?",
+                                description: getDeleteSelectionDescription(1),
                                 confirmLabel: "Delete from all devices",
                                 onConfirm: () =>
                                   removeLogEntry(
@@ -2251,7 +2480,14 @@ export function DailyLog({ appData }: DailyLogProps) {
               }
 
               return (
-                <SortableItem key={item.id} item={item} isLocked={isLocked}>
+                <SortableItem
+                  key={item.id}
+                  item={item}
+                  isLocked={isLocked}
+                  isSelected={selectedEntryIdSet.has(item.id)}
+                  isFocused={entrySelection.focusedId === item.id}
+                  onSelect={() => selectVisibleEntry(item.id)}
+                >
                   <FoodEntryCard
                     item={item}
                     food={food}
@@ -2261,7 +2497,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                     onRemove={() =>
                       setPendingDelete({
                         title: "Remove entry",
-                        description: `Delete only "${food.name}" from this day's log on all devices?`,
+                        description: getDeleteSelectionDescription(1),
                         confirmLabel: "Delete from all devices",
                         onConfirm: () =>
                           removeLogEntry(

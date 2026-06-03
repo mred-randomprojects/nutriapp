@@ -3,6 +3,7 @@ node_modules
 
 # Build output
 dist
+.tmp
 
 # OS files
 .DS_Store

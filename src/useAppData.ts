@@ -515,6 +515,51 @@ export function useAppData() {
     [data, persist],
   );
 
+  const removeLogEntries = useCallback(
+    (
+      profileId: ProfileId,
+      date: string,
+      entryIds: ReadonlyArray<LogEntryId>,
+    ) => {
+      const uniqueEntryIds = [...new Set(entryIds)];
+      if (uniqueEntryIds.length === 0) return;
+
+      const entryIdSet = new Set(uniqueEntryIds);
+      const deletedAt = new Date().toISOString();
+      const deletedEntries = uniqueEntryIds.map((entryId) => ({
+        profileId,
+        date,
+        entryId,
+        deletedAt,
+      }));
+      const nextDeletedDayLogEntries = deletedEntries.reduce(
+        (deleted, deletedEntry) =>
+          upsertDeletedDayLogEntry(deleted, deletedEntry),
+        data.deletedDayLogEntries ?? [],
+      );
+
+      persist({
+        ...data,
+        deletedDayLogEntries: nextDeletedDayLogEntries,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          return {
+            ...p,
+            dayLogs: p.dayLogs.map((dl) =>
+              dl.date === date
+                ? {
+                    ...dl,
+                    entries: dl.entries.filter((e) => !entryIdSet.has(e.id)),
+                  }
+                : dl,
+            ),
+          };
+        }),
+      });
+    },
+    [data, persist],
+  );
+
   const reorderLogEntries = useCallback(
     (profileId: ProfileId, date: string, newEntries: ReadonlyArray<DayLogItem>) => {
       persist({
@@ -725,6 +770,7 @@ export function useAppData() {
     addQuickAddEntry,
     addSeparator,
     removeLogEntry,
+    removeLogEntries,
     reorderLogEntries,
     updateLogEntry,
     updateQuickAddEntry,
