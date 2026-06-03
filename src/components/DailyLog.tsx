@@ -298,6 +298,7 @@ interface SortableItemProps {
   isSelected: boolean;
   isFocused: boolean;
   onSelect: () => void;
+  onNodeRef: (node: HTMLDivElement | null) => void;
   children: React.ReactNode;
 }
 
@@ -307,6 +308,7 @@ function SortableItem({
   isSelected,
   isFocused,
   onSelect,
+  onNodeRef,
   children,
 }: SortableItemProps) {
   const {
@@ -317,11 +319,18 @@ function SortableItem({
     transition,
     isDragging,
   } = useSortable({ id: item.id, disabled: isLocked });
+  const setCombinedNodeRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      setNodeRef(node);
+      onNodeRef(node);
+    },
+    [onNodeRef, setNodeRef],
+  );
 
   return (
     <div
-      ref={setNodeRef}
-      className={`flex items-center gap-1 rounded-xl outline-none transition-colors ${
+      ref={setCombinedNodeRef}
+      className={`scroll-mt-4 scroll-mb-24 flex items-center gap-1 rounded-xl outline-none transition-colors ${
         isSelected ? "bg-primary/5 ring-1 ring-primary/35" : ""
       } ${isFocused ? "ring-2 ring-primary" : ""} ${
         isDragging ? "z-10 opacity-50" : ""
@@ -1485,6 +1494,7 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [planFeedback, setPlanFeedback] = useState<string | null>(null);
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const planMenuRef = useRef<HTMLDivElement>(null);
+  const entryRowRefs = useRef<Map<LogEntryId, HTMLDivElement>>(new Map());
   const hasUnsavedChanges = useHasUnsavedChanges();
 
   const touchSensor = useSensor(TouchSensor, {
@@ -1507,6 +1517,16 @@ export function DailyLog({ appData }: DailyLogProps) {
     setAddEntryInsertIndex(insertIndex);
     setAddDialogOpen(true);
   }, []);
+  const setEntryRowRef = useCallback(
+    (entryId: LogEntryId, node: HTMLDivElement | null) => {
+      if (node == null) {
+        entryRowRefs.current.delete(entryId);
+      } else {
+        entryRowRefs.current.set(entryId, node);
+      }
+    },
+    [],
+  );
 
   const savePlanDirty = savePlanDialogOpen && planName.trim().length > 0;
   const dateStr = formatDate(selectedDate);
@@ -1520,6 +1540,10 @@ export function DailyLog({ appData }: DailyLogProps) {
   const visibleEntryIds = useMemo(
     () => getVisibleEntryIds(dayLog?.entries ?? [], collapsedSections),
     [collapsedSections, dayLog?.entries],
+  );
+  const entryOrderKey = useMemo(
+    () => dayLog?.entries.map((entry) => entry.id).join("\u0000") ?? "",
+    [dayLog?.entries],
   );
   const toggleEditMode = useCallback(() => {
     setEditModeByDate((prev) => {
@@ -1596,6 +1620,14 @@ export function DailyLog({ appData }: DailyLogProps) {
   useEffect(() => {
     setEntrySelection((prev) => normalizeEntrySelection(prev, visibleEntryIds));
   }, [visibleEntryIds]);
+
+  useEffect(() => {
+    if (entrySelection.focusedId == null) return;
+    entryRowRefs.current.get(entrySelection.focusedId)?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [entryOrderKey, entrySelection.focusedId]);
 
   const selectedEntryIds = entrySelection.selectedIds;
   const selectedVisibleItems = useMemo(() => {
@@ -2366,6 +2398,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                     isSelected={selectedEntryIdSet.has(item.id)}
                     isFocused={entrySelection.focusedId === item.id}
                     onSelect={() => selectVisibleEntry(item.id)}
+                    onNodeRef={(node) => setEntryRowRef(item.id, node)}
                   >
                     <button
                       className="flex w-full items-center gap-2 pt-2 first:pt-0"
@@ -2433,6 +2466,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                     isSelected={selectedEntryIdSet.has(item.id)}
                     isFocused={entrySelection.focusedId === item.id}
                     onSelect={() => selectVisibleEntry(item.id)}
+                    onNodeRef={(node) => setEntryRowRef(item.id, node)}
                   >
                     <QuickAddEntryCard
                       item={item}
@@ -2486,6 +2520,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                     isSelected={selectedEntryIdSet.has(item.id)}
                     isFocused={entrySelection.focusedId === item.id}
                     onSelect={() => selectVisibleEntry(item.id)}
+                    onNodeRef={(node) => setEntryRowRef(item.id, node)}
                   >
                     <Card className="border-dashed opacity-60">
                       <CardContent className="flex items-center gap-3 p-3">
@@ -2537,6 +2572,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                   isSelected={selectedEntryIdSet.has(item.id)}
                   isFocused={entrySelection.focusedId === item.id}
                   onSelect={() => selectVisibleEntry(item.id)}
+                  onNodeRef={(node) => setEntryRowRef(item.id, node)}
                 >
                   <FoodEntryCard
                     item={item}
