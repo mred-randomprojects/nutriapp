@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   emptyEntrySelection,
+  getAddBelowIndexForSelection,
   getDailyLogKeyboardAction,
   getDeleteSelectionDescription,
   getVisibleEntryIds,
@@ -225,6 +226,28 @@ describe("daily log keyboard list operations", () => {
       ["breakfast", "lunch", "shake"],
     );
   });
+
+  it("returns the insert index below the focused row", () => {
+    const items = [entry("a"), entry("b"), entry("c")];
+    const selection = {
+      focusedId: id("b"),
+      anchorId: id("b"),
+      selectedIds: [id("b")],
+    };
+
+    assert.equal(getAddBelowIndexForSelection(items, selection), 2);
+  });
+
+  it("does not return an add-below index when focus is stale", () => {
+    const items = [entry("a"), entry("b"), entry("c")];
+    const selection = {
+      focusedId: id("missing"),
+      anchorId: id("missing"),
+      selectedIds: [id("missing")],
+    };
+
+    assert.equal(getAddBelowIndexForSelection(items, selection), undefined);
+  });
 });
 
 describe("daily log keyboard shortcut classification", () => {
@@ -244,7 +267,17 @@ describe("daily log keyboard shortcut classification", () => {
     );
   });
 
-  it("maps cmd+arrow keys to moving the whole selection", () => {
+  it("maps option+arrow keys to moving the whole selection", () => {
+    assert.deepEqual(
+      getDailyLogKeyboardAction({ key: "ArrowDown", altKey: true }),
+      {
+        type: "move-selection",
+        direction: "down",
+      },
+    );
+  });
+
+  it("keeps cmd+arrow keys as a move-selection fallback", () => {
     assert.deepEqual(
       getDailyLogKeyboardAction({ key: "ArrowDown", metaKey: true }),
       {
@@ -254,12 +287,18 @@ describe("daily log keyboard shortcut classification", () => {
     );
   });
 
-  it("maps backspace/delete and m to row operations", () => {
+  it("maps backspace/delete, a, and m to row operations", () => {
     assert.deepEqual(getDailyLogKeyboardAction({ key: "Backspace" }), {
       type: "delete-selection",
     });
     assert.deepEqual(getDailyLogKeyboardAction({ key: "Delete" }), {
       type: "delete-selection",
+    });
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "a" }), {
+      type: "add-below",
+    });
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "A" }), {
+      type: "add-below",
     });
     assert.deepEqual(getDailyLogKeyboardAction({ key: "m" }), {
       type: "toggle-budgeted",
@@ -279,7 +318,7 @@ describe("daily log keyboard shortcut classification", () => {
       null,
     );
     assert.equal(
-      getDailyLogKeyboardAction({ key: "ArrowDown", altKey: true }),
+      getDailyLogKeyboardAction({ key: "m", altKey: true }),
       null,
     );
   });

@@ -63,6 +63,7 @@ import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel } from "../formEscapeCancel";
 import {
   emptyEntrySelection,
+  getAddBelowIndexForSelection,
   getDailyLogKeyboardAction,
   getDeleteSelectionDescription,
   getVisibleEntryIds,
@@ -1409,6 +1410,42 @@ function WeightInput({
   );
 }
 
+interface EntryShortcutPanelProps {
+  selectedCount: number;
+}
+
+function EntryShortcutPanel({ selectedCount }: EntryShortcutPanelProps) {
+  const rowLabel = selectedCount === 1 ? "row" : "rows";
+  const shortcuts = [
+    { keys: "A", label: "Add below" },
+    { keys: "M", label: "Budget" },
+    { keys: "Del", label: "Delete" },
+    { keys: "Option ↑/↓", label: "Move" },
+    { keys: "Shift ↑/↓", label: "Extend" },
+  ];
+
+  return (
+    <div className="fixed bottom-4 left-1/2 z-40 w-[min(calc(100vw-2rem),44rem)] -translate-x-1/2 rounded-lg border bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur">
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+        <span className="font-medium text-foreground">
+          {selectedCount} {rowLabel} selected
+        </span>
+        {shortcuts.map((shortcut) => (
+          <span
+            key={shortcut.label}
+            className="inline-flex items-center gap-1.5 text-muted-foreground"
+          >
+            <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+              {shortcut.keys}
+            </kbd>
+            <span>{shortcut.label}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DailyLog({ appData }: DailyLogProps) {
   const navigate = useNavigate();
   const { date: routeDateParam } = useParams<{ date: string }>();
@@ -1686,6 +1723,16 @@ export function DailyLog({ appData }: DailyLogProps) {
     selectedVisibleItems.length,
   ]);
 
+  const addBelowFocusedEntry = useCallback(() => {
+    if (dayLog == null || isLocked) return;
+    const insertIndex = getAddBelowIndexForSelection(
+      dayLog.entries,
+      entrySelection,
+    );
+    if (insertIndex == null) return;
+    openAddEntry(insertIndex);
+  }, [dayLog, entrySelection, isLocked, openAddEntry]);
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const isEditModeKey = isEditModeShortcut(e);
@@ -1737,8 +1784,10 @@ export function DailyLog({ appData }: DailyLogProps) {
           moveSelectedEntries(keyboardAction.direction);
         } else if (keyboardAction.type === "delete-selection") {
           requestDeleteSelectedEntries();
-        } else {
+        } else if (keyboardAction.type === "toggle-budgeted") {
           toggleBudgetedForSelectedEntries();
+        } else {
+          addBelowFocusedEntry();
         }
         return;
       }
@@ -1807,6 +1856,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     activeProfile,
+    addBelowFocusedEntry,
     addDialogOpen,
     copyMenuOpen,
     goToToday,
@@ -2533,6 +2583,14 @@ export function DailyLog({ appData }: DailyLogProps) {
           </div>
         </SortableContext>
       </DndContext>
+
+      {!isLocked &&
+        selectedVisibleItems.length > 0 &&
+        !addDialogOpen &&
+        !savePlanDialogOpen &&
+        pendingDelete == null && (
+          <EntryShortcutPanel selectedCount={selectedVisibleItems.length} />
+        )}
 
       <Dialog
         open={savePlanDialogOpen}

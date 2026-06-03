@@ -5,7 +5,8 @@ export type DailyLogKeyboardAction =
   | { type: "select"; direction: EntrySelectionDirection; extend: boolean }
   | { type: "move-selection"; direction: EntrySelectionDirection }
   | { type: "delete-selection" }
-  | { type: "toggle-budgeted" };
+  | { type: "toggle-budgeted" }
+  | { type: "add-below" };
 
 export interface EntrySelectionState {
   focusedId: LogEntryId | null;
@@ -221,22 +222,26 @@ export function getVisibleEntryIds(
 export function getDailyLogKeyboardAction(
   event: KeyboardShortcutLike,
 ): DailyLogKeyboardAction | null {
-  if (event.altKey || event.ctrlKey) return null;
+  if (event.ctrlKey) return null;
 
   const isArrowUp = event.key === "ArrowUp";
   const isArrowDown = event.key === "ArrowDown";
   if (isArrowUp || isArrowDown) {
     const direction = isArrowUp ? "up" : "down";
-    if (event.metaKey) {
+    if (event.altKey || event.metaKey) {
       return { type: "move-selection", direction };
     }
     return { type: "select", direction, extend: event.shiftKey === true };
   }
 
-  if (event.metaKey || event.shiftKey) return null;
+  if (event.metaKey || event.altKey || event.shiftKey) return null;
 
   if (event.key === "Backspace" || event.key === "Delete") {
     return { type: "delete-selection" };
+  }
+
+  if (event.key === "a" || event.key === "A" || event.code === "KeyA") {
+    return { type: "add-below" };
   }
 
   if (event.key === "m" || event.key === "M" || event.code === "KeyM") {
@@ -244,6 +249,15 @@ export function getDailyLogKeyboardAction(
   }
 
   return null;
+}
+
+export function getAddBelowIndexForSelection(
+  items: ReadonlyArray<DayLogItem>,
+  selection: EntrySelectionState,
+): number | undefined {
+  if (selection.focusedId == null) return undefined;
+  const focusedIndex = items.findIndex((item) => item.id === selection.focusedId);
+  return focusedIndex >= 0 ? focusedIndex + 1 : undefined;
 }
 
 export function getDeleteSelectionDescription(itemCount: number): string {
