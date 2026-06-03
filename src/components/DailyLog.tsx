@@ -630,6 +630,7 @@ interface FoodEntryCardProps {
   item: LogEntry;
   food: Food;
   isLocked: boolean;
+  editRequestNonce: number | null;
   onAddAbove: () => void;
   onAddBelow: () => void;
   onRemove: () => void;
@@ -637,13 +638,14 @@ interface FoodEntryCardProps {
   onToggleBudgeted: () => void;
 }
 
-function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
+function FoodEntryCard({ item, food, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
   const [editNotes, setEditNotes] = useState("");
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const editCardRef = useRef<HTMLDivElement>(null);
+  const lastHandledEditRequestNonce = useRef<number | null>(null);
 
   const isUnitBased = food.nutritionPerUnit != null;
   const entryNutrition = nutritionForEntry(item, food);
@@ -706,7 +708,7 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isEditing, requestCancel]);
 
-  function startEditing() {
+  const startEditing = useCallback(() => {
     if (isUnitBased) {
       setInputMode("units");
       setEditValue(String(item.units ?? 0));
@@ -719,7 +721,27 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
     }
     setEditNotes(item.notes ?? "");
     setIsEditing(true);
-  }
+  }, [
+    gramsPerUnit,
+    isUnitBased,
+    item.grams,
+    item.notes,
+    item.units,
+    unitCount,
+  ]);
+
+  useEffect(() => {
+    if (
+      editRequestNonce == null ||
+      isLocked ||
+      lastHandledEditRequestNonce.current === editRequestNonce
+    ) {
+      return;
+    }
+
+    lastHandledEditRequestNonce.current = editRequestNonce;
+    startEditing();
+  }, [editRequestNonce, isLocked, startEditing]);
 
   function commitEdit() {
     const parsed = parseFloat(editValue);
@@ -953,6 +975,7 @@ function FoodEntryCard({ item, food, isLocked, onAddAbove, onAddBelow, onRemove,
 interface QuickAddEntryCardProps {
   item: QuickAddEntry;
   isLocked: boolean;
+  editRequestNonce: number | null;
   onAddAbove: () => void;
   onAddBelow: () => void;
   onRemove: () => void;
@@ -960,7 +983,7 @@ interface QuickAddEntryCardProps {
   onToggleBudgeted: () => void;
 }
 
-function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
+function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCalories, setEditCalories] = useState("");
@@ -970,6 +993,7 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
   const [editNotes, setEditNotes] = useState("");
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const editCardRef = useRef<HTMLDivElement>(null);
+  const lastHandledEditRequestNonce = useRef<number | null>(null);
   const isBudgeted = item.isBudgeted === true;
   const isDirty =
     isEditing &&
@@ -1009,7 +1033,7 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isEditing, requestCancel]);
 
-  function startEditing() {
+  const startEditing = useCallback(() => {
     setEditName(item.name);
     setEditCalories(String(item.nutrition.calories));
     setEditProtein(String(item.nutrition.protein));
@@ -1017,7 +1041,27 @@ function QuickAddEntryCard({ item, isLocked, onAddAbove, onAddBelow, onRemove, o
     setEditFiber(String(item.nutrition.fiber));
     setEditNotes(item.notes ?? "");
     setIsEditing(true);
-  }
+  }, [
+    item.name,
+    item.notes,
+    item.nutrition.calories,
+    item.nutrition.fiber,
+    item.nutrition.protein,
+    item.nutrition.saturatedFat,
+  ]);
+
+  useEffect(() => {
+    if (
+      editRequestNonce == null ||
+      isLocked ||
+      lastHandledEditRequestNonce.current === editRequestNonce
+    ) {
+      return;
+    }
+
+    lastHandledEditRequestNonce.current = editRequestNonce;
+    startEditing();
+  }, [editRequestNonce, isLocked, startEditing]);
 
   function parseEditValue(value: string): number {
     const parsed = parseFloat(value);
@@ -1426,6 +1470,7 @@ interface EntryShortcutPanelProps {
 function EntryShortcutPanel({ selectedCount }: EntryShortcutPanelProps) {
   const rowLabel = selectedCount === 1 ? "row" : "rows";
   const shortcuts = [
+    { keys: "Enter", label: "Edit" },
     { keys: "A", label: "Add below" },
     { keys: "M", label: "Budget" },
     { keys: "Del", label: "Delete" },
@@ -1489,12 +1534,17 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
   const [entrySelection, setEntrySelection] =
     useState<EntrySelectionState>(emptyEntrySelection);
+  const [editEntryRequest, setEditEntryRequest] = useState<{
+    entryId: LogEntryId;
+    nonce: number;
+  } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [planFeedback, setPlanFeedback] = useState<string | null>(null);
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const planMenuRef = useRef<HTMLDivElement>(null);
   const entryRowRefs = useRef<Map<LogEntryId, HTMLDivElement>>(new Map());
+  const nextEditEntryRequestNonce = useRef(0);
   const hasUnsavedChanges = useHasUnsavedChanges();
 
   const touchSensor = useSensor(TouchSensor, {
@@ -1765,6 +1815,25 @@ export function DailyLog({ appData }: DailyLogProps) {
     openAddEntry(insertIndex);
   }, [dayLog, entrySelection, isLocked, openAddEntry]);
 
+  const requestEditSelectedEntry = useCallback(() => {
+    if (isLocked || selectedVisibleItems.length !== 1) return;
+
+    const selectedItem = selectedVisibleItems[0];
+    if (selectedItem.type === "separator") return;
+    if (
+      selectedItem.type !== "quick-add" &&
+      foodsMap.get(selectedItem.foodId) == null
+    ) {
+      return;
+    }
+
+    nextEditEntryRequestNonce.current += 1;
+    setEditEntryRequest({
+      entryId: selectedItem.id,
+      nonce: nextEditEntryRequestNonce.current,
+    });
+  }, [foodsMap, isLocked, selectedVisibleItems]);
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const isEditModeKey = isEditModeShortcut(e);
@@ -1816,6 +1885,8 @@ export function DailyLog({ appData }: DailyLogProps) {
           moveSelectedEntries(keyboardAction.direction);
         } else if (keyboardAction.type === "delete-selection") {
           requestDeleteSelectedEntries();
+        } else if (keyboardAction.type === "edit-selection") {
+          requestEditSelectedEntry();
         } else if (keyboardAction.type === "toggle-budgeted") {
           toggleBudgetedForSelectedEntries();
         } else {
@@ -1899,6 +1970,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     pendingDelete,
     planMenuOpen,
     requestDeleteSelectedEntries,
+    requestEditSelectedEntry,
     savePlanDialogOpen,
     savePlanDiscardOpen,
     selectedDate,
@@ -2471,6 +2543,11 @@ export function DailyLog({ appData }: DailyLogProps) {
                     <QuickAddEntryCard
                       item={item}
                       isLocked={isLocked}
+                      editRequestNonce={
+                        editEntryRequest?.entryId === item.id
+                          ? editEntryRequest.nonce
+                          : null
+                      }
                       onAddAbove={() => openAddEntry(index)}
                       onAddBelow={() => openAddEntry(index + 1)}
                       onRemove={() =>
@@ -2578,6 +2655,11 @@ export function DailyLog({ appData }: DailyLogProps) {
                     item={item}
                     food={food}
                     isLocked={isLocked}
+                    editRequestNonce={
+                      editEntryRequest?.entryId === item.id
+                        ? editEntryRequest.nonce
+                        : null
+                    }
                     onAddAbove={() => openAddEntry(index)}
                     onAddBelow={() => openAddEntry(index + 1)}
                     onRemove={() =>

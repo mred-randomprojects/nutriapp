@@ -287,12 +287,15 @@ describe("daily log keyboard shortcut classification", () => {
     );
   });
 
-  it("maps backspace/delete, a, and m to row operations", () => {
+  it("maps backspace/delete, enter, a, and m to row operations", () => {
     assert.deepEqual(getDailyLogKeyboardAction({ key: "Backspace" }), {
       type: "delete-selection",
     });
     assert.deepEqual(getDailyLogKeyboardAction({ key: "Delete" }), {
       type: "delete-selection",
+    });
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "Enter" }), {
+      type: "edit-selection",
     });
     assert.deepEqual(getDailyLogKeyboardAction({ key: "a" }), {
       type: "add-below",

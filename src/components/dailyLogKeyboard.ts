@@ -6,7 +6,8 @@ export type DailyLogKeyboardAction =
   | { type: "move-selection"; direction: EntrySelectionDirection }
   | { type: "delete-selection" }
   | { type: "toggle-budgeted" }
-  | { type: "add-below" };
+  | { type: "add-below" }
+  | { type: "edit-selection" };
 
 export interface EntrySelectionState {
   focusedId: LogEntryId | null;
@@ -238,6 +239,10 @@ export function getDailyLogKeyboardAction(
 
   if (event.key === "Backspace" || event.key === "Delete") {
     return { type: "delete-selection" };
+  }
+
+  if (event.key === "Enter") {
+    return { type: "edit-selection" };
   }
 
   if (event.key === "a" || event.key === "A" || event.code === "KeyA") {
