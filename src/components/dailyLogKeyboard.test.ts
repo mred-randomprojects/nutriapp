@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  canRepeatDailyLogKeyboardAction,
   emptyEntrySelection,
   getAddBelowIndexForSelection,
   getDailyLogKeyboardAction,
@@ -287,7 +288,10 @@ describe("daily log keyboard shortcut classification", () => {
     );
   });
 
-  it("maps backspace/delete, enter, a, and m to row operations", () => {
+  it("maps escape, backspace/delete, enter, a, and m to row operations", () => {
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "Escape" }), {
+      type: "clear-selection",
+    });
     assert.deepEqual(getDailyLogKeyboardAction({ key: "Backspace" }), {
       type: "delete-selection",
     });
@@ -323,6 +327,32 @@ describe("daily log keyboard shortcut classification", () => {
     assert.equal(
       getDailyLogKeyboardAction({ key: "m", altKey: true }),
       null,
+    );
+  });
+
+  it("marks only continuous movement actions as repeatable", () => {
+    assert.equal(
+      canRepeatDailyLogKeyboardAction({
+        type: "select",
+        direction: "down",
+        extend: false,
+      }),
+      true,
+    );
+    assert.equal(
+      canRepeatDailyLogKeyboardAction({
+        type: "move-selection",
+        direction: "up",
+      }),
+      true,
+    );
+    assert.equal(
+      canRepeatDailyLogKeyboardAction({ type: "clear-selection" }),
+      false,
+    );
+    assert.equal(
+      canRepeatDailyLogKeyboardAction({ type: "delete-selection" }),
+      false,
     );
   });
 });

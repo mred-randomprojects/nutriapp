@@ -7,7 +7,8 @@ export type DailyLogKeyboardAction =
   | { type: "delete-selection" }
   | { type: "toggle-budgeted" }
   | { type: "add-below" }
-  | { type: "edit-selection" };
+  | { type: "edit-selection" }
+  | { type: "clear-selection" };
 
 export interface EntrySelectionState {
   focusedId: LogEntryId | null;
@@ -237,6 +238,10 @@ export function getDailyLogKeyboardAction(
 
   if (event.metaKey || event.altKey || event.shiftKey) return null;
 
+  if (event.key === "Escape") {
+    return { type: "clear-selection" };
+  }
+
   if (event.key === "Backspace" || event.key === "Delete") {
     return { type: "delete-selection" };
   }
@@ -254,6 +259,12 @@ export function getDailyLogKeyboardAction(
   }
 
   return null;
+}
+
+export function canRepeatDailyLogKeyboardAction(
+  action: DailyLogKeyboardAction,
+): boolean {
+  return action.type === "select" || action.type === "move-selection";
 }
 
 export function getAddBelowIndexForSelection(

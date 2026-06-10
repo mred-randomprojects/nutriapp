@@ -62,6 +62,7 @@ import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel } from "../formEscapeCancel";
 import {
+  canRepeatDailyLogKeyboardAction,
   emptyEntrySelection,
   getAddBelowIndexForSelection,
   getDailyLogKeyboardAction,
@@ -1856,6 +1857,7 @@ export function DailyLog({ appData }: DailyLogProps) {
 
       const keyboardAction = getDailyLogKeyboardAction(e);
       if (keyboardAction != null) {
+        const isClearSelectionAction = keyboardAction.type === "clear-selection";
         if (
           activeProfile == null ||
           addDialogOpen ||
@@ -1864,13 +1866,15 @@ export function DailyLog({ appData }: DailyLogProps) {
           pendingDelete != null ||
           copyMenuOpen ||
           planMenuOpen ||
-          isInteractiveShortcutTarget(e.target)
+          (!isClearSelectionAction && isInteractiveShortcutTarget(e.target))
         ) {
           return;
         }
 
         e.preventDefault();
-        if (e.repeat) return;
+        if (e.repeat && !canRepeatDailyLogKeyboardAction(keyboardAction)) {
+          return;
+        }
 
         if (keyboardAction.type === "select") {
           setEntrySelection((prev) =>
@@ -1887,6 +1891,8 @@ export function DailyLog({ appData }: DailyLogProps) {
           requestDeleteSelectedEntries();
         } else if (keyboardAction.type === "edit-selection") {
           requestEditSelectedEntry();
+        } else if (keyboardAction.type === "clear-selection") {
+          setEntrySelection(emptyEntrySelection);
         } else if (keyboardAction.type === "toggle-budgeted") {
           toggleBudgetedForSelectedEntries();
         } else {
