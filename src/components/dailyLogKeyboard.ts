@@ -8,7 +8,8 @@ export type DailyLogKeyboardAction =
   | { type: "toggle-budgeted" }
   | { type: "add-below" }
   | { type: "edit-selection" }
-  | { type: "clear-selection" };
+  | { type: "clear-selection" }
+  | { type: "toggle-shortcuts" };
 
 export interface EntrySelectionState {
   focusedId: LogEntryId | null;
@@ -230,10 +231,17 @@ export function getDailyLogKeyboardAction(
   const isArrowDown = event.key === "ArrowDown";
   if (isArrowUp || isArrowDown) {
     const direction = isArrowUp ? "up" : "down";
-    if (event.altKey || event.metaKey) {
+    if (event.altKey && !event.metaKey) {
       return { type: "move-selection", direction };
     }
+    if (event.metaKey) return null;
     return { type: "select", direction, extend: event.shiftKey === true };
+  }
+
+  const isShortcutPanelShortcut =
+    event.key === "?" || (event.code === "Slash" && event.shiftKey === true);
+  if (isShortcutPanelShortcut && !event.metaKey && !event.altKey) {
+    return { type: "toggle-shortcuts" };
   }
 
   if (event.metaKey || event.altKey || event.shiftKey) return null;
@@ -254,7 +262,14 @@ export function getDailyLogKeyboardAction(
     return { type: "add-below" };
   }
 
-  if (event.key === "m" || event.key === "M" || event.code === "KeyM") {
+  if (
+    event.key === "m" ||
+    event.key === "M" ||
+    event.code === "KeyM" ||
+    event.key === "b" ||
+    event.key === "B" ||
+    event.code === "KeyB"
+  ) {
     return { type: "toggle-budgeted" };
   }
 

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "tsc -p tsconfig.test.json && node --test .tmp/test-dist/src/components/*.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test .tmp/test-dist/src/*.test.js .tmp/test-dist/src/components/*.test.js",
     "preview": "vite preview",
     "add-food": "node scripts/add-food.mjs"
   },

@@ -16,6 +16,7 @@ import { Label } from "./ui/label";
 import { normalizeForSearch } from "../search";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useUnsavedChanges } from "../unsavedChanges";
+import { isFocusFirstSearchOptionKey } from "../searchOptionKeyboard";
 
 type InputMode = "grams" | "units";
 type AddMode = "search" | "quick-add" | "section";
@@ -79,6 +80,7 @@ export function AddEntryDialog({
   const [isBudgeted, setIsBudgeted] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const firstFoodOptionRef = useRef<HTMLButtonElement>(null);
   const quickNameInputRef = useRef<HTMLInputElement>(null);
   const sectionLabelInputRef = useRef<HTMLInputElement>(null);
 
@@ -338,6 +340,15 @@ export function AddEntryDialog({
     }
   }
 
+  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (!isFocusFirstSearchOptionKey(event) || filteredFoods.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    firstFoodOptionRef.current?.focus();
+  }
+
   const statusToggle = (
     <button
       type="button"
@@ -591,12 +602,14 @@ export function AddEntryDialog({
               placeholder="Search foods..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               autoFocus
             />
             <div className="max-h-60 min-w-0 space-y-1 overflow-y-auto">
-              {filteredFoods.map((food) => (
+              {filteredFoods.map((food, index) => (
                 <button
                   key={food.id}
+                  ref={index === 0 ? firstFoodOptionRef : undefined}
                   className="flex w-full min-w-0 items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-accent"
                   onClick={() => selectFood(food.id)}
                 >

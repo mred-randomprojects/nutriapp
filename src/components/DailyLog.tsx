@@ -61,6 +61,7 @@ import type { PendingAction } from "./ConfirmDialog";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel } from "../formEscapeCancel";
+import { isFocusFirstSearchOptionKey } from "../searchOptionKeyboard";
 import {
   canRepeatDailyLogKeyboardAction,
   emptyEntrySelection,
@@ -1473,10 +1474,11 @@ function EntryShortcutPanel({ selectedCount }: EntryShortcutPanelProps) {
   const shortcuts = [
     { keys: "Enter", label: "Edit" },
     { keys: "A", label: "Add below" },
-    { keys: "M", label: "Budget" },
+    { keys: "M/B", label: "Budget" },
     { keys: "Del", label: "Delete" },
     { keys: "Option ↑/↓", label: "Move" },
     { keys: "Shift ↑/↓", label: "Extend" },
+    { keys: "?", label: "Shortcuts" },
   ];
 
   return (
@@ -1539,11 +1541,13 @@ export function DailyLog({ appData }: DailyLogProps) {
     entryId: LogEntryId;
     nonce: number;
   } | null>(null);
+  const [shortcutPanelHidden, setShortcutPanelHidden] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [planFeedback, setPlanFeedback] = useState<string | null>(null);
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const planMenuRef = useRef<HTMLDivElement>(null);
+  const firstPlanOptionRef = useRef<HTMLButtonElement>(null);
   const entryRowRefs = useRef<Map<LogEntryId, HTMLDivElement>>(new Map());
   const nextEditEntryRequestNonce = useRef(0);
   const hasUnsavedChanges = useHasUnsavedChanges();
@@ -1694,6 +1698,12 @@ export function DailyLog({ appData }: DailyLogProps) {
     [selectedEntryIds],
   );
 
+  useEffect(() => {
+    if (selectedVisibleItems.length === 0) {
+      setShortcutPanelHidden(false);
+    }
+  }, [selectedVisibleItems.length]);
+
   const selectVisibleEntry = useCallback(
     (entryId: LogEntryId) => {
       setEntrySelection(selectEntry(entryId, visibleEntryIds));
@@ -1835,6 +1845,11 @@ export function DailyLog({ appData }: DailyLogProps) {
     });
   }, [foodsMap, isLocked, selectedVisibleItems]);
 
+  const toggleShortcutPanel = useCallback(() => {
+    if (selectedVisibleItems.length === 0) return;
+    setShortcutPanelHidden((prev) => !prev);
+  }, [selectedVisibleItems.length]);
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const isEditModeKey = isEditModeShortcut(e);
@@ -1895,6 +1910,8 @@ export function DailyLog({ appData }: DailyLogProps) {
           setEntrySelection(emptyEntrySelection);
         } else if (keyboardAction.type === "toggle-budgeted") {
           toggleBudgetedForSelectedEntries();
+        } else if (keyboardAction.type === "toggle-shortcuts") {
+          toggleShortcutPanel();
         } else {
           addBelowFocusedEntry();
         }
@@ -1982,6 +1999,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     selectedDate,
     moveSelectedEntries,
     toggleBudgetedForSelectedEntries,
+    toggleShortcutPanel,
     toggleEditMode,
     editModeDiagnostics,
     visibleEntryIds,
@@ -2166,6 +2184,20 @@ export function DailyLog({ appData }: DailyLogProps) {
     applyMealPlanToDay,
     dateStr,
   ]);
+
+  function handlePlanSearchKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>,
+  ) {
+    if (
+      !isFocusFirstSearchOptionKey(event) ||
+      filteredMealPlans.length === 0
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    firstPlanOptionRef.current?.focus();
+  }
 
   const sectionSubtotals = useMemo(() => {
     if (dayLog == null) return new Map<LogEntryId, NutritionValues>();
@@ -2365,13 +2397,15 @@ export function DailyLog({ appData }: DailyLogProps) {
                 <Input
                   value={planSearch}
                   onChange={(e) => setPlanSearch(e.target.value)}
+                  onKeyDown={handlePlanSearchKeyDown}
                   placeholder="Search plans..."
                   className="mb-2 h-8 text-sm"
                 />
                 <div className="max-h-56 space-y-1 overflow-y-auto">
-                  {filteredMealPlans.map((plan) => (
+                  {filteredMealPlans.map((plan, index) => (
                     <button
                       key={plan.id}
+                      ref={index === 0 ? firstPlanOptionRef : undefined}
                       className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent"
                       onClick={() => applyPlan(plan.id, plan.name)}
                     >
@@ -2710,6 +2744,7 @@ export function DailyLog({ appData }: DailyLogProps) {
 
       {!isLocked &&
         selectedVisibleItems.length > 0 &&
+        !shortcutPanelHidden &&
         !addDialogOpen &&
         !savePlanDialogOpen &&
         pendingDelete == null && (

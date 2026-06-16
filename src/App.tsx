@@ -7,6 +7,7 @@ import { NavBar } from "./components/NavBar";
 import { FoodList } from "./components/FoodList";
 import { FoodForm } from "./components/FoodForm";
 import { DailyLog } from "./components/DailyLog";
+import { PlansPage } from "./components/PlansPage";
 import { ProfileManager } from "./components/ProfileManager";
 import { TrendPage } from "./components/TrendPage";
 import { StorageUsage } from "./components/StorageUsage";
@@ -19,9 +20,10 @@ import { submitClosestFormFromShortcut } from "./formSubmitShortcut";
 const NAV_SHORTCUTS = {
   "1": "/foods",
   "2": "/log",
-  "3": "/trend",
-  "4": "/profiles",
-  "5": "/account",
+  "3": "/plans",
+  "4": "/trend",
+  "5": "/profiles",
+  "6": "/account",
 } as const;
 
 function todayLogPath(): string {
@@ -133,6 +135,10 @@ function AuthenticatedApp() {
         <Route
           path="/log/:date"
           element={<DailyLog appData={appData} />}
+        />
+        <Route
+          path="/plans"
+          element={<PlansPage appData={appData} />}
         />
         <Route
           path="/trend"

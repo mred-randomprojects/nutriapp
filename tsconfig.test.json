@@ -16,6 +16,8 @@
   "include": [
     "src/components/dailyLogKeyboard.ts",
     "src/components/dailyLogKeyboard.test.ts",
+    "src/searchOptionKeyboard.ts",
+    "src/searchOptionKeyboard.test.ts",
     "src/types.ts"
   ]
 }

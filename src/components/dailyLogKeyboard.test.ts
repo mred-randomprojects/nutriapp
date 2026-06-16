@@ -278,20 +278,26 @@ describe("daily log keyboard shortcut classification", () => {
     );
   });
 
-  it("keeps cmd+arrow keys as a move-selection fallback", () => {
-    assert.deepEqual(
+  it("does not intercept cmd+arrow keys", () => {
+    assert.equal(
       getDailyLogKeyboardAction({ key: "ArrowDown", metaKey: true }),
-      {
-        type: "move-selection",
-        direction: "down",
-      },
+      null,
     );
   });
 
-  it("maps escape, backspace/delete, enter, a, and m to row operations", () => {
+  it("maps escape, backspace/delete, enter, a, m/b, and ? to row operations", () => {
     assert.deepEqual(getDailyLogKeyboardAction({ key: "Escape" }), {
       type: "clear-selection",
     });
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "?" }), {
+      type: "toggle-shortcuts",
+    });
+    assert.deepEqual(
+      getDailyLogKeyboardAction({ key: "/", code: "Slash", shiftKey: true }),
+      {
+        type: "toggle-shortcuts",
+      },
+    );
     assert.deepEqual(getDailyLogKeyboardAction({ key: "Backspace" }), {
       type: "delete-selection",
     });
@@ -311,6 +317,12 @@ describe("daily log keyboard shortcut classification", () => {
       type: "toggle-budgeted",
     });
     assert.deepEqual(getDailyLogKeyboardAction({ key: "M" }), {
+      type: "toggle-budgeted",
+    });
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "b" }), {
+      type: "toggle-budgeted",
+    });
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "B" }), {
       type: "toggle-budgeted",
     });
   });
@@ -348,6 +360,10 @@ describe("daily log keyboard shortcut classification", () => {
     );
     assert.equal(
       canRepeatDailyLogKeyboardAction({ type: "clear-selection" }),
+      false,
+    );
+    assert.equal(
+      canRepeatDailyLogKeyboardAction({ type: "toggle-shortcuts" }),
       false,
     );
     assert.equal(

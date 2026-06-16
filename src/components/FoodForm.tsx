@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { flushSync } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
@@ -17,6 +18,7 @@ import { Label } from "./ui/label";
 import { normalizeForSearch } from "../search";
 import { useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel } from "../formEscapeCancel";
+import { isFocusFirstSearchOptionKey } from "../searchOptionKeyboard";
 
 interface FoodFormProps {
   appData: AppDataHandle;
@@ -268,6 +270,7 @@ export function FoodForm({ appData }: FoodFormProps) {
   const [showIngredientPicker, setShowIngredientPicker] = useState(false);
   const [ingredientSearch, setIngredientSearch] = useState("");
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const firstIngredientOptionRef = useRef<HTMLButtonElement>(null);
 
   const baseDraft = useMemo<FoodFormDraft>(
     () => ({
@@ -434,6 +437,20 @@ export function FoodForm({ appData }: FoodFormProps) {
     ]);
     setShowIngredientPicker(false);
     setIngredientSearch("");
+  }
+
+  function handleIngredientSearchKeyDown(
+    event: ReactKeyboardEvent<HTMLInputElement>,
+  ) {
+    if (
+      !isFocusFirstSearchOptionKey(event) ||
+      availableFoods.length === 0
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    firstIngredientOptionRef.current?.focus();
   }
 
   function handleSubmit() {
@@ -667,13 +684,15 @@ export function FoodForm({ appData }: FoodFormProps) {
                         placeholder="Search foods to add..."
                         value={ingredientSearch}
                         onChange={(e) => setIngredientSearch(e.target.value)}
+                        onKeyDown={handleIngredientSearchKeyDown}
                         autoFocus
                       />
                       <div className="max-h-40 space-y-1 overflow-y-auto">
-                        {availableFoods.map((food) => (
+                        {availableFoods.map((food, index) => (
                           <button
                             type="button"
                             key={food.id}
+                            ref={index === 0 ? firstIngredientOptionRef : undefined}
                             className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm transition-colors hover:bg-accent"
                             onClick={() => handleAddIngredient(food)}
                           >

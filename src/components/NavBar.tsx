@@ -1,13 +1,21 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { UtensilsCrossed, BookOpen, TrendingUp, Users, CircleUserRound } from "lucide-react";
+import {
+  UtensilsCrossed,
+  BookOpen,
+  CalendarDays,
+  TrendingUp,
+  Users,
+  CircleUserRound,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { path: "/foods", label: "Foods", shortcut: "1", icon: UtensilsCrossed },
   { path: "/log", label: "Log", shortcut: "2", icon: BookOpen },
-  { path: "/trend", label: "Trend", shortcut: "3", icon: TrendingUp },
-  { path: "/profiles", label: "Profiles", shortcut: "4", icon: Users },
-  { path: "/account", label: "Account", shortcut: "5", icon: CircleUserRound },
+  { path: "/plans", label: "Plans", shortcut: "3", icon: CalendarDays },
+  { path: "/trend", label: "Trend", shortcut: "4", icon: TrendingUp },
+  { path: "/profiles", label: "Profiles", shortcut: "5", icon: Users },
+  { path: "/account", label: "Account", shortcut: "6", icon: CircleUserRound },
 ] as const;
 
 export function NavBar() {

@@ -721,6 +721,61 @@ export function useAppData() {
     [data, persist],
   );
 
+  const renameMealPlan = useCallback(
+    (profileId: ProfileId, planId: MealPlanId, name: string) => {
+      const trimmedName = name.trim();
+      if (trimmedName.length === 0) return false;
+
+      const profile = data.profiles.find((p) => p.id === profileId);
+      const existingPlans = profile?.mealPlans ?? [];
+      const currentPlan = existingPlans.find((plan) => plan.id === planId);
+      if (currentPlan == null) return false;
+
+      const duplicatePlan = existingPlans.some(
+        (plan) =>
+          plan.id !== planId &&
+          plan.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+      );
+      if (duplicatePlan) return false;
+
+      if (currentPlan.name === trimmedName) return true;
+
+      const now = new Date().toISOString();
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          return {
+            ...p,
+            mealPlans: (p.mealPlans ?? []).map((plan) =>
+              plan.id === planId
+                ? { ...plan, name: trimmedName, updatedAt: now }
+                : plan,
+            ),
+          };
+        }),
+      });
+      return true;
+    },
+    [data, persist],
+  );
+
+  const deleteMealPlan = useCallback(
+    (profileId: ProfileId, planId: MealPlanId) => {
+      persist({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          return {
+            ...p,
+            mealPlans: (p.mealPlans ?? []).filter((plan) => plan.id !== planId),
+          };
+        }),
+      });
+    },
+    [data, persist],
+  );
+
   const applyMealPlanToDay = useCallback(
     (profileId: ProfileId, planId: MealPlanId, date: string) => {
       persist({
@@ -775,6 +830,8 @@ export function useAppData() {
     updateLogEntry,
     updateQuickAddEntry,
     saveMealPlanFromDay,
+    renameMealPlan,
+    deleteMealPlan,
     applyMealPlanToDay,
     updateDayLogWeight,
     setWeightLossPlan,
