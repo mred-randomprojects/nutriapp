@@ -291,6 +291,14 @@ export function getAddBelowIndexForSelection(
   return focusedIndex >= 0 ? focusedIndex + 1 : undefined;
 }
 
+export function getKeyboardAddEntryInsertIndex(
+  items: ReadonlyArray<DayLogItem>,
+  selection: EntrySelectionState,
+): number | undefined {
+  if (selection.selectedIds.length === 0) return undefined;
+  return getAddBelowIndexForSelection(items, selection);
+}
+
 export function getDeleteSelectionDescription(itemCount: number): string {
   const safeCount = Math.max(0, Math.floor(itemCount));
   const itemLabel = safeCount === 1 ? "item" : "items";

@@ -65,9 +65,9 @@ import { isFocusFirstSearchOptionKey } from "../searchOptionKeyboard";
 import {
   canRepeatDailyLogKeyboardAction,
   emptyEntrySelection,
-  getAddBelowIndexForSelection,
   getDailyLogKeyboardAction,
   getDeleteSelectionDescription,
+  getKeyboardAddEntryInsertIndex,
   getVisibleEntryIds,
   moveEntrySelection,
   moveSelectedItems,
@@ -1817,12 +1817,11 @@ export function DailyLog({ appData }: DailyLogProps) {
   ]);
 
   const addBelowFocusedEntry = useCallback(() => {
-    if (dayLog == null || isLocked) return;
-    const insertIndex = getAddBelowIndexForSelection(
-      dayLog.entries,
-      entrySelection,
-    );
-    if (insertIndex == null) return;
+    if (isLocked) return;
+    const insertIndex =
+      dayLog == null
+        ? undefined
+        : getKeyboardAddEntryInsertIndex(dayLog.entries, entrySelection);
     openAddEntry(insertIndex);
   }, [dayLog, entrySelection, isLocked, openAddEntry]);
 

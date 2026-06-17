@@ -6,6 +6,7 @@ import {
   getAddBelowIndexForSelection,
   getDailyLogKeyboardAction,
   getDeleteSelectionDescription,
+  getKeyboardAddEntryInsertIndex,
   getVisibleEntryIds,
   moveEntrySelection,
   moveSelectedItems,
@@ -248,6 +249,26 @@ describe("daily log keyboard list operations", () => {
     };
 
     assert.equal(getAddBelowIndexForSelection(items, selection), undefined);
+  });
+
+  it("uses no insert index for add shortcut when nothing is selected", () => {
+    const items = [entry("a"), entry("b"), entry("c")];
+
+    assert.equal(
+      getKeyboardAddEntryInsertIndex(items, emptyEntrySelection),
+      undefined,
+    );
+  });
+
+  it("uses the focused row as the add shortcut insert anchor", () => {
+    const items = [entry("a"), entry("b"), entry("c")];
+    const selection = {
+      focusedId: id("b"),
+      anchorId: id("b"),
+      selectedIds: [id("b")],
+    };
+
+    assert.equal(getKeyboardAddEntryInsertIndex(items, selection), 2);
   });
 });
 
