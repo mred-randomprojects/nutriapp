@@ -280,6 +280,22 @@ export function AddEntryDialog({
     setAmount("");
   }
 
+  function handleEscapeKeyDown(event: KeyboardEvent) {
+    // In the food-detail step, if the user has not entered any data yet,
+    // Escape should go back to the food picker instead of prompting to
+    // discard the draft.
+    if (
+      addMode === "search" &&
+      selectedFoodId != null &&
+      amount.trim().length === 0 &&
+      notes.trim().length === 0 &&
+      !isBudgeted
+    ) {
+      event.preventDefault();
+      setSelectedFoodId(null);
+    }
+  }
+
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
       onOpenChange(true);
@@ -379,6 +395,7 @@ export function AddEntryDialog({
         <DialogContent
           className="max-h-[85dvh] overflow-x-hidden overflow-y-auto"
           onKeyDownCapture={handleDialogKeyDown}
+          onEscapeKeyDown={handleEscapeKeyDown}
         >
           <DialogHeader>
             <DialogTitle>Add</DialogTitle>
