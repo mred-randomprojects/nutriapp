@@ -60,7 +60,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
-import { handleFormEscapeCancel } from "../formEscapeCancel";
+import { handleFormEscapeCancel, isFormEscapeCancel } from "../formEscapeCancel";
 import { useOptionListKeyboard } from "../useOptionListKeyboard";
 import {
   canRepeatDailyLogKeyboardAction,
@@ -2015,8 +2015,20 @@ export function DailyLog({ appData }: DailyLogProps) {
       }
     }
 
+    // Escape backs out of the menu (keyboard equivalent of clicking away).
+    function handleEscape(event: KeyboardEvent) {
+      if (isFormEscapeCancel(event)) {
+        event.stopPropagation();
+        setCopyMenuOpen(false);
+      }
+    }
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, [copyMenuOpen]);
 
   useEffect(() => {
@@ -2031,8 +2043,19 @@ export function DailyLog({ appData }: DailyLogProps) {
       }
     }
 
+    function handleEscape(event: KeyboardEvent) {
+      if (isFormEscapeCancel(event)) {
+        event.stopPropagation();
+        setPlanMenuOpen(false);
+      }
+    }
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, [planMenuOpen]);
 
   useEffect(() => {
