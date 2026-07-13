@@ -39,7 +39,7 @@ re-implementing key handling:
 
 Global
 - `1`–`6` — switch tabs: Foods / Log / Plans / Trend / Profiles / Account
-- `Cmd/Ctrl+K` — open the History (undo) panel
+- `Cmd/Ctrl+K` — open the command palette (navigate + actions + open history)
 - `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` — undo / redo
 
 Daily log

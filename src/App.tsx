@@ -17,6 +17,8 @@ import { Loader2 } from "lucide-react";
 import { UnsavedChangesProvider } from "./UnsavedChangesProvider";
 import { submitClosestFormFromShortcut } from "./formSubmitShortcut";
 import { HistoryPanel } from "./components/HistoryPanel";
+import { CommandPalette } from "./components/CommandPalette";
+import type { Command } from "./components/CommandPalette";
 
 const NAV_SHORTCUTS = {
   "1": "/foods",
@@ -64,7 +66,22 @@ function AuthenticatedApp() {
   const navigate = useNavigate();
   const location = useLocation();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const { undo, redo, canUndo, canRedo } = appData;
+
+  const commands: Command[] = [
+    { id: "nav-foods", title: "Go to Foods", section: "Go to", keywords: "food list", hint: "1", run: () => navigate("/foods") },
+    { id: "nav-log", title: "Go to Log", section: "Go to", keywords: "daily log today", hint: "2", run: () => navigate(todayLogPath()) },
+    { id: "nav-plans", title: "Go to Plans", section: "Go to", keywords: "meal plans", hint: "3", run: () => navigate("/plans") },
+    { id: "nav-trend", title: "Go to Trend", section: "Go to", keywords: "weight chart graph", hint: "4", run: () => navigate("/trend") },
+    { id: "nav-profiles", title: "Go to Profiles", section: "Go to", keywords: "books switch", hint: "5", run: () => navigate("/profiles") },
+    { id: "nav-account", title: "Go to Account", section: "Go to", keywords: "settings sign out", hint: "6", run: () => navigate("/account") },
+    { id: "act-today", title: "Jump to today", section: "Actions", keywords: "log date now", run: () => navigate(todayLogPath()) },
+    { id: "act-add-food", title: "Add a new food", section: "Actions", keywords: "create new food", run: () => navigate("/foods/new") },
+    { id: "act-history", title: "Open change history", section: "Actions", keywords: "undo timeline redo", run: () => setHistoryOpen(true) },
+    ...(canUndo ? [{ id: "act-undo", title: "Undo last change", section: "Actions", keywords: "revert", hint: "⌘Z", run: undo }] : []),
+    ...(canRedo ? [{ id: "act-redo", title: "Redo change", section: "Actions", keywords: "", hint: "⇧⌘Z", run: redo }] : []),
+  ];
 
   useEffect(() => {
     window.addEventListener("keydown", submitClosestFormFromShortcut);
@@ -80,10 +97,10 @@ function AuthenticatedApp() {
 
       const key = event.key.toLowerCase();
 
-      // Cmd/Ctrl+K opens the history panel from anywhere.
+      // Cmd/Ctrl+K opens the command palette from anywhere.
       if (key === "k" && !event.shiftKey && !event.altKey) {
         event.preventDefault();
-        setHistoryOpen((prev) => !prev);
+        setPaletteOpen((prev) => !prev);
         return;
       }
 
@@ -213,6 +230,12 @@ function AuthenticatedApp() {
       <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">
         <StorageUsage />
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        commands={commands}
+      />
 
       <HistoryPanel
         open={historyOpen}
