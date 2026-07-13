@@ -4,7 +4,8 @@ import type {
   DeletedDayLogEntry,
   LogEntryId,
   ProfileId,
-} from "./types";
+} from "./types.js";
+import { isTombstoneActive, mergeTombstonePair } from "./tombstones.js";
 
 export function deletedDayLogEntryKey(
   profileId: ProfileId,
@@ -18,9 +19,11 @@ export function buildDeletedDayLogEntrySet(
   deletedEntries: ReadonlyArray<DeletedDayLogEntry>,
 ): Set<string> {
   return new Set(
-    deletedEntries.map((entry) =>
-      deletedDayLogEntryKey(entry.profileId, entry.date, entry.entryId),
-    ),
+    deletedEntries
+      .filter(isTombstoneActive)
+      .map((entry) =>
+        deletedDayLogEntryKey(entry.profileId, entry.date, entry.entryId),
+      ),
   );
 }
 
@@ -40,9 +43,10 @@ export function mergeDeletedDayLogEntries(
       deletedEntry.entryId,
     );
     const existing = byKey.get(key);
-    if (existing == null || deletedEntry.deletedAt > existing.deletedAt) {
-      byKey.set(key, deletedEntry);
-    }
+    byKey.set(
+      key,
+      existing == null ? deletedEntry : mergeTombstonePair(existing, deletedEntry),
+    );
   }
 
   return [...byKey.values()];

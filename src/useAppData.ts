@@ -26,6 +26,7 @@ import { generateId } from "./types";
 import { loadAppData, saveAppData, StorageQuotaError } from "./storage";
 import { loadCloudData, saveCloudData } from "./cloudStorage";
 import { mergeAppData } from "./mergeAppData";
+import { reconcileTombstonesForRestore } from "./tombstones";
 import { useAuth } from "./auth";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
@@ -34,6 +35,21 @@ import {
   upsertDeletedFood,
   upsertDeletedProfile,
 } from "./deletedAppEntities";
+
+/** Maximum number of undoable actions kept in the session history. */
+const MAX_HISTORY = 50;
+
+/**
+ * One undoable action. `before`/`after` are full immutable AppData snapshots;
+ * thanks to the immutable update style they structurally share everything the
+ * action did not touch, so keeping many frames is cheap.
+ */
+export interface HistoryFrame {
+  label: string;
+  at: string;
+  before: AppData;
+  after: AppData;
+}
 
 function clonePlanEntries(entries: ReadonlyArray<DayLogItem>): DayLogItem[] {
   return entries.map((entry) => ({ ...entry }));
@@ -127,6 +143,8 @@ function insertDayLogItem(
 export function useAppData() {
   const { user } = useAuth();
   const [data, setData] = useState<AppData>(loadAppData);
+  const [undoStack, setUndoStack] = useState<HistoryFrame[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryFrame[]>([]);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [cloudSynced, setCloudSynced] = useState(false);
   const cloudSaveInFlight = useRef(false);
@@ -170,6 +188,11 @@ export function useAppData() {
           console.log("[cloud-sync] cloud data found, merging with local");
           const merged = mergeAppData(local, cloudData);
           setData(merged);
+          // Any undo frames captured before this point reference pre-merge
+          // snapshots; undoing to one would drop the just-merged cloud data.
+          // Drop the session history so undo can never clobber the merge.
+          setUndoStack([]);
+          setRedoStack([]);
           saveAppData(merged);
           saveCloudData(user.uid, merged)
             .then(() => console.log("[cloud-sync] initial merge pushed to cloud"))
@@ -219,6 +242,69 @@ export function useAppData() {
     [user, flushCloudSave],
   );
 
+  /**
+   * Applies a user-initiated mutation and records it as an undoable action.
+   * All mutations funnel through here so the history captures everything and
+   * undo/redo restore exact prior snapshots. Starting a new action clears the
+   * redo stack, matching the standard linear-history model.
+   */
+  const commit = useCallback(
+    (next: AppData, label: string) => {
+      const frame: HistoryFrame = {
+        label,
+        at: new Date().toISOString(),
+        before: data,
+        after: next,
+      };
+      setUndoStack((prev) => [...prev, frame].slice(-MAX_HISTORY));
+      setRedoStack([]);
+      persist(next);
+    },
+    [data, persist],
+  );
+
+  const undo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const frame = undoStack[undoStack.length - 1];
+    const now = new Date().toISOString();
+    const restored = reconcileTombstonesForRestore(frame.before, data, now);
+    setUndoStack(undoStack.slice(0, -1));
+    setRedoStack((prev) => [...prev, frame].slice(-MAX_HISTORY));
+    persist(restored);
+  }, [undoStack, data, persist]);
+
+  const redo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const frame = redoStack[redoStack.length - 1];
+    const now = new Date().toISOString();
+    const restored = reconcileTombstonesForRestore(frame.after, data, now);
+    setRedoStack(redoStack.slice(0, -1));
+    setUndoStack((prev) => [...prev, frame].slice(-MAX_HISTORY));
+    persist(restored);
+  }, [redoStack, data, persist]);
+
+  /**
+   * Undoes every action from the top of the stack down to and including the
+   * frame at `index` in a single step. The undone frames are pushed onto the
+   * redo stack newest-first so a subsequent redo replays them oldest-first,
+   * one action at a time.
+   */
+  const undoTo = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= undoStack.length) return;
+      const target = undoStack[index];
+      const now = new Date().toISOString();
+      const restored = reconcileTombstonesForRestore(target.before, data, now);
+      const undone = undoStack.slice(index);
+      setUndoStack(undoStack.slice(0, index));
+      setRedoStack((prev) =>
+        [...prev, ...undone.slice().reverse()].slice(-MAX_HISTORY),
+      );
+      persist(restored);
+    },
+    [undoStack, data, persist],
+  );
+
   const rawFoods = useMemo(
     () => [...builtinFoods, ...data.foods],
     [data.foods],
@@ -251,31 +337,39 @@ export function useAppData() {
         id: generateId() as FoodId,
         createdAt: new Date().toISOString(),
       };
-      persist({ ...data, foods: [...data.foods, newFood] });
+      commit(
+        { ...data, foods: [...data.foods, newFood] },
+        `Add food “${newFood.name}”`,
+      );
       return newFood;
     },
-    [data, persist],
+    [data, commit],
   );
 
   const updateFood = useCallback(
     (foodId: FoodId, updates: Partial<Omit<Food, "id" | "createdAt">>) => {
-      persist({
-        ...data,
-        foods: data.foods.map((f) =>
-          f.id === foodId ? { ...f, ...updates } : f,
-        ),
-      });
+      const name = data.foods.find((f) => f.id === foodId)?.name;
+      commit(
+        {
+          ...data,
+          foods: data.foods.map((f) =>
+            f.id === foodId ? { ...f, ...updates } : f,
+          ),
+        },
+        name != null ? `Edit food “${name}”` : "Edit food",
+      );
     },
-    [data, persist],
+    [data, commit],
   );
 
   const deleteFood = useCallback(
     (foodId: FoodId) => {
+      const name = data.foods.find((f) => f.id === foodId)?.name;
       const deletedFood: DeletedFood = {
         foodId,
         deletedAt: new Date().toISOString(),
       };
-      persist({
+      commit({
         ...data,
         deletedFoods: upsertDeletedFood(data.deletedFoods ?? [], deletedFood),
         foods: data.foods
@@ -305,9 +399,9 @@ export function useAppData() {
             ),
           })),
         })),
-      });
+      }, name != null ? `Delete food “${name}”` : "Delete food");
     },
-    [data, persist],
+    [data, commit],
   );
 
   // --- Profile CRUD ---
@@ -332,17 +426,21 @@ export function useAppData() {
         activeProfileId:
           data.activeProfileId ?? newProfile.id,
       };
-      persist(next);
+      commit(next, `Add profile “${name}”`);
       return newProfile;
     },
-    [data, persist],
+    [data, commit],
   );
 
   const setActiveProfile = useCallback(
     (profileId: ProfileId) => {
-      persist({ ...data, activeProfileId: profileId });
+      const name = data.profiles.find((p) => p.id === profileId)?.name;
+      commit(
+        { ...data, activeProfileId: profileId },
+        name != null ? `Switch to “${name}”` : "Switch profile",
+      );
     },
-    [data, persist],
+    [data, commit],
   );
 
   const deleteProfile = useCallback(
@@ -356,7 +454,8 @@ export function useAppData() {
         data.activeProfileId === profileId
           ? (remaining[0]?.id ?? null)
           : data.activeProfileId;
-      persist({
+      const name = data.profiles.find((p) => p.id === profileId)?.name;
+      commit({
         ...data,
         deletedProfiles: upsertDeletedProfile(
           data.deletedProfiles ?? [],
@@ -364,21 +463,24 @@ export function useAppData() {
         ),
         profiles: remaining,
         activeProfileId: nextActiveId,
-      });
+      }, name != null ? `Delete profile “${name}”` : "Delete profile");
     },
-    [data, persist],
+    [data, commit],
   );
 
   const renameProfile = useCallback(
     (profileId: ProfileId, name: string) => {
-      persist({
-        ...data,
-        profiles: data.profiles.map((p) =>
-          p.id === profileId ? { ...p, name } : p,
-        ),
-      });
+      commit(
+        {
+          ...data,
+          profiles: data.profiles.map((p) =>
+            p.id === profileId ? { ...p, name } : p,
+          ),
+        },
+        `Rename profile to “${name}”`,
+      );
     },
-    [data, persist],
+    [data, commit],
   );
 
   const updateProfileGoals = useCallback(
@@ -388,14 +490,17 @@ export function useAppData() {
       schedule: WakeSleepSchedule | null,
       userMetrics: UserMetrics | null,
     ) => {
-      persist({
-        ...data,
-        profiles: data.profiles.map((p) =>
-          p.id === profileId ? { ...p, goals, schedule, userMetrics } : p,
-        ),
-      });
+      commit(
+        {
+          ...data,
+          profiles: data.profiles.map((p) =>
+            p.id === profileId ? { ...p, goals, schedule, userMetrics } : p,
+          ),
+        },
+        "Update goals",
+      );
     },
-    [data, persist],
+    [data, commit],
   );
 
   // --- Day log entries ---
@@ -405,9 +510,10 @@ export function useAppData() {
       profileId: ProfileId,
       date: string,
       item: DayLogItem,
+      label: string,
       insertIndex?: number,
     ) => {
-      persist({
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -428,9 +534,9 @@ export function useAppData() {
           const newDayLog: DayLog = { date, entries: [item] };
           return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
         }),
-      });
+      }, label);
     },
-    [data, persist],
+    [data, commit],
   );
 
   const addLogEntry = useCallback(
@@ -444,9 +550,16 @@ export function useAppData() {
         ...entry,
         id: generateId() as LogEntryId,
       };
-      appendToDayLog(profileId, date, newEntry, insertIndex);
+      const foodName = allFoods.find((f) => f.id === entry.foodId)?.name;
+      appendToDayLog(
+        profileId,
+        date,
+        newEntry,
+        foodName != null ? `Add ${foodName}` : "Add entry",
+        insertIndex,
+      );
     },
-    [appendToDayLog],
+    [appendToDayLog, allFoods],
   );
 
   const addSeparator = useCallback(
@@ -461,7 +574,13 @@ export function useAppData() {
         id: generateId() as LogEntryId,
         label,
       };
-      appendToDayLog(profileId, date, separator, insertIndex);
+      appendToDayLog(
+        profileId,
+        date,
+        separator,
+        `Add section “${label}”`,
+        insertIndex,
+      );
     },
     [appendToDayLog],
   );
@@ -477,7 +596,13 @@ export function useAppData() {
         ...entry,
         id: generateId() as LogEntryId,
       };
-      appendToDayLog(profileId, date, newEntry, insertIndex);
+      appendToDayLog(
+        profileId,
+        date,
+        newEntry,
+        `Quick add “${entry.name}”`,
+        insertIndex,
+      );
     },
     [appendToDayLog],
   );
@@ -490,7 +615,7 @@ export function useAppData() {
         entryId,
         deletedAt: new Date().toISOString(),
       };
-      persist({
+      commit({
         ...data,
         deletedDayLogEntries: upsertDeletedDayLogEntry(
           data.deletedDayLogEntries ?? [],
@@ -510,9 +635,9 @@ export function useAppData() {
             ),
           };
         }),
-      });
+      }, "Delete entry");
     },
-    [data, persist],
+    [data, commit],
   );
 
   const removeLogEntries = useCallback(
@@ -538,7 +663,7 @@ export function useAppData() {
         data.deletedDayLogEntries ?? [],
       );
 
-      persist({
+      commit({
         ...data,
         deletedDayLogEntries: nextDeletedDayLogEntries,
         profiles: data.profiles.map((p) => {
@@ -555,14 +680,16 @@ export function useAppData() {
             ),
           };
         }),
-      });
+      }, uniqueEntryIds.length === 1
+        ? "Delete entry"
+        : `Delete ${uniqueEntryIds.length} entries`);
     },
-    [data, persist],
+    [data, commit],
   );
 
   const reorderLogEntries = useCallback(
     (profileId: ProfileId, date: string, newEntries: ReadonlyArray<DayLogItem>) => {
-      persist({
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -573,21 +700,24 @@ export function useAppData() {
             ),
           };
         }),
-      });
+      }, "Reorder entries");
     },
-    [data, persist],
+    [data, commit],
   );
 
   const setWeightLossPlan = useCallback(
     (profileId: ProfileId, plan: WeightLossPlan | null) => {
-      persist({
-        ...data,
-        profiles: data.profiles.map((p) =>
-          p.id === profileId ? { ...p, weightLossPlan: plan } : p,
-        ),
-      });
+      commit(
+        {
+          ...data,
+          profiles: data.profiles.map((p) =>
+            p.id === profileId ? { ...p, weightLossPlan: plan } : p,
+          ),
+        },
+        plan == null ? "Clear weight plan" : "Update weight plan",
+      );
     },
-    [data, persist],
+    [data, commit],
   );
 
   const updateDayLogWeight = useCallback(
@@ -597,7 +727,7 @@ export function useAppData() {
       weightKg: number | undefined,
       weightNotes: string | undefined,
     ) => {
-      persist({
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -613,9 +743,9 @@ export function useAppData() {
           const newDayLog: DayLog = { date, entries: [], weightKg, weightNotes };
           return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
         }),
-      });
+      }, weightKg == null ? "Clear weight" : "Update weight");
     },
-    [data, persist],
+    [data, commit],
   );
 
   const updateLogEntry = useCallback(
@@ -625,7 +755,7 @@ export function useAppData() {
       entryId: LogEntryId,
       updates: Partial<Omit<LogEntry, "id">>,
     ) => {
-      persist({
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -647,9 +777,9 @@ export function useAppData() {
             ),
           };
         }),
-      });
+      }, "Edit entry");
     },
-    [data, persist],
+    [data, commit],
   );
 
   const updateQuickAddEntry = useCallback(
@@ -659,7 +789,7 @@ export function useAppData() {
       entryId: LogEntryId,
       updates: Partial<Omit<QuickAddEntry, "id" | "type">>,
     ) => {
-      persist({
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -679,9 +809,9 @@ export function useAppData() {
             ),
           };
         }),
-      });
+      }, "Edit quick add");
     },
-    [data, persist],
+    [data, commit],
   );
 
   const saveMealPlanFromDay = useCallback(
@@ -689,7 +819,7 @@ export function useAppData() {
       const trimmedName = name.trim();
       if (trimmedName.length === 0 || entries.length === 0) return;
       const now = new Date().toISOString();
-      persist({
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -716,9 +846,9 @@ export function useAppData() {
               : [...existingPlans, nextPlan];
           return { ...p, mealPlans: nextPlans };
         }),
-      });
+      }, `Save meal plan “${trimmedName}”`);
     },
-    [data, persist],
+    [data, commit],
   );
 
   const renameMealPlan = useCallback(
@@ -741,7 +871,7 @@ export function useAppData() {
       if (currentPlan.name === trimmedName) return true;
 
       const now = new Date().toISOString();
-      persist({
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -754,15 +884,18 @@ export function useAppData() {
             ),
           };
         }),
-      });
+      }, `Rename meal plan to “${trimmedName}”`);
       return true;
     },
-    [data, persist],
+    [data, commit],
   );
 
   const deleteMealPlan = useCallback(
     (profileId: ProfileId, planId: MealPlanId) => {
-      persist({
+      const name = data.profiles
+        .find((p) => p.id === profileId)
+        ?.mealPlans?.find((plan) => plan.id === planId)?.name;
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -771,14 +904,17 @@ export function useAppData() {
             mealPlans: (p.mealPlans ?? []).filter((plan) => plan.id !== planId),
           };
         }),
-      });
+      }, name != null ? `Delete meal plan “${name}”` : "Delete meal plan");
     },
-    [data, persist],
+    [data, commit],
   );
 
   const applyMealPlanToDay = useCallback(
     (profileId: ProfileId, planId: MealPlanId, date: string) => {
-      persist({
+      const planName = data.profiles
+        .find((p) => p.id === profileId)
+        ?.mealPlans?.find((plan) => plan.id === planId)?.name;
+      commit({
         ...data,
         profiles: data.profiles.map((p) => {
           if (p.id !== profileId) return p;
@@ -802,9 +938,9 @@ export function useAppData() {
           const newDayLog: DayLog = { date, entries: entriesToAdd };
           return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
         }),
-      });
+      }, planName != null ? `Apply meal plan “${planName}”` : "Apply meal plan");
     },
-    [data, persist],
+    [data, commit],
   );
 
   return {
@@ -836,5 +972,13 @@ export function useAppData() {
     updateDayLogWeight,
     setWeightLossPlan,
     setStorageError,
+    // --- Undo/redo history ---
+    undoStack,
+    redoStack,
+    canUndo: undoStack.length > 0,
+    canRedo: redoStack.length > 0,
+    undo,
+    redo,
+    undoTo,
   };
 }

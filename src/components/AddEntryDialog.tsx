@@ -16,7 +16,7 @@ import { Label } from "./ui/label";
 import { normalizeForSearch } from "../search";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useUnsavedChanges } from "../unsavedChanges";
-import { isFocusFirstSearchOptionKey } from "../searchOptionKeyboard";
+import { useOptionListKeyboard } from "../useOptionListKeyboard";
 
 type InputMode = "grams" | "units";
 type AddMode = "search" | "quick-add" | "section";
@@ -80,12 +80,17 @@ export function AddEntryDialog({
   const [isBudgeted, setIsBudgeted] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const firstFoodOptionRef = useRef<HTMLButtonElement>(null);
   const quickNameInputRef = useRef<HTMLInputElement>(null);
   const sectionLabelInputRef = useRef<HTMLInputElement>(null);
 
   const filteredFoods = allFoods.filter((f) =>
     normalizeForSearch(f.name).includes(normalizeForSearch(search)),
+  );
+
+  const foodNav = useOptionListKeyboard(
+    filteredFoods,
+    (food) => selectFood(food.id),
+    search,
   );
 
   const selectedFood =
@@ -356,15 +361,6 @@ export function AddEntryDialog({
     }
   }
 
-  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
-    if (!isFocusFirstSearchOptionKey(event) || filteredFoods.length === 0) {
-      return;
-    }
-
-    event.preventDefault();
-    firstFoodOptionRef.current?.focus();
-  }
-
   const statusToggle = (
     <button
       type="button"
@@ -619,15 +615,20 @@ export function AddEntryDialog({
               placeholder="Search foods..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
+              onKeyDown={foodNav.handleKeyDown}
               autoFocus
             />
             <div className="max-h-60 min-w-0 space-y-1 overflow-y-auto">
-              {filteredFoods.map((food, index) => (
+              {filteredFoods.map((food, index) => {
+                const optionProps = foodNav.getOptionProps(index);
+                return (
                 <button
                   key={food.id}
-                  ref={index === 0 ? firstFoodOptionRef : undefined}
-                  className="flex w-full min-w-0 items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-accent"
+                  ref={optionProps.ref}
+                  className={`flex w-full min-w-0 items-center gap-3 rounded-lg p-2 text-left transition-colors ${
+                    optionProps.isHighlighted ? "bg-accent" : "hover:bg-accent"
+                  }`}
+                  onMouseEnter={optionProps.onMouseEnter}
                   onClick={() => selectFood(food.id)}
                 >
                   {food.imageUrl != null ? (
@@ -653,7 +654,8 @@ export function AddEntryDialog({
                     </p>
                   </div>
                 </button>
-              ))}
+                );
+              })}
               {filteredFoods.length === 0 && (
                 <p className="py-4 text-center text-sm text-muted-foreground">
                   No foods match &ldquo;{search}&rdquo;

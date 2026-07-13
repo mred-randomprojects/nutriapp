@@ -98,21 +98,31 @@ export interface DayLog {
   weightNotes?: string;
 }
 
+/**
+ * Deletion tombstones carry both a `deletedAt` and an optional `restoredAt`.
+ * The entity is considered deleted iff `restoredAt` is absent or older than
+ * `deletedAt`. An undo of a deletion stamps `restoredAt` with a fresh timestamp
+ * so the un-delete wins over any stale `deletedAt` still held by the cloud or
+ * another device. Both timestamps merge independently by max across devices.
+ */
 export interface DeletedDayLogEntry {
   profileId: ProfileId;
   date: string;
   entryId: LogEntryId;
   deletedAt: string;
+  restoredAt?: string;
 }
 
 export interface DeletedFood {
   foodId: FoodId;
   deletedAt: string;
+  restoredAt?: string;
 }
 
 export interface DeletedProfile {
   profileId: ProfileId;
   deletedAt: string;
+  restoredAt?: string;
 }
 
 export type WeeklyMealPlan = Partial<Record<PlanWeekday, DayLogItem[]>>;

@@ -10,11 +10,12 @@ import type {
   ProfileId,
   SavedMealPlan,
   WeeklyMealPlan,
-} from "./types";
+} from "./types.js";
 import {
   buildDeletedDayLogEntrySet,
   deletedDayLogEntryKey,
-} from "./deletedDayLogEntries";
+} from "./deletedDayLogEntries.js";
+import { isTombstoneActive, mergeTombstonePair } from "./tombstones.js";
 
 export function deletedFoodKey(foodId: FoodId): string {
   return foodId;
@@ -28,9 +29,9 @@ export function buildDeletedFoodSet(
   deletedFoods: ReadonlyArray<DeletedFood>,
 ): Set<string> {
   return new Set(
-    deletedFoods.map((deletedFood) =>
-      deletedFoodKey(deletedFood.foodId),
-    ),
+    deletedFoods
+      .filter(isTombstoneActive)
+      .map((deletedFood) => deletedFoodKey(deletedFood.foodId)),
   );
 }
 
@@ -38,9 +39,9 @@ export function buildDeletedProfileSet(
   deletedProfiles: ReadonlyArray<DeletedProfile>,
 ): Set<string> {
   return new Set(
-    deletedProfiles.map((deletedProfile) =>
-      deletedProfileKey(deletedProfile.profileId),
-    ),
+    deletedProfiles
+      .filter(isTombstoneActive)
+      .map((deletedProfile) => deletedProfileKey(deletedProfile.profileId)),
   );
 }
 
@@ -53,9 +54,10 @@ export function mergeDeletedFoods(
   for (const deletedFood of [...localDeletedFoods, ...cloudDeletedFoods]) {
     const key = deletedFoodKey(deletedFood.foodId);
     const existing = byKey.get(key);
-    if (existing == null || deletedFood.deletedAt > existing.deletedAt) {
-      byKey.set(key, deletedFood);
-    }
+    byKey.set(
+      key,
+      existing == null ? deletedFood : mergeTombstonePair(existing, deletedFood),
+    );
   }
 
   return [...byKey.values()];
@@ -73,9 +75,12 @@ export function mergeDeletedProfiles(
   ]) {
     const key = deletedProfileKey(deletedProfile.profileId);
     const existing = byKey.get(key);
-    if (existing == null || deletedProfile.deletedAt > existing.deletedAt) {
-      byKey.set(key, deletedProfile);
-    }
+    byKey.set(
+      key,
+      existing == null
+        ? deletedProfile
+        : mergeTombstonePair(existing, deletedProfile),
+    );
   }
 
   return [...byKey.values()];

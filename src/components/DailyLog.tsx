@@ -61,7 +61,7 @@ import type { PendingAction } from "./ConfirmDialog";
 import { DiscardChangesDialog } from "./DiscardChangesDialog";
 import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel } from "../formEscapeCancel";
-import { isFocusFirstSearchOptionKey } from "../searchOptionKeyboard";
+import { useOptionListKeyboard } from "../useOptionListKeyboard";
 import {
   canRepeatDailyLogKeyboardAction,
   emptyEntrySelection,
@@ -1547,7 +1547,6 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [planFeedback, setPlanFeedback] = useState<string | null>(null);
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const planMenuRef = useRef<HTMLDivElement>(null);
-  const firstPlanOptionRef = useRef<HTMLButtonElement>(null);
   const entryRowRefs = useRef<Map<LogEntryId, HTMLDivElement>>(new Map());
   const nextEditEntryRequestNonce = useRef(0);
   const hasUnsavedChanges = useHasUnsavedChanges();
@@ -2184,19 +2183,11 @@ export function DailyLog({ appData }: DailyLogProps) {
     dateStr,
   ]);
 
-  function handlePlanSearchKeyDown(
-    event: React.KeyboardEvent<HTMLInputElement>,
-  ) {
-    if (
-      !isFocusFirstSearchOptionKey(event) ||
-      filteredMealPlans.length === 0
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    firstPlanOptionRef.current?.focus();
-  }
+  const planNav = useOptionListKeyboard(
+    filteredMealPlans,
+    (plan) => applyPlan(plan.id, plan.name),
+    planSearch,
+  );
 
   const sectionSubtotals = useMemo(() => {
     if (dayLog == null) return new Map<LogEntryId, NutritionValues>();
@@ -2396,16 +2387,21 @@ export function DailyLog({ appData }: DailyLogProps) {
                 <Input
                   value={planSearch}
                   onChange={(e) => setPlanSearch(e.target.value)}
-                  onKeyDown={handlePlanSearchKeyDown}
+                  onKeyDown={planNav.handleKeyDown}
                   placeholder="Search plans..."
                   className="mb-2 h-8 text-sm"
                 />
                 <div className="max-h-56 space-y-1 overflow-y-auto">
-                  {filteredMealPlans.map((plan, index) => (
+                  {filteredMealPlans.map((plan, index) => {
+                    const optionProps = planNav.getOptionProps(index);
+                    return (
                     <button
                       key={plan.id}
-                      ref={index === 0 ? firstPlanOptionRef : undefined}
-                      className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-accent"
+                      ref={optionProps.ref}
+                      className={`flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm ${
+                        optionProps.isHighlighted ? "bg-accent" : "hover:bg-accent"
+                      }`}
+                      onMouseEnter={optionProps.onMouseEnter}
                       onClick={() => applyPlan(plan.id, plan.name)}
                     >
                       <CalendarCheck className="h-4 w-4 shrink-0" />
@@ -2416,7 +2412,8 @@ export function DailyLog({ appData }: DailyLogProps) {
                         {plan.entries.length}
                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
                   {filteredMealPlans.length === 0 && (
                     <p className="px-3 py-2 text-sm text-muted-foreground">
                       {mealPlans.length === 0

@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
@@ -18,7 +17,7 @@ import { Label } from "./ui/label";
 import { normalizeForSearch } from "../search";
 import { useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel } from "../formEscapeCancel";
-import { isFocusFirstSearchOptionKey } from "../searchOptionKeyboard";
+import { useOptionListKeyboard } from "../useOptionListKeyboard";
 
 interface FoodFormProps {
   appData: AppDataHandle;
@@ -270,7 +269,6 @@ export function FoodForm({ appData }: FoodFormProps) {
   const [showIngredientPicker, setShowIngredientPicker] = useState(false);
   const [ingredientSearch, setIngredientSearch] = useState("");
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const firstIngredientOptionRef = useRef<HTMLButtonElement>(null);
 
   const baseDraft = useMemo<FoodFormDraft>(
     () => ({
@@ -439,19 +437,11 @@ export function FoodForm({ appData }: FoodFormProps) {
     setIngredientSearch("");
   }
 
-  function handleIngredientSearchKeyDown(
-    event: ReactKeyboardEvent<HTMLInputElement>,
-  ) {
-    if (
-      !isFocusFirstSearchOptionKey(event) ||
-      availableFoods.length === 0
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    firstIngredientOptionRef.current?.focus();
-  }
+  const ingredientNav = useOptionListKeyboard(
+    availableFoods,
+    handleAddIngredient,
+    ingredientSearch,
+  );
 
   function handleSubmit() {
     if (readonly) return;
@@ -684,16 +674,23 @@ export function FoodForm({ appData }: FoodFormProps) {
                         placeholder="Search foods to add..."
                         value={ingredientSearch}
                         onChange={(e) => setIngredientSearch(e.target.value)}
-                        onKeyDown={handleIngredientSearchKeyDown}
+                        onKeyDown={ingredientNav.handleKeyDown}
                         autoFocus
                       />
                       <div className="max-h-40 space-y-1 overflow-y-auto">
-                        {availableFoods.map((food, index) => (
+                        {availableFoods.map((food, index) => {
+                          const optionProps = ingredientNav.getOptionProps(index);
+                          return (
                           <button
                             type="button"
                             key={food.id}
-                            ref={index === 0 ? firstIngredientOptionRef : undefined}
-                            className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm transition-colors hover:bg-accent"
+                            ref={optionProps.ref}
+                            className={`flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm transition-colors ${
+                              optionProps.isHighlighted
+                                ? "bg-accent"
+                                : "hover:bg-accent"
+                            }`}
+                            onMouseEnter={optionProps.onMouseEnter}
                             onClick={() => handleAddIngredient(food)}
                           >
                             {food.imageUrl != null ? (
@@ -714,7 +711,8 @@ export function FoodForm({ appData }: FoodFormProps) {
                               </span>
                             )}
                           </button>
-                        ))}
+                          );
+                        })}
                         {availableFoods.length === 0 && (
                           <p className="py-2 text-center text-xs text-muted-foreground">
                             No matching foods found. Unit-based foods cannot be

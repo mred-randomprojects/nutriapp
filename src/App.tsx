@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { useAppData } from "./useAppData";
@@ -16,6 +16,7 @@ import { LoginPage } from "./components/LoginPage";
 import { Loader2 } from "lucide-react";
 import { UnsavedChangesProvider } from "./UnsavedChangesProvider";
 import { submitClosestFormFromShortcut } from "./formSubmitShortcut";
+import { HistoryPanel } from "./components/HistoryPanel";
 
 const NAV_SHORTCUTS = {
   "1": "/foods",
@@ -62,12 +63,58 @@ function AuthenticatedApp() {
   const appData = useAppData();
   const navigate = useNavigate();
   const location = useLocation();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const { undo, redo, canUndo, canRedo } = appData;
 
   useEffect(() => {
     window.addEventListener("keydown", submitClosestFormFromShortcut);
     return () =>
       window.removeEventListener("keydown", submitClosestFormFromShortcut);
   }, []);
+
+  useEffect(() => {
+    function handleHistoryKeys(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+
+      const key = event.key.toLowerCase();
+
+      // Cmd/Ctrl+K opens the history panel from anywhere.
+      if (key === "k" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        setHistoryOpen((prev) => !prev);
+        return;
+      }
+
+      if (key !== "z") return;
+
+      // Leave native text undo/redo alone while editing a field.
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement)
+      ) {
+        return;
+      }
+
+      // Cmd/Ctrl+Shift+Z redoes; Cmd/Ctrl+Z undoes.
+      if (event.shiftKey) {
+        if (canRedo) {
+          event.preventDefault();
+          redo();
+        }
+      } else if (canUndo) {
+        event.preventDefault();
+        undo();
+      }
+    }
+
+    window.addEventListener("keydown", handleHistoryKeys);
+    return () => window.removeEventListener("keydown", handleHistoryKeys);
+  }, [undo, redo, canUndo, canRedo]);
 
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
@@ -166,6 +213,18 @@ function AuthenticatedApp() {
       <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">
         <StorageUsage />
       </div>
+
+      <HistoryPanel
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        undoStack={appData.undoStack}
+        redoStack={appData.redoStack}
+        canUndo={appData.canUndo}
+        canRedo={appData.canRedo}
+        onUndo={appData.undo}
+        onRedo={appData.redo}
+        onUndoTo={appData.undoTo}
+      />
 
       <NavBar />
     </div>

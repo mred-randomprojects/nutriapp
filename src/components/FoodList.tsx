@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Trash2 } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
@@ -22,6 +22,42 @@ export function FoodList({ appData }: FoodListProps) {
   const { allFoods, deleteFood } = appData;
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
   const search = searchParams.get("q") ?? "";
+
+  // Spacebar is a shortcut for "Add Food" while browsing the list — but only
+  // when the user isn't typing in a field and no dialog is capturing input.
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.key !== " " ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        pendingDelete != null
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          target instanceof HTMLButtonElement ||
+          target instanceof HTMLAnchorElement)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      navigate("/foods/new");
+    }
+
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [navigate, pendingDelete]);
 
   function setSearch(value: string) {
     setSearchParams(

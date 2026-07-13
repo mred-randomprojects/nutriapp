@@ -18,6 +18,10 @@
     "src/components/dailyLogKeyboard.test.ts",
     "src/searchOptionKeyboard.ts",
     "src/searchOptionKeyboard.test.ts",
+    "src/tombstones.ts",
+    "src/tombstones.test.ts",
+    "src/deletedDayLogEntries.ts",
+    "src/deletedAppEntities.ts",
     "src/types.ts"
   ]
 }
