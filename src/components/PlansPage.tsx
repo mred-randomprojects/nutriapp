@@ -24,14 +24,6 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
 
@@ -135,12 +127,8 @@ export function PlansPage({ appData }: PlansPageProps) {
     foodsMap,
     applyMealPlanToDay,
     deleteMealPlan,
-    renameMealPlan,
   } = appData;
   const [pendingDelete, setPendingDelete] = useState<PendingAction | null>(null);
-  const [renamePlan, setRenamePlan] = useState<SavedMealPlan | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [renameError, setRenameError] = useState<string | null>(null);
   const search = searchParams.get("q") ?? "";
   const mealPlans = useMemo(
     () => activeProfile?.mealPlans ?? [],
@@ -154,18 +142,6 @@ export function PlansPage({ appData }: PlansPageProps) {
       normalizeForSearch(plan.name).includes(normalizedSearch),
     );
   }, [mealPlans, search]);
-
-  const trimmedRename = renameValue.trim();
-  const renameNameTaken =
-    renamePlan != null &&
-    mealPlans.some(
-      (plan) =>
-        plan.id !== renamePlan.id &&
-        plan.name.trim().toLowerCase() === trimmedRename.toLowerCase(),
-    );
-  const renameMessage = renameNameTaken
-    ? "Another plan already uses that name."
-    : renameError;
 
   function setSearch(value: string) {
     setSearchParams(
@@ -182,38 +158,12 @@ export function PlansPage({ appData }: PlansPageProps) {
     );
   }
 
-  function openRenameDialog(plan: SavedMealPlan) {
-    setRenamePlan(plan);
-    setRenameValue(plan.name);
-    setRenameError(null);
-  }
-
-  function closeRenameDialog() {
-    setRenamePlan(null);
-    setRenameValue("");
-    setRenameError(null);
-  }
-
-  function saveRename() {
-    if (activeProfile == null || renamePlan == null) return;
-    if (trimmedRename.length === 0 || renameNameTaken) return;
-
-    const renamed = renameMealPlan(
-      activeProfile.id as ProfileId,
-      renamePlan.id as MealPlanId,
-      trimmedRename,
-    );
-
-    if (!renamed) {
-      setRenameError("This plan could not be renamed.");
-      return;
-    }
-
-    closeRenameDialog();
-  }
-
   function saveDayPath() {
     return `/log/${formatDateKey(new Date())}`;
+  }
+
+  function editPlanPath(plan: SavedMealPlan) {
+    return `/plans/${plan.id}/edit`;
   }
 
   function applyPlanToday(plan: SavedMealPlan) {
@@ -292,31 +242,45 @@ export function PlansPage({ appData }: PlansPageProps) {
           const sectionCount = countSections(plan.entries);
           const missingFoodCount = countMissingFoods(plan.entries, foodsMap);
 
+          const description = plan.description?.trim();
+
           return (
             <Card key={plan.id}>
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <CalendarCheck className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-base font-semibold">
-                      {plan.name}
-                    </h2>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {getPlanPreview(plan, foodsMap)}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Updated {formatStoredDate(plan.updatedAt)}
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                    onClick={() => navigate(editPlanPath(plan))}
+                    aria-label={`Edit ${plan.name}`}
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <CalendarCheck className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h2 className="truncate text-base font-semibold">
+                        {plan.name}
+                      </h2>
+                      {description != null && description.length > 0 && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {description}
+                        </p>
+                      )}
+                      <p className="truncate text-xs text-muted-foreground">
+                        {getPlanPreview(plan, foodsMap)}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Updated {formatStoredDate(plan.updatedAt)}
+                      </p>
+                    </div>
+                  </button>
                   <div className="flex shrink-0 items-center gap-1">
                     <Button
                       variant="ghost"
                       size="icon"
-                      title="Rename plan"
-                      aria-label={`Rename ${plan.name}`}
-                      onClick={() => openRenameDialog(plan)}
+                      title="Edit plan"
+                      aria-label={`Edit ${plan.name}`}
+                      onClick={() => navigate(editPlanPath(plan))}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -376,52 +340,6 @@ export function PlansPage({ appData }: PlansPageProps) {
           );
         })}
       </div>
-
-      <Dialog
-        open={renamePlan != null}
-        onOpenChange={(open) => {
-          if (!open) closeRenameDialog();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Plan</DialogTitle>
-            <DialogDescription>
-              Keep the saved entries and change only the plan name.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            className="space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveRename();
-            }}
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="plan-name">Name</Label>
-              <Input
-                id="plan-name"
-                value={renameValue}
-                onChange={(event) => {
-                  setRenameValue(event.target.value);
-                  setRenameError(null);
-                }}
-                autoFocus
-              />
-            </div>
-            {renameMessage != null && (
-              <p className="text-sm text-destructive">{renameMessage}</p>
-            )}
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={trimmedRename.length === 0 || renameNameTaken}
-            >
-              Save Name
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <ConfirmDialog
         pending={pendingDelete}

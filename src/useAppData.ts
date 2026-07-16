@@ -890,6 +890,61 @@ export function useAppData() {
     [data, commit],
   );
 
+  const updateMealPlan = useCallback(
+    (
+      profileId: ProfileId,
+      planId: MealPlanId,
+      updates: {
+        name: string;
+        description: string | undefined;
+        entries: ReadonlyArray<DayLogItem>;
+      },
+    ): boolean => {
+      const trimmedName = updates.name.trim();
+      if (trimmedName.length === 0) return false;
+
+      const profile = data.profiles.find((p) => p.id === profileId);
+      const existingPlans = profile?.mealPlans ?? [];
+      const currentPlan = existingPlans.find((plan) => plan.id === planId);
+      if (currentPlan == null) return false;
+
+      const duplicateName = existingPlans.some(
+        (plan) =>
+          plan.id !== planId &&
+          plan.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+      );
+      if (duplicateName) return false;
+
+      const trimmedDescription = updates.description?.trim();
+      const now = new Date().toISOString();
+      commit({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          return {
+            ...p,
+            mealPlans: (p.mealPlans ?? []).map((plan) =>
+              plan.id === planId
+                ? {
+                    ...plan,
+                    name: trimmedName,
+                    description:
+                      trimmedDescription != null && trimmedDescription.length > 0
+                        ? trimmedDescription
+                        : undefined,
+                    entries: clonePlanEntries(updates.entries),
+                    updatedAt: now,
+                  }
+                : plan,
+            ),
+          };
+        }),
+      }, `Edit meal plan “${trimmedName}”`);
+      return true;
+    },
+    [data, commit],
+  );
+
   const deleteMealPlan = useCallback(
     (profileId: ProfileId, planId: MealPlanId) => {
       const name = data.profiles
@@ -967,6 +1022,7 @@ export function useAppData() {
     updateQuickAddEntry,
     saveMealPlanFromDay,
     renameMealPlan,
+    updateMealPlan,
     deleteMealPlan,
     applyMealPlanToDay,
     updateDayLogWeight,

@@ -8,6 +8,7 @@ import { FoodList } from "./components/FoodList";
 import { FoodForm } from "./components/FoodForm";
 import { DailyLog } from "./components/DailyLog";
 import { PlansPage } from "./components/PlansPage";
+import { PlanEditor } from "./components/PlanEditor";
 import { ProfileManager } from "./components/ProfileManager";
 import { TrendPage } from "./components/TrendPage";
 import { StorageUsage } from "./components/StorageUsage";
@@ -203,6 +204,10 @@ function AuthenticatedApp() {
         <Route
           path="/plans"
           element={<PlansPage appData={appData} />}
+        />
+        <Route
+          path="/plans/:planId/edit"
+          element={<PlanEditor appData={appData} />}
         />
         <Route
           path="/trend"

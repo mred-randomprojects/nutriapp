@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { CalendarCheck, Utensils } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
-import type { FoodId, NutritionValues, ProfileId } from "../types";
+import type {
+  DayLogItem,
+  FoodId,
+  LogEntry,
+  LogEntryId,
+  NutritionValues,
+  QuickAddEntry,
+  SectionSeparator,
+} from "../types";
+import { generateId } from "../types";
 import {
   Dialog,
   DialogContent,
@@ -50,8 +59,12 @@ interface AddEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   appData: AppDataHandle;
-  profileId: ProfileId;
-  date: string;
+  /**
+   * Called with a fully-formed log item (id already assigned) when the user
+   * confirms an add. The caller decides where the item lands — a day log, a
+   * meal plan draft, etc.
+   */
+  onAddItem: (item: DayLogItem, insertIndex?: number) => void;
   insertIndex?: number;
 }
 
@@ -59,11 +72,10 @@ export function AddEntryDialog({
   open,
   onOpenChange,
   appData,
-  profileId,
-  date,
+  onAddItem,
   insertIndex,
 }: AddEntryDialogProps) {
-  const { allFoods, addLogEntry, addQuickAddEntry, addSeparator } = appData;
+  const { allFoods } = appData;
   const [addMode, setAddMode] = useState<AddMode>("search");
   const [selectedFoodId, setSelectedFoodId] = useState<FoodId | null>(null);
   const [inputMode, setInputMode] = useState<InputMode>("grams");
@@ -209,31 +221,25 @@ export function AddEntryDialog({
     const trimmedNotes = notes.trim();
     const entryNotes = trimmedNotes.length > 0 ? trimmedNotes : undefined;
     if (isUnitBased) {
-      addLogEntry(
-        profileId,
-        date,
-        {
-          foodId: selectedFoodId,
-          grams: 0,
-          units: parsedAmount,
-          notes: entryNotes,
-          isBudgeted: isBudgeted ? true : undefined,
-        },
-        insertIndex,
-      );
+      const entry: LogEntry = {
+        id: generateId() as LogEntryId,
+        foodId: selectedFoodId,
+        grams: 0,
+        units: parsedAmount,
+        notes: entryNotes,
+        isBudgeted: isBudgeted ? true : undefined,
+      };
+      onAddItem(entry, insertIndex);
     } else {
       if (totalGrams <= 0) return;
-      addLogEntry(
-        profileId,
-        date,
-        {
-          foodId: selectedFoodId,
-          grams: totalGrams,
-          notes: entryNotes,
-          isBudgeted: isBudgeted ? true : undefined,
-        },
-        insertIndex,
-      );
+      const entry: LogEntry = {
+        id: generateId() as LogEntryId,
+        foodId: selectedFoodId,
+        grams: totalGrams,
+        notes: entryNotes,
+        isBudgeted: isBudgeted ? true : undefined,
+      };
+      onAddItem(entry, insertIndex);
     }
     closeWithoutPrompt();
   }
@@ -243,23 +249,20 @@ export function AddEntryDialog({
     if (trimmedName.length === 0 || !quickHasNutrition) return;
 
     const trimmedNotes = notes.trim();
-    addQuickAddEntry(
-      profileId,
-      date,
-      {
-        type: "quick-add",
-        name: trimmedName,
-        nutrition: {
-          calories: Math.round(quickNutrition.calories * 10) / 10,
-          protein: Math.round(quickNutrition.protein * 10) / 10,
-          saturatedFat: Math.round(quickNutrition.saturatedFat * 10) / 10,
-          fiber: Math.round(quickNutrition.fiber * 10) / 10,
-        },
-        notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
-        isBudgeted: isBudgeted ? true : undefined,
+    const entry: QuickAddEntry = {
+      type: "quick-add",
+      id: generateId() as LogEntryId,
+      name: trimmedName,
+      nutrition: {
+        calories: Math.round(quickNutrition.calories * 10) / 10,
+        protein: Math.round(quickNutrition.protein * 10) / 10,
+        saturatedFat: Math.round(quickNutrition.saturatedFat * 10) / 10,
+        fiber: Math.round(quickNutrition.fiber * 10) / 10,
       },
-      insertIndex,
-    );
+      notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
+      isBudgeted: isBudgeted ? true : undefined,
+    };
+    onAddItem(entry, insertIndex);
     closeWithoutPrompt();
   }
 
@@ -267,7 +270,12 @@ export function AddEntryDialog({
     const trimmedLabel = label.trim();
     if (trimmedLabel.length === 0) return;
 
-    addSeparator(profileId, date, trimmedLabel, insertIndex);
+    const separator: SectionSeparator = {
+      type: "separator",
+      id: generateId() as LogEntryId,
+      label: trimmedLabel,
+    };
+    onAddItem(separator, insertIndex);
     closeWithoutPrompt();
   }
 

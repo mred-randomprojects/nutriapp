@@ -47,6 +47,12 @@ Daily log
 - `Enter` edit · `Delete`/`Backspace` delete · `a` add below · `m`/`b` toggle budgeted
 - `t` jump to today · `← / →` previous / next day · `?` shortcuts panel · `Esc` clear selection
 
+Plan editor (`/plans/:planId/edit`)
+- reuses the daily-log entry grammar: `↑ / ↓` select · `Alt+↑/↓` move · `Enter` edit ·
+  `Delete`/`Backspace` remove · `m`/`b` toggle budgeted · `a` add below · `Space` add ·
+  `Esc` clear selection. Name + description are plain fields; `Save` commits, `Cancel`
+  leaves (guarded by the unsaved-changes prompt).
+
 Add / search flows (log entry, ingredient, meal plan pickers)
 - type to filter · `↑ / ↓` move highlight · `Enter` select · `Esc` back a step / close
 

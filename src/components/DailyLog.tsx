@@ -304,7 +304,7 @@ interface SortableItemProps {
   children: React.ReactNode;
 }
 
-function SortableItem({
+export function SortableItem({
   item,
   isLocked,
   isSelected,
@@ -505,7 +505,7 @@ function BudgetBar({ actual, budget, invertColor, aboveGoalIsGood }: BudgetBarPr
   );
 }
 
-function SectionSubtotal({ totals }: { totals: NutritionValues }) {
+export function SectionSubtotal({ totals }: { totals: NutritionValues }) {
   return (
     <div className="mt-1 flex justify-end gap-3 px-1 text-[11px] text-muted-foreground">
       <span>{Math.round(totals.calories)} kcal</span>
@@ -640,7 +640,7 @@ interface FoodEntryCardProps {
   onToggleBudgeted: () => void;
 }
 
-function FoodEntryCard({ item, food, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
+export function FoodEntryCard({ item, food, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
@@ -985,7 +985,7 @@ interface QuickAddEntryCardProps {
   onToggleBudgeted: () => void;
 }
 
-function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
+export function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCalories, setEditCalories] = useState("");
@@ -1509,6 +1509,9 @@ export function DailyLog({ appData }: DailyLogProps) {
   const {
     activeProfile,
     foodsMap,
+    addLogEntry,
+    addQuickAddEntry,
+    addSeparator,
     removeLogEntry,
     removeLogEntries,
     reorderLogEntries,
@@ -2819,8 +2822,38 @@ export function DailyLog({ appData }: DailyLogProps) {
           if (!open) setAddEntryInsertIndex(undefined);
         }}
         appData={appData}
-        profileId={activeProfile.id}
-        date={dateStr}
+        onAddItem={(item, insertIndex) => {
+          const profileId = activeProfile.id as ProfileId;
+          if (item.type === "separator") {
+            addSeparator(profileId, dateStr, item.label, insertIndex);
+          } else if (item.type === "quick-add") {
+            addQuickAddEntry(
+              profileId,
+              dateStr,
+              {
+                type: "quick-add",
+                name: item.name,
+                nutrition: item.nutrition,
+                notes: item.notes,
+                isBudgeted: item.isBudgeted,
+              },
+              insertIndex,
+            );
+          } else {
+            addLogEntry(
+              profileId,
+              dateStr,
+              {
+                foodId: item.foodId,
+                grams: item.grams,
+                units: item.units,
+                notes: item.notes,
+                isBudgeted: item.isBudgeted,
+              },
+              insertIndex,
+            );
+          }
+        }}
         insertIndex={addEntryInsertIndex}
       />
 

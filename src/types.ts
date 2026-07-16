@@ -130,6 +130,8 @@ export type WeeklyMealPlan = Partial<Record<PlanWeekday, DayLogItem[]>>;
 export interface SavedMealPlan {
   id: MealPlanId;
   name: string;
+  /** Optional free-text description of what the plan is / when to use it. */
+  description?: string;
   entries: DayLogItem[];
   createdAt: string;
   updatedAt: string;
