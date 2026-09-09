@@ -131,3 +131,30 @@ The values are the same as in your `.env` file.
 - [ ] **Weekly/monthly summary view** — show average daily calories, protein, sat. fat, and fiber over the last 7 or 30 days. Give users a feedback loop that makes tracking feel worthwhile instead of each day being an island.
 - [ ] **Nutrition targets / goals** — let users set calorie/protein/fiber targets per profile, and show progress bars or color-coding (green = on track, red = over) in the daily totals card.
 - [ ] **Cloud sync status indicator** — show a small cloud icon (checkmark/spinner/warning) so users know whether their data is synced, syncing, or failed. Right now cloud sync failures are completely silent.
+
+## Installed app appearance
+
+`public/manifest.webmanifest` supplies the NutriApp name, standalone window,
+start URL, scope, theme, and install icons. URLs are relative to the manifest,
+and HTML links use Vite's `%BASE_URL%`, so development at `/` and GitHub Pages
+at `/nutriapp/` both resolve correctly. The React hash routes stay within that
+scope.
+
+The PNG icons preserve the original salad-emoji favicon on the app's dark
+background. Sizes include a 32px favicon, a 180px Apple touch icon, 192/512/1024px
+install icons, and a separate maskable icon with extra safe-area padding.
+Generated PNGs are committed; Linux/CI builds require no icon-generation tools.
+To regenerate them on macOS:
+
+```sh
+swift scripts/generate-app-icons.swift public/icons
+```
+
+After deploying, open the website in Safari and choose **File → Add to Dock**.
+For an already installed Safari web app, open **NutriApp → Settings → General
+→ Icon** and select `public/icons/icon-1024.png` to update its appearance while
+keeping its existing login, data, and application identity. Other browsers may
+refresh installed metadata on their own schedule.
+
+This adds install metadata and branding. It does not add a service worker or
+change the app's existing storage/sync behavior.
