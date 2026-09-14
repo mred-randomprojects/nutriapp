@@ -94,11 +94,13 @@ function AuthenticatedApp() {
   // ⌘S / Ctrl+S, instead of the browser's "Save page" dialog. Inside a form it
   // is that form's own save, same as ⌘Enter. Anywhere else there is nothing
   // left to write — every change already wrote itself — so it only confirms,
-  // or repeats the storage error if the last write did not land.
+  // or repeats the storage error if the last write did not land. Top of the
+  // screen: the nav bar owns the bottom.
   const { storageError } = appData;
   useEffect(
     () =>
       interceptSave({
+        position: "top",
         onSave: () => {
           if (submitClosestForm(document.activeElement)) return;
           return storageError ?? "Saved";
