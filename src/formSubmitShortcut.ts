@@ -9,12 +9,8 @@ export function isFormSubmitShortcut(event: KeyboardEvent): boolean {
   );
 }
 
-export function submitClosestFormFromShortcut(event: KeyboardEvent): boolean {
-  if (event.defaultPrevented || !isFormSubmitShortcut(event)) {
-    return false;
-  }
-
-  const target = event.target;
+/** Submit the form around `target`, if there is one. Shared by ⌘Enter and ⌘S. */
+export function submitClosestForm(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false;
   }
@@ -24,7 +20,19 @@ export function submitClosestFormFromShortcut(event: KeyboardEvent): boolean {
     return false;
   }
 
-  event.preventDefault();
   form.requestSubmit();
+  return true;
+}
+
+export function submitClosestFormFromShortcut(event: KeyboardEvent): boolean {
+  if (event.defaultPrevented || !isFormSubmitShortcut(event)) {
+    return false;
+  }
+
+  if (!submitClosestForm(event.target)) {
+    return false;
+  }
+
+  event.preventDefault();
   return true;
 }

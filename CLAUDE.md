@@ -26,6 +26,10 @@ re-implementing key handling:
 - `Enter` → **confirm the primary action** / commit the highlighted option.
 - `Cmd/Ctrl+Enter` → **submit the surrounding form** from any field
   (`submitClosestFormFromShortcut`).
+- `Cmd/Ctrl+S` → **the app's save, never the browser's dialog.** Inside a form
+  it submits that form like `Cmd/Ctrl+Enter`; elsewhere it shows a "Saved"
+  toast (everything already autosaves). Wired once in `App.tsx` through the
+  shared `cmd-s` package (`github:mred-randomprojects/cmd-s`).
 - `↑ / ↓` → **move the selection/highlight** within a list. In "type-to-search"
   option lists use the shared `useOptionListKeyboard` hook (arrows move the
   highlight, `Enter` selects, hover syncs, scroll-into-view) — do not hand-roll.
@@ -41,6 +45,7 @@ Global
 - `1`–`6` — switch tabs: Foods / Log / Plans / Trend / Profiles / Account
 - `Cmd/Ctrl+K` — open the command palette (navigate + actions + open history)
 - `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` — undo / redo
+- `Cmd/Ctrl+S` — submit the focused form, or confirm "Saved"
 
 Daily log
 - `↑ / ↓` select entry · `Shift+↑/↓` extend · `Alt+↑/↓` move entry

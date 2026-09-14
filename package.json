@@ -23,6 +23,7 @@
     "@radix-ui/react-tabs": "^1.1.12",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmd-s": "github:mred-randomprojects/cmd-s#v1.0.0",
     "date-fns": "^3.6.0",
     "firebase": "^12.12.0",
     "lucide-react": "^0.577.0",

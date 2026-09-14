@@ -16,7 +16,8 @@ import { AccountPage } from "./components/AccountPage";
 import { LoginPage } from "./components/LoginPage";
 import { Loader2 } from "lucide-react";
 import { UnsavedChangesProvider } from "./UnsavedChangesProvider";
-import { submitClosestFormFromShortcut } from "./formSubmitShortcut";
+import { submitClosestForm, submitClosestFormFromShortcut } from "./formSubmitShortcut";
+import { interceptSave } from "cmd-s";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import type { Command } from "./components/CommandPalette";
@@ -89,6 +90,22 @@ function AuthenticatedApp() {
     return () =>
       window.removeEventListener("keydown", submitClosestFormFromShortcut);
   }, []);
+
+  // ⌘S / Ctrl+S, instead of the browser's "Save page" dialog. Inside a form it
+  // is that form's own save, same as ⌘Enter. Anywhere else there is nothing
+  // left to write — every change already wrote itself — so it only confirms,
+  // or repeats the storage error if the last write did not land.
+  const { storageError } = appData;
+  useEffect(
+    () =>
+      interceptSave({
+        onSave: () => {
+          if (submitClosestForm(document.activeElement)) return;
+          return storageError ?? "Saved";
+        },
+      }),
+    [storageError],
+  );
 
   useEffect(() => {
     function handleHistoryKeys(event: KeyboardEvent) {
