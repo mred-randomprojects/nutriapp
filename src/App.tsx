@@ -16,6 +16,11 @@ import { AccountPage } from "./components/AccountPage";
 import { LoginPage } from "./components/LoginPage";
 import { Loader2 } from "lucide-react";
 import { UnsavedChangesProvider } from "./UnsavedChangesProvider";
+import { useKeyboardFocusParity } from "./useKeyboardFocusParity";
+import {
+  isEditableShortcutTarget,
+  isInsideModalLayer,
+} from "./shortcutTargets";
 import { submitClosestForm, submitClosestFormFromShortcut } from "./formSubmitShortcut";
 import { interceptSave } from "cmd-s";
 import { HistoryPanel } from "./components/HistoryPanel";
@@ -47,6 +52,10 @@ export default function App() {
 
 function AuthGate() {
   const { user, loading } = useAuth();
+
+  // Above the auth gate: the login page is a form and a button too, and WebKit
+  // skips its button in the tab order just the same.
+  useKeyboardFocusParity();
 
   if (loading) {
     return (
@@ -164,13 +173,12 @@ function AuthenticatedApp() {
         return;
       }
 
-      const target = event.target;
+      // Let people type, and let the top-most layer keep its keys: with the
+      // palette open, `1` is for filtering it, not for leaving the page behind
+      // it.
       if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target instanceof HTMLInputElement ||
-          target instanceof HTMLTextAreaElement ||
-          target instanceof HTMLSelectElement)
+        isEditableShortcutTarget(event.target) ||
+        isInsideModalLayer(event.target)
       ) {
         return;
       }

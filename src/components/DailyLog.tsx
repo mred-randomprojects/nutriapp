@@ -63,7 +63,15 @@ import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel, isFormEscapeCancel } from "../formEscapeCancel";
 import { useOptionListKeyboard } from "../useOptionListKeyboard";
 import {
+  isActivatableControlTarget,
+  isCompositeWidgetTarget,
+  isEditableShortcutTarget,
+  isInsideModalLayer,
+  isInteractiveShortcutTarget,
+} from "../shortcutTargets";
+import {
   canRepeatDailyLogKeyboardAction,
+  dailyLogActionYieldsToFocusedControl,
   emptyEntrySelection,
   getDailyLogKeyboardAction,
   getDeleteSelectionDescription,
@@ -121,29 +129,6 @@ function addNutritionValues(
 
 function isToday(date: Date): boolean {
   return formatDate(date) === formatDate(new Date());
-}
-
-function isEditableShortcutTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement)
-  );
-}
-
-function isInteractiveShortcutTarget(target: EventTarget | null): boolean {
-  if (isEditableShortcutTarget(target)) {
-    return true;
-  }
-
-  return (
-    target instanceof Element &&
-    target.closest(
-      'button,a[href],summary,[role="button"],[role="link"],[role="menuitem"],[role="option"],[role="tab"]',
-    ) != null
-  );
 }
 
 function isAddEntryShortcut(event: KeyboardEvent): boolean {
@@ -1870,10 +1855,27 @@ export function DailyLog({ appData }: DailyLogProps) {
         logEditModeShortcut("blocked-editable-target", e, editModeDiagnostics);
         return;
       }
+      // A dialog or menu on top owns every key while it is up — including the
+      // palette, whose commands are plain buttons this page must not read
+      // arrows from.
+      if (isInsideModalLayer(e.target)) {
+        logEditModeShortcut("blocked-modal-layer", e, editModeDiagnostics);
+        return;
+      }
 
       const keyboardAction = getDailyLogKeyboardAction(e);
       if (keyboardAction != null) {
+        // `Esc` backs out of whatever is on top and is never anyone else's key.
+        // Past that, only the focused element's *own* keys are conceded: the
+        // arrows inside a menu or listbox, `Enter` on a button. A focused
+        // button does not get to swallow `↑ / ↓`, `a`, `m`/`b` or `Delete` —
+        // one click on the nav bar used to leave the whole grammar dead.
         const isClearSelectionAction = keyboardAction.type === "clear-selection";
+        const focusedElementOwnsKey =
+          !isClearSelectionAction &&
+          (isCompositeWidgetTarget(e.target) ||
+            (dailyLogActionYieldsToFocusedControl(keyboardAction) &&
+              isActivatableControlTarget(e.target)));
         if (
           activeProfile == null ||
           addDialogOpen ||
@@ -1882,7 +1884,7 @@ export function DailyLog({ appData }: DailyLogProps) {
           pendingDelete != null ||
           copyMenuOpen ||
           planMenuOpen ||
-          (!isClearSelectionAction && isInteractiveShortcutTarget(e.target))
+          focusedElementOwnsKey
         ) {
           return;
         }

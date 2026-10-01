@@ -11,6 +11,10 @@ import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { PendingAction } from "./ConfirmDialog";
+import {
+  isInsideModalLayer,
+  isInteractiveShortcutTarget,
+} from "../shortcutTargets";
 
 interface FoodListProps {
   appData: AppDataHandle;
@@ -38,15 +42,11 @@ export function FoodList({ appData }: FoodListProps) {
         return;
       }
 
-      const target = event.target;
+      // `Space` activates whatever has the focus, and a dialog or menu on top
+      // owns it outright; this page only gets it when nobody else claimed it.
       if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target instanceof HTMLInputElement ||
-          target instanceof HTMLTextAreaElement ||
-          target instanceof HTMLSelectElement ||
-          target instanceof HTMLButtonElement ||
-          target instanceof HTMLAnchorElement)
+        isInteractiveShortcutTarget(event.target) ||
+        isInsideModalLayer(event.target)
       ) {
         return;
       }

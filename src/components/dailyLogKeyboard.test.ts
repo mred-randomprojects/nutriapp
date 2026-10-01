@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   canRepeatDailyLogKeyboardAction,
+  dailyLogActionYieldsToFocusedControl,
   emptyEntrySelection,
   getAddBelowIndexForSelection,
   getDailyLogKeyboardAction,
@@ -407,5 +408,37 @@ describe("daily log delete confirmation copy", () => {
       getDeleteSelectionDescription(3),
       "You're about to delete 3 items from this day's log report.",
     );
+  });
+});
+
+describe("dailyLogActionYieldsToFocusedControl", () => {
+  it("gives Enter to the focused button", () => {
+    // Enter activates the control under the focus; the entry editor stays shut.
+    assert.equal(
+      dailyLogActionYieldsToFocusedControl({ type: "edit-selection" }),
+      true,
+    );
+  });
+
+  it("keeps the rest of the grammar with the list", () => {
+    // A button has no use for any of these, and every control in this app is a
+    // button — including the nav bar, one click on which used to kill them all.
+    const kept: Parameters<typeof dailyLogActionYieldsToFocusedControl>[0][] = [
+      { type: "select", direction: "down", extend: false },
+      { type: "select", direction: "up", extend: true },
+      { type: "move-selection", direction: "down" },
+      { type: "delete-selection" },
+      { type: "toggle-budgeted" },
+      { type: "add-below" },
+      { type: "clear-selection" },
+      { type: "toggle-shortcuts" },
+    ];
+    for (const action of kept) {
+      assert.equal(
+        dailyLogActionYieldsToFocusedControl(action),
+        false,
+        `${action.type} should stay with the list`,
+      );
+    }
   });
 });

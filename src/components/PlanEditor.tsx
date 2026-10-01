@@ -40,7 +40,15 @@ import {
   SortableItem,
 } from "./DailyLog";
 import {
+  isActivatableControlTarget,
+  isCompositeWidgetTarget,
+  isEditableShortcutTarget,
+  isInsideModalLayer,
+  isInteractiveShortcutTarget,
+} from "../shortcutTargets";
+import {
   canRepeatDailyLogKeyboardAction,
+  dailyLogActionYieldsToFocusedControl,
   emptyEntrySelection,
   getDailyLogKeyboardAction,
   getKeyboardAddEntryInsertIndex,
@@ -62,16 +70,6 @@ const NO_COLLAPSED_SECTIONS: ReadonlySet<LogEntryId> = new Set();
 
 function formatNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement)
-  );
 }
 
 function TotalsRow({ totals }: { totals: NutritionValues }) {
@@ -320,15 +318,32 @@ export function PlanEditor({ appData }: PlanEditorProps) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.defaultPrevented) return;
-      if (isEditableTarget(e.target)) return;
+      if (isEditableShortcutTarget(e.target)) return;
+      // A dialog or menu on top owns every key while it is up.
+      if (isInsideModalLayer(e.target)) return;
       if (addDialogOpen) return;
 
       const action = getDailyLogKeyboardAction(e);
       if (action == null) {
         if (e.key === " " && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          // `Space` activates whatever has the focus; it only reaches the
+          // page's own "add" when nothing has claimed it.
+          if (isInteractiveShortcutTarget(e.target)) return;
           e.preventDefault();
           if (!e.repeat) openAddEntry();
         }
+        return;
+      }
+
+      // Same split as the daily log: the arrows inside a menu or listbox and
+      // `Enter` on a button belong to the focused element; the rest of the
+      // entry grammar does not.
+      if (
+        action.type !== "clear-selection" &&
+        (isCompositeWidgetTarget(e.target) ||
+          (dailyLogActionYieldsToFocusedControl(action) &&
+            isActivatableControlTarget(e.target)))
+      ) {
         return;
       }
 

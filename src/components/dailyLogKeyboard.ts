@@ -282,6 +282,20 @@ export function canRepeatDailyLogKeyboardAction(
   return action.type === "select" || action.type === "move-selection";
 }
 
+/**
+ * Which of these a focused button or link gets to keep for itself.
+ *
+ * Only `Enter`: it activates the control under the focus, and an entry editor
+ * opening behind the button you just pressed is not what anyone pressed it for.
+ * The rest of the grammar — `↑ / ↓`, `Alt+↑/↓`, `a`, `m`/`b`, `Delete` — means
+ * nothing to a button, so it stays with the list. See `shortcutTargets.ts`.
+ */
+export function dailyLogActionYieldsToFocusedControl(
+  action: DailyLogKeyboardAction,
+): boolean {
+  return action.type === "edit-selection";
+}
+
 export function getAddBelowIndexForSelection(
   items: ReadonlyArray<DayLogItem>,
   selection: EntrySelectionState,
