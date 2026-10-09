@@ -32,6 +32,8 @@
     "src/calculator.test.ts",
     "src/backup.ts",
     "src/backup.test.ts",
+    "src/storageQuota.ts",
+    "src/storageQuota.test.ts",
     "src/types.ts"
   ]
 }

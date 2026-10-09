@@ -1,25 +1,28 @@
-import { getStorageUsage } from "../storage";
+import {
+  ORIGIN_QUOTA_BYTES,
+  formatBytes,
+  isNutriAppKey,
+  storageSpaceMessage,
+  storageUsage,
+} from "../storageQuota";
 import { Progress } from "./ui/progress";
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  const mb = kb / 1024;
-  return `${mb.toFixed(2)} MB`;
-}
-
 export function StorageUsage() {
-  const { usedBytes, quotaBytes } = getStorageUsage();
-  const percentage = Math.min((usedBytes / quotaBytes) * 100, 100);
+  // The ~5 MB is shared by every app on mred-randomprojects.github.io, so the
+  // bar shows the site's total and the label says whose bytes they are.
+  const split = storageUsage(isNutriAppKey);
+  const usedBytes = split.mine + split.others;
+  const percentage = Math.min((usedBytes / ORIGIN_QUOTA_BYTES) * 100, 100);
   const isNearFull = percentage > 80;
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Local storage</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 text-xs text-muted-foreground">
         <span>
-          {formatBytes(usedBytes)} / {formatBytes(quotaBytes)}
+          NutriApp {formatBytes(split.mine)} · other apps {formatBytes(split.others)}
+        </span>
+        <span>
+          {Math.round(percentage)}% of {formatBytes(ORIGIN_QUOTA_BYTES)}
         </span>
       </div>
       <Progress
@@ -28,7 +31,7 @@ export function StorageUsage() {
       />
       {isNearFull && (
         <p className="text-[10px] text-destructive">
-          Storage is almost full — consider exporting and deleting old profiles.
+          {storageSpaceMessage(split, "almost-full")}
         </p>
       )}
     </div>

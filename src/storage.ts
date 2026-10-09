@@ -1,5 +1,11 @@
 import type { AppData, ProfileId } from "./types";
 import { filterDeletedAppEntitiesFromAppData } from "./deletedAppEntities";
+import {
+  isNutriAppKey,
+  isQuotaError,
+  storageSpaceMessage,
+  storageUsage,
+} from "./storageQuota";
 
 const STORAGE_KEY = "nutriapp-data";
 const BACKUP_KEY = "nutriapp-data-backup";
@@ -7,9 +13,8 @@ const CORRUPT_RECOVERY_KEY = "nutriapp-data-corrupt-recovery";
 
 export class StorageQuotaError extends Error {
   constructor() {
-    super(
-      "localStorage is full — no space left to save your data. Consider exporting and deleting old profiles.",
-    );
+    // The quota is the whole site's, so say whose bytes fill it.
+    super(storageSpaceMessage(storageUsage(isNutriAppKey), "full"));
     this.name = "StorageQuotaError";
   }
 }
@@ -18,11 +23,7 @@ function safeSetItem(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch (e: unknown) {
-    if (
-      e instanceof DOMException &&
-      (e.name === "QuotaExceededError" ||
-        e.name === "NS_ERROR_DOM_QUOTA_REACHED")
-    ) {
+    if (isQuotaError(e)) {
       throw new StorageQuotaError();
     }
     throw e;
@@ -89,17 +90,6 @@ export function saveAppData(data: AppData): void {
     }
   }
   safeSetItem(STORAGE_KEY, JSON.stringify(data));
-}
-
-export function getStorageUsage(): { usedBytes: number; quotaBytes: number } {
-  let usedBytes = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key == null) continue;
-    usedBytes += (key.length + (localStorage.getItem(key)?.length ?? 0)) * 2;
-  }
-  const quotaBytes = 5 * 1024 * 1024;
-  return { usedBytes, quotaBytes };
 }
 
 /**
