@@ -24,6 +24,7 @@ import {
 } from "./shortcutTargets";
 import { submitClosestForm, submitClosestFormFromShortcut } from "./formSubmitShortcut";
 import { interceptSave } from "cmd-s";
+import { SaveIndicator } from "./components/SaveIndicator";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import type { Command } from "./components/CommandPalette";
@@ -268,6 +269,9 @@ function AuthenticatedApp() {
       )}
 
       <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">
+        {appData.cloudError == null && (
+          <SaveIndicator status={appData.saveStatus} />
+        )}
         {appData.cloudError != null && (
           <div className="mb-2 flex justify-center">
             <p

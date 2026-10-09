@@ -43,6 +43,16 @@ const MAX_HISTORY = 50;
 const CLOUD_SYNC_FAILED = "Sync failed — your changes are saved on this device.";
 
 /**
+ * Where the latest user change is: still being written, or written. "saved"
+ * means it reached the cloud when signed in, and this device when not.
+ * `at` makes two saves in a row distinct, so the indicator restarts.
+ */
+export type SaveStatus =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "saved"; at: number };
+
+/**
  * One undoable action. `before`/`after` are full immutable AppData snapshots;
  * thanks to the immutable update style they structurally share everything the
  * action did not touch, so keeping many frames is cheap.
@@ -151,6 +161,7 @@ export function useAppData() {
   const [storageError, setStorageError] = useState<string | null>(null);
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [cloudSynced, setCloudSynced] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const cloudSaveInFlight = useRef(false);
   const pendingCloudSave = useRef<AppData | null>(null);
   /** Bumped on every local write, so a pull can tell it raced one. */
@@ -168,11 +179,16 @@ export function useAppData() {
           console.log("[cloud-sync] save succeeded");
           hasUnsyncedChanges.current = false;
           setCloudError(null);
+          // A queued save means a newer change is still on its way.
+          if (pendingCloudSave.current == null) {
+            setSaveStatus({ kind: "saved", at: Date.now() });
+          }
         })
         .catch((err: unknown) => {
           console.error("[cloud-sync] save failed:", err);
           hasUnsyncedChanges.current = true;
           setCloudError(CLOUD_SYNC_FAILED);
+          setSaveStatus({ kind: "idle" });
         })
         .finally(() => {
           const queued = pendingCloudSave.current;
@@ -301,10 +317,12 @@ export function useAppData() {
   const persist = useCallback(
     (next: AppData) => {
       localRevision.current += 1;
+      let storedLocally = false;
       try {
         saveAppData(next);
         setData(next);
         setStorageError(null);
+        storedLocally = true;
       } catch (e) {
         if (e instanceof StorageQuotaError) {
           setStorageError(e.message);
@@ -313,7 +331,12 @@ export function useAppData() {
         }
       }
 
-      if (user != null) {
+      if (user == null) {
+        setSaveStatus(
+          storedLocally ? { kind: "saved", at: Date.now() } : { kind: "idle" },
+        );
+      } else {
+        setSaveStatus({ kind: "saving" });
         if (cloudSaveInFlight.current) {
           console.log("[cloud-sync] save in flight, queuing latest state");
           pendingCloudSave.current = next;
@@ -1086,6 +1109,7 @@ export function useAppData() {
     allFoods,
     storageError,
     cloudError,
+    saveStatus,
     foodsMap,
     activeProfile,
     addFood,
