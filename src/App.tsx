@@ -105,19 +105,25 @@ function AuthenticatedApp() {
   // ⌘S / Ctrl+S, instead of the browser's "Save page" dialog. Inside a form it
   // is that form's own save, same as ⌘Enter. Anywhere else there is nothing
   // left to write — every change already wrote itself — so it only confirms,
-  // or repeats the storage error if the last write did not land. Top of the
-  // screen: the nav bar owns the bottom.
-  const { storageError } = appData;
+  // or repeats the storage error if the last write did not land, and never
+  // says a plain "Saved" while the cloud copy is failing. Top of the screen:
+  // the nav bar owns the bottom.
+  const { storageError, cloudError } = appData;
   useEffect(
     () =>
       interceptSave({
         position: "top",
         onSave: () => {
           if (submitClosestForm(document.activeElement)) return;
-          return storageError ?? "Saved";
+          return (
+            storageError ??
+            (cloudError != null
+              ? "Saved on this device — cloud sync failed"
+              : "Saved")
+          );
         },
       }),
-    [storageError],
+    [storageError, cloudError],
   );
 
   useEffect(() => {
@@ -262,6 +268,16 @@ function AuthenticatedApp() {
       )}
 
       <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">
+        {appData.cloudError != null && (
+          <div className="mb-2 flex justify-center">
+            <p
+              role="status"
+              className="rounded-full bg-destructive px-3 py-1 text-xs text-destructive-foreground"
+            >
+              {appData.cloudError}
+            </p>
+          </div>
+        )}
         <StorageUsage />
       </div>
 

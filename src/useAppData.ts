@@ -39,6 +39,9 @@ import {
 /** Maximum number of undoable actions kept in the session history. */
 const MAX_HISTORY = 50;
 
+/** Shown until a cloud write succeeds again. */
+const CLOUD_SYNC_FAILED = "Sync failed — your changes are saved on this device.";
+
 /**
  * One undoable action. `before`/`after` are full immutable AppData snapshots;
  * thanks to the immutable update style they structurally share everything the
@@ -146,6 +149,7 @@ export function useAppData() {
   const [undoStack, setUndoStack] = useState<HistoryFrame[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryFrame[]>([]);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [cloudError, setCloudError] = useState<string | null>(null);
   const [cloudSynced, setCloudSynced] = useState(false);
   const cloudSaveInFlight = useRef(false);
   const pendingCloudSave = useRef<AppData | null>(null);
@@ -157,9 +161,11 @@ export function useAppData() {
       saveCloudData(uid, dataToSave)
         .then(() => {
           console.log("[cloud-sync] save succeeded");
+          setCloudError(null);
         })
         .catch((err: unknown) => {
           console.error("[cloud-sync] save failed:", err);
+          setCloudError(CLOUD_SYNC_FAILED);
         })
         .finally(() => {
           const queued = pendingCloudSave.current;
@@ -195,19 +201,32 @@ export function useAppData() {
           setRedoStack([]);
           saveAppData(merged);
           saveCloudData(user.uid, merged)
-            .then(() => console.log("[cloud-sync] initial merge pushed to cloud"))
-            .catch((err: unknown) => console.error("[cloud-sync] initial merge push failed:", err));
+            .then(() => {
+              console.log("[cloud-sync] initial merge pushed to cloud");
+              setCloudError(null);
+            })
+            .catch((err: unknown) => {
+              console.error("[cloud-sync] initial merge push failed:", err);
+              setCloudError(CLOUD_SYNC_FAILED);
+            });
         } else {
           console.log("[cloud-sync] no cloud data, uploading local");
           saveCloudData(user.uid, local)
-            .then(() => console.log("[cloud-sync] initial upload succeeded"))
-            .catch((err: unknown) => console.error("[cloud-sync] initial upload failed:", err));
+            .then(() => {
+              console.log("[cloud-sync] initial upload succeeded");
+              setCloudError(null);
+            })
+            .catch((err: unknown) => {
+              console.error("[cloud-sync] initial upload failed:", err);
+              setCloudError(CLOUD_SYNC_FAILED);
+            });
         }
         setCloudSynced(true);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         console.error("[cloud-sync] initial load failed:", err);
+        setCloudError(CLOUD_SYNC_FAILED);
         setCloudSynced(true);
       });
 
@@ -1002,6 +1021,7 @@ export function useAppData() {
     data,
     allFoods,
     storageError,
+    cloudError,
     foodsMap,
     activeProfile,
     addFood,
