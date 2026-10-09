@@ -1,40 +1,42 @@
 #!/bin/bash
-# Requires: GitHub CLI (gh) — install with `brew install gh && gh auth login`
-set -e
+# Check, push main, and follow the Pages deploy to completion.
+# Requires: GitHub CLI (gh). Run it from main.
+set -euo pipefail
 
-echo "Running build check..."
-npm run build
+WORKFLOW="deploy.yml"   # the root site: WORKFLOW="pages-build-deployment"
+NAME="$(basename "$(git rev-parse --show-toplevel)")"
 
-echo ""
-echo "Build passed! Pushing..."
-COMMIT_SHA=$(git rev-parse HEAD)
-git ps -f
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+  echo "Not on main: only main deploys." >&2
+  exit 1
+fi
 
-echo ""
-echo "Waiting for GitHub Actions run to appear for $COMMIT_SHA..."
+if [ -f package.json ]; then
+  npm run check
+  npm run build
+fi
 
-MAX_ATTEMPTS=30
-ATTEMPT=0
+SHA="$(git rev-parse HEAD)"
+# Never a plain --force. The lease refuses to overwrite commits pushed from
+# elsewhere, and --force-if-includes stops an editor's background fetch from
+# silently refreshing that lease. Re-pushing an amended commit still works.
+git push --force-with-lease --force-if-includes origin main
+
+echo "Waiting for the $WORKFLOW run of ${SHA:0:7}..."
 RUN_ID=""
-while [ -z "$RUN_ID" ]; do
-  ATTEMPT=$((ATTEMPT + 1))
-  if [ "$ATTEMPT" -gt "$MAX_ATTEMPTS" ]; then
-    echo "❌ Timed out waiting for workflow run to appear."
-    exit 1
-  fi
-  RUN_ID=$(gh run list --commit "$COMMIT_SHA" --workflow deploy.yml --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)
-  if [ -z "$RUN_ID" ]; then
-    sleep 2
-  fi
+for _ in $(seq 1 30); do
+  RUN_ID="$(gh run list --commit "$SHA" --workflow "$WORKFLOW" --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)"
+  [ -n "$RUN_ID" ] && break
+  sleep 2
 done
-
-echo "Found run $RUN_ID — watching..."
+if [ -z "$RUN_ID" ]; then
+  echo "No $WORKFLOW run appeared for ${SHA:0:7}." >&2
+  exit 1
+fi
 
 if gh run watch "$RUN_ID" --exit-status; then
-  osascript -e 'display notification "Deploy succeeded!" with title "NutriApp" sound name "Glass"'
-  echo "✅ Deploy complete!"
+  osascript -e "display notification \"Deploy succeeded\" with title \"$NAME\" sound name \"Glass\""
 else
-  osascript -e 'display notification "Deploy FAILED" with title "NutriApp" sound name "Basso"'
-  echo "❌ Deploy failed — check GitHub Actions."
+  osascript -e "display notification \"Deploy FAILED\" with title \"$NAME\" sound name \"Basso\""
   exit 1
 fi
