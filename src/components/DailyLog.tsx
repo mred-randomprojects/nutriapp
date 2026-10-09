@@ -143,45 +143,6 @@ function isEditModeShortcut(event: KeyboardEvent): boolean {
   return event.code === "KeyE" || event.key === "e" || event.key === "E";
 }
 
-function describeShortcutTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) {
-    return { kind: target == null ? "none" : "non-element" };
-  }
-
-  return {
-    kind: "element",
-    tagName: target.tagName,
-    id: target.id || null,
-    role: target.getAttribute("role"),
-    ariaLabel: target.getAttribute("aria-label"),
-    inputType: target instanceof HTMLInputElement ? target.type : null,
-    isContentEditable:
-      target instanceof HTMLElement ? target.isContentEditable : false,
-  };
-}
-
-function logEditModeShortcut(
-  phase: string,
-  event: KeyboardEvent,
-  details: Record<string, unknown> = {},
-) {
-  if (!isEditModeShortcut(event)) return;
-
-  console.info("[daily-log edit-mode shortcut]", {
-    phase,
-    key: event.key,
-    code: event.code,
-    defaultPrevented: event.defaultPrevented,
-    repeat: event.repeat,
-    altKey: event.altKey,
-    ctrlKey: event.ctrlKey,
-    metaKey: event.metaKey,
-    shiftKey: event.shiftKey,
-    target: describeShortcutTarget(event.target),
-    ...details,
-  });
-}
-
 function describeEntryAmount(entry: LogEntry, food: Food): string {
   if (entry.units != null && food.nutritionPerUnit != null) {
     return `${formatNumber(entry.units)} unit${entry.units === 1 ? "" : "s"}`;
@@ -1595,36 +1556,6 @@ export function DailyLog({ appData }: DailyLogProps) {
       return next;
     });
   }, [dateStr, isSelectedDayToday]);
-  const editModeDiagnostics = useMemo(
-    () => ({
-      dateStr,
-      isSelectedDayToday,
-      isEditable,
-      isLocked,
-      hasUnsavedChanges,
-      activeProfileLoaded: activeProfile != null,
-      addDialogOpen,
-      savePlanDialogOpen,
-      savePlanDiscardOpen,
-      pendingDeleteOpen: pendingDelete != null,
-      copyMenuOpen,
-      planMenuOpen,
-    }),
-    [
-      activeProfile,
-      addDialogOpen,
-      copyMenuOpen,
-      dateStr,
-      hasUnsavedChanges,
-      isEditable,
-      isLocked,
-      isSelectedDayToday,
-      pendingDelete,
-      planMenuOpen,
-      savePlanDialogOpen,
-      savePlanDiscardOpen,
-    ],
-  );
 
   useUnsavedChanges(savePlanDirty, {
     title: "Discard saved plan?",
@@ -1636,28 +1567,6 @@ export function DailyLog({ appData }: DailyLogProps) {
     if (routeDate != null) return;
     navigate(`/log/${formatDate(new Date())}`, { replace: true });
   }, [navigate, routeDate]);
-
-  useEffect(() => {
-    console.info("[daily-log edit-mode shortcut]", {
-      phase: "state",
-      marker: "2026-06-01-diagnostics",
-      ...editModeDiagnostics,
-    });
-  }, [editModeDiagnostics]);
-
-  useEffect(() => {
-    function handleDiagnosticKeyDownCapture(e: KeyboardEvent) {
-      logEditModeShortcut("window-capture", e, editModeDiagnostics);
-    }
-
-    window.addEventListener("keydown", handleDiagnosticKeyDownCapture, true);
-    return () =>
-      window.removeEventListener(
-        "keydown",
-        handleDiagnosticKeyDownCapture,
-        true,
-      );
-  }, [editModeDiagnostics]);
 
   useEffect(() => {
     setEntrySelection((prev) => normalizeEntrySelection(prev, visibleEntryIds));
@@ -1838,30 +1747,12 @@ export function DailyLog({ appData }: DailyLogProps) {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      const isEditModeKey = isEditModeShortcut(e);
-      if (isEditModeKey) {
-        logEditModeShortcut("window-bubble", e, editModeDiagnostics);
-      }
-
-      if (e.defaultPrevented) {
-        logEditModeShortcut("blocked-default-prevented", e, editModeDiagnostics);
-        return;
-      }
-      if (hasUnsavedChanges) {
-        logEditModeShortcut("blocked-unsaved-changes", e, editModeDiagnostics);
-        return;
-      }
-      if (isEditableShortcutTarget(e.target)) {
-        logEditModeShortcut("blocked-editable-target", e, editModeDiagnostics);
-        return;
-      }
+      if (e.defaultPrevented || hasUnsavedChanges) return;
+      if (isEditableShortcutTarget(e.target)) return;
       // A dialog or menu on top owns every key while it is up — including the
       // palette, whose commands are plain buttons this page must not read
       // arrows from.
-      if (isInsideModalLayer(e.target)) {
-        logEditModeShortcut("blocked-modal-layer", e, editModeDiagnostics);
-        return;
-      }
+      if (isInsideModalLayer(e.target)) return;
 
       const keyboardAction = getDailyLogKeyboardAction(e);
       if (keyboardAction != null) {
@@ -1921,10 +1812,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         return;
       }
 
-      if (e.metaKey || e.ctrlKey || e.altKey) {
-        logEditModeShortcut("blocked-modifier", e, editModeDiagnostics);
-        return;
-      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       if (isAddEntryShortcut(e)) {
         if (
@@ -1948,7 +1836,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         return;
       }
 
-      if (isEditModeKey) {
+      if (isEditModeShortcut(e)) {
         if (
           activeProfile == null ||
           addDialogOpen ||
@@ -1958,19 +1846,12 @@ export function DailyLog({ appData }: DailyLogProps) {
           copyMenuOpen ||
           planMenuOpen
         ) {
-          logEditModeShortcut("blocked-ui-state", e, editModeDiagnostics);
           return;
         }
 
         e.preventDefault();
         if (!e.repeat) {
-          logEditModeShortcut("toggle", e, {
-            ...editModeDiagnostics,
-            nextIsEditable: !editModeDiagnostics.isEditable,
-          });
           toggleEditMode();
-        } else {
-          logEditModeShortcut("blocked-repeat", e, editModeDiagnostics);
         }
         return;
       } else if (e.key === "t" || e.key === "T") {
@@ -2004,7 +1885,6 @@ export function DailyLog({ appData }: DailyLogProps) {
     toggleBudgetedForSelectedEntries,
     toggleShortcutPanel,
     toggleEditMode,
-    editModeDiagnostics,
     visibleEntryIds,
   ]);
 
