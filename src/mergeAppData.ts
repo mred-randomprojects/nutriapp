@@ -190,3 +190,36 @@ function mergeEntries(
   );
   return [...liveCloudEntries, ...localOnly];
 }
+
+/** JSON with object keys sorted, so equal data always serializes equally. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) => {
+    if (v == null || typeof v !== "object" || Array.isArray(v)) return v;
+    return Object.fromEntries(
+      Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    );
+  });
+}
+
+export interface CloudPullPlan {
+  merged: AppData;
+  /** This device must adopt `merged`: the cloud had something it lacked. */
+  localChanged: boolean;
+  /** The cloud must receive `merged`: this device had something it lacked. */
+  cloudChanged: boolean;
+}
+
+/**
+ * What a pull of the cloud copy changes on each side. Equality is canonical,
+ * because the app and Firestore order object keys differently and a pull that
+ * changes nothing must not count as a change (it would wipe the undo history).
+ */
+export function planCloudPull(local: AppData, cloud: AppData): CloudPullPlan {
+  const merged = mergeAppData(local, cloud);
+  const mergedJson = canonicalJson(merged);
+  return {
+    merged,
+    localChanged: mergedJson !== canonicalJson(local),
+    cloudChanged: mergedJson !== canonicalJson(cloud),
+  };
+}

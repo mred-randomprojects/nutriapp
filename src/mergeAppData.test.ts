@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mergeAppData } from "./mergeAppData.js";
+import { mergeAppData, planCloudPull } from "./mergeAppData.js";
 import type {
   AppData,
   DayLog,
@@ -366,5 +366,71 @@ describe("mergeAppData: day logs", () => {
       }),
     );
     assert.deepEqual(ids(onlyDay(merged).entries), ["e1"]);
+  });
+});
+
+describe("planCloudPull", () => {
+  it("brings an entry logged on another device into this one", () => {
+    const synced = { mealPlans: [], weeklyPlan: {} };
+    const local = appData({
+      activeProfileId: P1,
+      profiles: [
+        profile("p1", { ...synced, dayLogs: [dayLog(DAY, [entry("e1", "f1", 100)])] }),
+      ],
+    });
+    const cloud = appData({
+      activeProfileId: P1,
+      profiles: [
+        profile("p1", {
+          ...synced,
+          dayLogs: [dayLog(DAY, [entry("e1", "f1", 100), entry("e2", "f1", 50)])],
+        }),
+      ],
+    });
+    const plan = planCloudPull(local, cloud);
+    assert.deepEqual(ids(onlyDay(plan.merged).entries), ["e1", "e2"]);
+    assert.equal(plan.localChanged, true);
+    assert.equal(plan.cloudChanged, false);
+  });
+
+  it("pushes back what only this device has", () => {
+    const local = appData({ foods: [food("f1", "Rice"), food("f2", "Beans")] });
+    const cloud = appData({ foods: [food("f1", "Rice")] });
+    const plan = planCloudPull(local, cloud);
+    assert.deepEqual(ids(plan.merged.foods), ["f1", "f2"]);
+    assert.equal(plan.localChanged, false);
+    assert.equal(plan.cloudChanged, true);
+  });
+
+  it("reports no change when the two differ only in key order", () => {
+    const local = appData({ foods: [food("f1", "Rice")] });
+    const reordered = Object.fromEntries(
+      Object.entries(food("f1", "Rice")).reverse(),
+    ) as Food;
+    const cloud: AppData = {
+      deletedProfiles: [],
+      deletedFoods: [],
+      deletedDayLogEntries: [],
+      activeProfileId: null,
+      profiles: [],
+      foods: [reordered],
+    };
+    const plan = planCloudPull(local, cloud);
+    assert.equal(plan.localChanged, false);
+    assert.equal(plan.cloudChanged, false);
+  });
+
+  it("is a no-op on the second pull once both sides hold the merge", () => {
+    const local = appData({
+      profiles: [profile("p1", { dayLogs: [dayLog(DAY, [entry("e1", "f1", 100)])] })],
+    });
+    const cloud = appData({
+      foods: [food("f1", "Rice")],
+      profiles: [profile("p1", { dayLogs: [dayLog(DAY, [entry("e2", "f1", 50)])] })],
+    });
+    const { merged } = planCloudPull(local, cloud);
+    const again = planCloudPull(merged, merged);
+    assert.equal(again.localChanged, false);
+    assert.equal(again.cloudChanged, false);
   });
 });

@@ -25,7 +25,7 @@ import type {
 import { generateId } from "./types";
 import { loadAppData, saveAppData, StorageQuotaError } from "./storage";
 import { loadCloudData, saveCloudData } from "./cloudStorage";
-import { mergeAppData } from "./mergeAppData";
+import { planCloudPull } from "./mergeAppData";
 import { reconcileTombstonesForRestore } from "./tombstones";
 import { useAuth } from "./auth";
 import { builtinFoods } from "./data/builtinFoods";
@@ -153,6 +153,11 @@ export function useAppData() {
   const [cloudSynced, setCloudSynced] = useState(false);
   const cloudSaveInFlight = useRef(false);
   const pendingCloudSave = useRef<AppData | null>(null);
+  /** Bumped on every local write, so a pull can tell it raced one. */
+  const localRevision = useRef(0);
+  const pullInFlight = useRef(false);
+  /** The last cloud write failed, so this device holds changes the cloud lacks. */
+  const hasUnsyncedChanges = useRef(false);
 
   const flushCloudSave = useCallback(
     (uid: string, dataToSave: AppData) => {
@@ -161,10 +166,12 @@ export function useAppData() {
       saveCloudData(uid, dataToSave)
         .then(() => {
           console.log("[cloud-sync] save succeeded");
+          hasUnsyncedChanges.current = false;
           setCloudError(null);
         })
         .catch((err: unknown) => {
           console.error("[cloud-sync] save failed:", err);
+          hasUnsyncedChanges.current = true;
           setCloudError(CLOUD_SYNC_FAILED);
         })
         .finally(() => {
@@ -181,62 +188,119 @@ export function useAppData() {
     [],
   );
 
+  /**
+   * Pulls the cloud copy and merges it into this device's data (cloud wins on
+   * the same id, as at sign-in), then pushes the merge back if this device had
+   * something the cloud lacked. Runs at sign-in and again whenever the app
+   * comes back into view: the installed Dock app stays open for days, and
+   * without the re-pull it never sees what was logged in a browser tab.
+   */
+  const pullFromCloud = useCallback(
+    (uid: string, reason: "initial" | "refocus") => {
+      if (pullInFlight.current) return;
+      // A local write on its way up must land first; the next refocus retries.
+      // After a failed write, the cloud wins on the same id would revert the
+      // unsynced edits, so stay on this device's copy until a write succeeds.
+      if (
+        reason === "refocus" &&
+        (cloudSaveInFlight.current || hasUnsyncedChanges.current)
+      ) {
+        return;
+      }
+      pullInFlight.current = true;
+      const revisionAtStart = localRevision.current;
+      console.log(`[cloud-sync] ${reason} load started`);
+      return loadCloudData(uid)
+        .then((cloudData) => {
+          if (reason === "refocus" && localRevision.current !== revisionAtStart) {
+            // The user changed something while the pull was out; merging the
+            // older cloud copy over it could undo that change. Skip this one.
+            // The sign-in pull always merges: until it does, this device's
+            // writes would overwrite whatever only the cloud has.
+            console.log("[cloud-sync] local change during pull, skipping merge");
+            return;
+          }
+          const local = loadAppData();
+          if (cloudData == null) {
+            console.log("[cloud-sync] no cloud data, uploading local");
+            saveCloudData(uid, local)
+              .then(() => {
+                console.log("[cloud-sync] initial upload succeeded");
+                hasUnsyncedChanges.current = false;
+                setCloudError(null);
+              })
+              .catch((err: unknown) => {
+                console.error("[cloud-sync] initial upload failed:", err);
+                hasUnsyncedChanges.current = true;
+                setCloudError(CLOUD_SYNC_FAILED);
+              });
+            return;
+          }
+          const { merged, localChanged, cloudChanged } = planCloudPull(
+            local,
+            cloudData,
+          );
+          if (localChanged) {
+            console.log("[cloud-sync] cloud data differs, merging with local");
+            setData(merged);
+            // Any undo frames captured before this point reference pre-merge
+            // snapshots; undoing to one would drop the just-merged cloud data.
+            // Drop the session history so undo can never clobber the merge.
+            setUndoStack([]);
+            setRedoStack([]);
+            saveAppData(merged);
+          }
+          if (!cloudChanged) {
+            hasUnsyncedChanges.current = false;
+            setCloudError(null);
+            return;
+          }
+          saveCloudData(uid, merged)
+            .then(() => {
+              console.log("[cloud-sync] merge pushed to cloud");
+              hasUnsyncedChanges.current = false;
+              setCloudError(null);
+            })
+            .catch((err: unknown) => {
+              console.error("[cloud-sync] merge push failed:", err);
+              hasUnsyncedChanges.current = true;
+              setCloudError(CLOUD_SYNC_FAILED);
+            });
+        })
+        .catch((err: unknown) => {
+          console.error(`[cloud-sync] ${reason} load failed:`, err);
+          setCloudError(CLOUD_SYNC_FAILED);
+        })
+        .finally(() => {
+          pullInFlight.current = false;
+        });
+    },
+    [],
+  );
+
   useEffect(() => {
     if (user == null || cloudSynced) return;
+    void pullFromCloud(user.uid, "initial")?.finally(() => setCloudSynced(true));
+  }, [user, cloudSynced, pullFromCloud]);
 
-    let cancelled = false;
-    console.log("[cloud-sync] initial load started");
-    loadCloudData(user.uid)
-      .then((cloudData) => {
-        if (cancelled) return;
-        const local = loadAppData();
-        if (cloudData != null) {
-          console.log("[cloud-sync] cloud data found, merging with local");
-          const merged = mergeAppData(local, cloudData);
-          setData(merged);
-          // Any undo frames captured before this point reference pre-merge
-          // snapshots; undoing to one would drop the just-merged cloud data.
-          // Drop the session history so undo can never clobber the merge.
-          setUndoStack([]);
-          setRedoStack([]);
-          saveAppData(merged);
-          saveCloudData(user.uid, merged)
-            .then(() => {
-              console.log("[cloud-sync] initial merge pushed to cloud");
-              setCloudError(null);
-            })
-            .catch((err: unknown) => {
-              console.error("[cloud-sync] initial merge push failed:", err);
-              setCloudError(CLOUD_SYNC_FAILED);
-            });
-        } else {
-          console.log("[cloud-sync] no cloud data, uploading local");
-          saveCloudData(user.uid, local)
-            .then(() => {
-              console.log("[cloud-sync] initial upload succeeded");
-              setCloudError(null);
-            })
-            .catch((err: unknown) => {
-              console.error("[cloud-sync] initial upload failed:", err);
-              setCloudError(CLOUD_SYNC_FAILED);
-            });
-        }
-        setCloudSynced(true);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        console.error("[cloud-sync] initial load failed:", err);
-        setCloudError(CLOUD_SYNC_FAILED);
-        setCloudSynced(true);
-      });
-
+  useEffect(() => {
+    if (user == null || !cloudSynced) return;
+    const uid = user.uid;
+    function handleReturn() {
+      if (document.visibilityState !== "visible") return;
+      void pullFromCloud(uid, "refocus");
+    }
+    window.addEventListener("focus", handleReturn);
+    document.addEventListener("visibilitychange", handleReturn);
     return () => {
-      cancelled = true;
+      window.removeEventListener("focus", handleReturn);
+      document.removeEventListener("visibilitychange", handleReturn);
     };
-  }, [user, cloudSynced]);
+  }, [user, cloudSynced, pullFromCloud]);
 
   const persist = useCallback(
     (next: AppData) => {
+      localRevision.current += 1;
       try {
         saveAppData(next);
         setData(next);
