@@ -912,6 +912,7 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
+                        aria-label={`Rename ${profile.name}`}
                         onClick={() =>
                           startEditing(
                             profile.id as ProfileId,
@@ -925,6 +926,7 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
+                        aria-label={`Edit goals for ${profile.name}`}
                         onClick={() =>
                           setGoalsEditingId(
                             goalsEditingId === profile.id
@@ -939,6 +941,7 @@ export function ProfileManager({ appData }: ProfileManagerProps) {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
+                        aria-label={`Delete ${profile.name}`}
                         onClick={() =>
                           setPendingDelete({
                             title: "Delete profile",

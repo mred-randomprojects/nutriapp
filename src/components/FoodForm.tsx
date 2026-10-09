@@ -189,6 +189,7 @@ function IngredientRow({
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
+            aria-label="Remove ingredient"
             onClick={onRemove}
           >
             <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -524,6 +525,7 @@ export function FoodForm({ appData }: FoodFormProps) {
           type="button"
           variant="ghost"
           size="icon"
+          aria-label="Back to foods"
           onClick={requestClose}
         >
           <ArrowLeft className="h-5 w-5" />

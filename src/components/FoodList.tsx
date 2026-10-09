@@ -178,6 +178,7 @@ export function FoodList({ appData }: FoodListProps) {
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label={`Delete ${food.name}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setPendingDelete({

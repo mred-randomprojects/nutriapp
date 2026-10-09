@@ -758,6 +758,7 @@ export function FoodEntryCard({ item, food, isLocked, editRequestNonce, onAddAbo
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
+                aria-label="Remove entry"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemove();
@@ -907,6 +908,7 @@ export function FoodEntryCard({ item, food, isLocked, editRequestNonce, onAddAbo
             variant="ghost"
             size="icon"
             className="h-8 w-8"
+            aria-label="Remove entry"
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
@@ -1070,6 +1072,7 @@ export function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
+                  aria-label="Remove entry"
                   onClick={(e) => {
                     e.stopPropagation();
                     onRemove();
@@ -1219,6 +1222,7 @@ export function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove
             variant="ghost"
             size="icon"
             className="h-8 w-8"
+            aria-label="Remove entry"
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
@@ -2122,6 +2126,9 @@ export function DailyLog({ appData }: DailyLogProps) {
 
     return result;
   }, [dayLog, foodsMap]);
+  const allSectionsCollapsed = [...sectionSubtotals.keys()].every((id) =>
+    collapsedSections.has(id),
+  );
 
   if (activeProfile == null) {
     return (
@@ -2147,6 +2154,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Previous day"
           onClick={() => navigateToDate(subDays(selectedDate, 1))}
         >
           <ChevronLeft className="h-5 w-5" />
@@ -2182,6 +2190,7 @@ export function DailyLog({ appData }: DailyLogProps) {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Next day"
           onClick={() => navigateToDate(addDays(selectedDate, 1))}
         >
           <ChevronRight className="h-5 w-5" />
@@ -2225,13 +2234,14 @@ export function DailyLog({ appData }: DailyLogProps) {
               variant="ghost"
               size="icon"
               className="h-7 w-7"
+              aria-label={allSectionsCollapsed ? "Expand all sections" : "Collapse all sections"}
               onClick={() => {
                 const allSeparatorIds = [...sectionSubtotals.keys()];
                 const allCollapsed = allSeparatorIds.every((id) => collapsedSections.has(id));
                 setCollapsedSections(allCollapsed ? new Set() : new Set(allSeparatorIds));
               }}
             >
-              {[...sectionSubtotals.keys()].every((id) => collapsedSections.has(id)) ? (
+              {allSectionsCollapsed ? (
                 <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
               ) : (
                 <ChevronsDownUp className="h-4 w-4 text-muted-foreground" />
@@ -2445,6 +2455,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6"
+                          aria-label="Remove section"
                           onClick={(e) => {
                             e.stopPropagation();
                             setPendingDelete({
@@ -2559,6 +2570,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
+                            aria-label="Remove entry"
                             onClick={() =>
                               setPendingDelete({
                                 title: "Remove entry",
