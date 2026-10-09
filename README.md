@@ -116,11 +116,23 @@ The values are the same as in your `.env` file.
 
 ## Data Architecture
 
-- **Built-in foods** ship as static JSON in the bundle (`src/data/foods.json`)
+- **Built-in foods** ship as static JSON in the bundle (`src/data/foods.json`, filled by
+  `npm run add-food`). It is empty today: every food is a user food.
 - **User data** (custom foods, profiles, day logs) is stored in both:
   - **localStorage** — immediate reads/writes, works offline
-  - **Firestore** — async cloud sync for cross-device access
-- On app load, data from Firestore and localStorage is **merged** (union of both, no data is ever discarded)
+  - **Firestore** — async cloud sync for cross-device access, one document per user
+- **On app load** the cloud document is read once and merged with this device's copy. Items
+  only one side has are kept (entries only this device has go to the end of their day). For
+  an item both sides have, **the cloud's version wins**. A value the cloud lacks (a day's
+  weight, a weight plan) is filled in from this device, even when it was cleared on purpose
+  elsewhere. Deletions are tombstones merged from both sides.
+- **Every change after that** writes this device's whole copy to the cloud; only the
+  tombstones are merged on the way. The cloud is not read again until the app reloads, so a
+  window left open for days overwrites changes made on other devices since it loaded
+  (audit finding nutriapp-1). `src/mergeAppData.test.ts` pins this behaviour.
+- A failed cloud read or write shows a pill above the storage meter until a write succeeds.
+- **Backup:** Account → **Download backup (JSON)** saves exactly what the `nutriapp-data` key
+  holds, as `nutriapp-backup-YYYY-MM-DD.json`. There is no import.
 - Firestore document path: `users/{uid}/data/appData`
 
 ## Future Features
@@ -130,7 +142,7 @@ The values are the same as in your `.env` file.
 - [ ] **Storage support** — add Firebase Storage (or equivalent) for storing user-uploaded files such as food photos.
 - [ ] **Weekly/monthly summary view** — show average daily calories, protein, sat. fat, and fiber over the last 7 or 30 days. Give users a feedback loop that makes tracking feel worthwhile instead of each day being an island.
 - [ ] **Nutrition targets / goals** — let users set calorie/protein/fiber targets per profile, and show progress bars or color-coding (green = on track, red = over) in the daily totals card.
-- [ ] **Cloud sync status indicator** — show a small cloud icon (checkmark/spinner/warning) so users know whether their data is synced, syncing, or failed. Right now cloud sync failures are completely silent.
+- [ ] **Cloud sync status indicator** — show a small cloud icon (checkmark/spinner/warning) so users know whether their data is synced, syncing, or failed. Today only failures show, as a pill above the storage meter.
 
 ## Installed app appearance
 
