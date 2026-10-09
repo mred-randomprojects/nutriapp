@@ -13,6 +13,7 @@ import { ProfileManager } from "./components/ProfileManager";
 import { TrendPage } from "./components/TrendPage";
 import { StorageUsage } from "./components/StorageUsage";
 import { AccountPage } from "./components/AccountPage";
+import { downloadBackup } from "./downloadBackup";
 import { LoginPage } from "./components/LoginPage";
 import { Loader2 } from "lucide-react";
 import { UnsavedChangesProvider } from "./UnsavedChangesProvider";
@@ -90,6 +91,7 @@ function AuthenticatedApp() {
     { id: "act-today", title: "Jump to today", section: "Actions", keywords: "log date now", run: () => navigate(todayLogPath()) },
     { id: "act-add-food", title: "Add a new food", section: "Actions", keywords: "create new food", run: () => navigate("/foods/new") },
     { id: "act-history", title: "Open change history", section: "Actions", keywords: "undo timeline redo", run: () => setHistoryOpen(true) },
+    { id: "act-backup", title: "Download backup (JSON)", section: "Actions", keywords: "export save file json", run: () => downloadBackup(appData.data) },
     ...(canUndo ? [{ id: "act-undo", title: "Undo last change", section: "Actions", keywords: "revert", hint: "⌘Z", run: undo }] : []),
     ...(canRedo ? [{ id: "act-redo", title: "Redo change", section: "Actions", keywords: "", hint: "⇧⌘Z", run: redo }] : []),
   ];
@@ -244,7 +246,7 @@ function AuthenticatedApp() {
           path="/profiles"
           element={<ProfileManager appData={appData} />}
         />
-        <Route path="/account" element={<AccountPage />} />
+        <Route path="/account" element={<AccountPage appData={appData} />} />
       </Routes>
 
       {appData.storageError != null && (

@@ -30,6 +30,8 @@
     "src/nutrition.test.ts",
     "src/calculator.ts",
     "src/calculator.test.ts",
+    "src/backup.ts",
+    "src/backup.test.ts",
     "src/types.ts"
   ]
 }

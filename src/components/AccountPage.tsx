@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { useAuth } from "../auth";
-import { LogOut } from "lucide-react";
+import { Download, LogOut } from "lucide-react";
+import type { AppDataHandle } from "../appDataType";
+import { downloadBackup } from "../downloadBackup";
 
-export function AccountPage() {
+interface AccountPageProps {
+  appData: AppDataHandle;
+}
+
+export function AccountPage({ appData }: AccountPageProps) {
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
 
@@ -40,6 +46,21 @@ export function AccountPage() {
             </p>
           )}
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => downloadBackup(appData.data)}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          <Download className="h-4 w-4" />
+          Download backup (JSON)
+        </button>
+        <p className="text-xs text-muted-foreground">
+          Every food, profile, log and plan on this device, in one file. Keep it
+          somewhere other than this browser.
+        </p>
       </div>
 
       <button
