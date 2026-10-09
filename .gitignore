@@ -4,6 +4,7 @@ node_modules
 # Build output
 dist
 .tmp
+*.tsbuildinfo
 
 # OS files
 .DS_Store
@@ -18,6 +19,7 @@ Thumbs.db
 # Environment
 .env
 .env.*
+!.env.example
 
 # Vite
 *.local
@@ -25,3 +27,13 @@ Thumbs.db
 # Archives and media accidentally added
 *.zip
 Photos-*/
+
+# Credentials: never committed
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
+*.pem
+*.p12
+
+# Claude Code per-machine settings
+.claude/settings.local.json
