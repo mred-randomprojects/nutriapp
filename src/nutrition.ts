@@ -1,4 +1,4 @@
-import type { ComboIngredient, DayLogItem, Food, LogEntry, NutritionPer100g, NutritionValues, WakeSleepSchedule } from "./types";
+import type { ComboIngredient, DayLogItem, Food, LogEntry, NutritionPer100g, NutritionValues, WakeSleepSchedule } from "./types.js";
 
 type NutritionStatusFilter = "all" | "consumed" | "budgeted";
 

@@ -24,6 +24,12 @@
     "src/tombstones.test.ts",
     "src/deletedDayLogEntries.ts",
     "src/deletedAppEntities.ts",
+    "src/mergeAppData.ts",
+    "src/mergeAppData.test.ts",
+    "src/nutrition.ts",
+    "src/nutrition.test.ts",
+    "src/calculator.ts",
+    "src/calculator.test.ts",
     "src/types.ts"
   ]
 }

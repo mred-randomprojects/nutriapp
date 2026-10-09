@@ -1,5 +1,5 @@
 import { differenceInCalendarDays } from "date-fns";
-import type { ActivityLevel, Sex, UserMetrics, WeightLossPlan } from "./types";
+import type { ActivityLevel, Sex, UserMetrics, WeightLossPlan } from "./types.js";
 
 const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
   sedentary: 1.2,

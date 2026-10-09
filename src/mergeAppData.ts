@@ -7,19 +7,19 @@ import type {
   DayLog,
   DayLogItem,
   LogEntryId,
-} from "./types";
+} from "./types.js";
 import {
   buildDeletedDayLogEntrySet,
   deletedDayLogEntryKey,
   filterDeletedDayLogEntriesFromDayLog,
   filterDeletedDayLogEntriesFromDayLogs,
   mergeDeletedDayLogEntries,
-} from "./deletedDayLogEntries";
+} from "./deletedDayLogEntries.js";
 import {
   filterDeletedAppEntitiesFromAppData,
   mergeDeletedFoods,
   mergeDeletedProfiles,
-} from "./deletedAppEntities";
+} from "./deletedAppEntities.js";
 
 /**
  * Merges local and cloud AppData so that no live data is ever lost.
