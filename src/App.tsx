@@ -71,11 +71,14 @@ function AuthGate() {
     return <LoginPage />;
   }
 
-  return <AuthenticatedApp />;
+  // Keyed by uid: another account signing in (even straight from one to the
+  // other, as a second tab sees it) gets a fresh hook on its own local copy,
+  // never the previous account's state.
+  return <AuthenticatedApp key={user.uid} uid={user.uid} />;
 }
 
-function AuthenticatedApp() {
-  const appData = useAppData();
+function AuthenticatedApp({ uid }: { uid: string }) {
+  const appData = useAppData(uid);
   const navigate = useNavigate();
   const location = useLocation();
   const [historyOpen, setHistoryOpen] = useState(false);

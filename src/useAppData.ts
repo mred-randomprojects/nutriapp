@@ -23,11 +23,15 @@ import type {
   WeightLossPlan,
 } from "./types";
 import { generateId } from "./types";
-import { loadAppData, saveAppData, StorageQuotaError } from "./storage";
+import {
+  loadAppData,
+  localKeysFor,
+  saveAppData,
+  StorageQuotaError,
+} from "./storage";
 import { loadCloudData, saveCloudData } from "./cloudStorage";
 import { planCloudPull } from "./mergeAppData";
 import { reconcileTombstonesForRestore } from "./tombstones";
-import { useAuth } from "./auth";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
 import { upsertDeletedDayLogEntry } from "./deletedDayLogEntries";
@@ -152,10 +156,14 @@ function insertDayLogItem(
  * Every mutation returns a new AppData (immutable updates).
  * Built-in foods (from the bundle) are merged with user-defined foods
  * (from localStorage). Only user foods are persisted/editable.
+ *
+ * `uid` is the signed-in account. The local copy it reads and writes is that
+ * account's own (see localKeysFor), so another account signed in on the same
+ * browser never reaches it; App.tsx remounts the hook when the uid changes.
  */
-export function useAppData() {
-  const { user } = useAuth();
-  const [data, setData] = useState<AppData>(loadAppData);
+export function useAppData(uid: string) {
+  const [keys] = useState(() => localKeysFor(uid));
+  const [data, setData] = useState<AppData>(() => loadAppData(keys));
   const [undoStack, setUndoStack] = useState<HistoryFrame[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryFrame[]>([]);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -236,7 +244,7 @@ export function useAppData() {
             console.log("[cloud-sync] local change during pull, skipping merge");
             return;
           }
-          const local = loadAppData();
+          const local = loadAppData(keys);
           if (cloudData == null) {
             console.log("[cloud-sync] no cloud data, uploading local");
             saveCloudData(uid, local)
@@ -264,7 +272,7 @@ export function useAppData() {
             // Drop the session history so undo can never clobber the merge.
             setUndoStack([]);
             setRedoStack([]);
-            saveAppData(merged);
+            saveAppData(keys, merged);
           }
           if (!cloudChanged) {
             hasUnsyncedChanges.current = false;
@@ -291,17 +299,16 @@ export function useAppData() {
           pullInFlight.current = false;
         });
     },
-    [],
+    [keys],
   );
 
   useEffect(() => {
-    if (user == null || cloudSynced) return;
-    void pullFromCloud(user.uid, "initial")?.finally(() => setCloudSynced(true));
-  }, [user, cloudSynced, pullFromCloud]);
+    if (cloudSynced) return;
+    void pullFromCloud(uid, "initial")?.finally(() => setCloudSynced(true));
+  }, [uid, cloudSynced, pullFromCloud]);
 
   useEffect(() => {
-    if (user == null || !cloudSynced) return;
-    const uid = user.uid;
+    if (!cloudSynced) return;
     function handleReturn() {
       if (document.visibilityState !== "visible") return;
       void pullFromCloud(uid, "refocus");
@@ -312,17 +319,15 @@ export function useAppData() {
       window.removeEventListener("focus", handleReturn);
       document.removeEventListener("visibilitychange", handleReturn);
     };
-  }, [user, cloudSynced, pullFromCloud]);
+  }, [uid, cloudSynced, pullFromCloud]);
 
   const persist = useCallback(
     (next: AppData) => {
       localRevision.current += 1;
-      let storedLocally = false;
       try {
-        saveAppData(next);
+        saveAppData(keys, next);
         setData(next);
         setStorageError(null);
-        storedLocally = true;
       } catch (e) {
         if (e instanceof StorageQuotaError) {
           setStorageError(e.message);
@@ -331,21 +336,15 @@ export function useAppData() {
         }
       }
 
-      if (user == null) {
-        setSaveStatus(
-          storedLocally ? { kind: "saved", at: Date.now() } : { kind: "idle" },
-        );
+      setSaveStatus({ kind: "saving" });
+      if (cloudSaveInFlight.current) {
+        console.log("[cloud-sync] save in flight, queuing latest state");
+        pendingCloudSave.current = next;
       } else {
-        setSaveStatus({ kind: "saving" });
-        if (cloudSaveInFlight.current) {
-          console.log("[cloud-sync] save in flight, queuing latest state");
-          pendingCloudSave.current = next;
-        } else {
-          flushCloudSave(user.uid, next);
-        }
+        flushCloudSave(uid, next);
       }
     },
-    [user, flushCloudSave],
+    [keys, uid, flushCloudSave],
   );
 
   /**

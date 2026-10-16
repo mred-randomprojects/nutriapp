@@ -1,15 +1,61 @@
-import type { AppData, ProfileId } from "./types";
-import { filterDeletedAppEntitiesFromAppData } from "./deletedAppEntities";
+import type { AppData, ProfileId } from "./types.js";
+import { filterDeletedAppEntitiesFromAppData } from "./deletedAppEntities.js";
 import {
   isNutriAppKey,
   isQuotaError,
   storageSpaceMessage,
   storageUsage,
-} from "./storageQuota";
+} from "./storageQuota.js";
 
-const STORAGE_KEY = "nutriapp-data";
-const BACKUP_KEY = "nutriapp-data-backup";
-const CORRUPT_RECOVERY_KEY = "nutriapp-data-corrupt-recovery";
+/**
+ * The uid the unsuffixed keys (`nutriapp-data`, its backup and its corrupt
+ * copy) belong to. Before it existed, a browser kept one copy for whoever was
+ * signed in, and the next account to sign in merged it into its own cloud
+ * copy. The first account to load claims them (a device that used the app
+ * was already signed in as their owner); any other account keeps its own
+ * copy under keys suffixed with its uid. The two never read each other's.
+ */
+export const LOCAL_OWNER_KEY = "nutriapp-data-owner";
+
+/** Where one account's local copy lives in this browser. */
+export interface LocalKeys {
+  uid: string;
+  data: string;
+  backup: string;
+  corruptRecovery: string;
+}
+
+const LEGACY_KEYS = {
+  data: "nutriapp-data",
+  backup: "nutriapp-data-backup",
+  corruptRecovery: "nutriapp-data-corrupt-recovery",
+};
+
+/**
+ * The keys of `uid`'s local copy, claiming the unsuffixed ones if nobody owns
+ * them yet. Leaves every other key alone: another account's copy stays where
+ * it is, set aside for when it signs in again.
+ */
+export function localKeysFor(uid: string, storage: Storage = localStorage): LocalKeys {
+  let owner: string | null = null;
+  try {
+    owner = storage.getItem(LOCAL_OWNER_KEY);
+    if (owner == null) {
+      storage.setItem(LOCAL_OWNER_KEY, uid);
+      owner = uid;
+    }
+  } catch {
+    // Storage blocked or full: nothing persists this session anyway.
+    owner ??= uid;
+  }
+  if (owner === uid) return { uid, ...LEGACY_KEYS };
+  return {
+    uid,
+    data: `${LEGACY_KEYS.data}:${uid}`,
+    backup: `${LEGACY_KEYS.backup}:${uid}`,
+    corruptRecovery: `${LEGACY_KEYS.corruptRecovery}:${uid}`,
+  };
+}
 
 export class StorageQuotaError extends Error {
   constructor() {
@@ -19,9 +65,9 @@ export class StorageQuotaError extends Error {
   }
 }
 
-function safeSetItem(key: string, value: string): void {
+function safeSetItem(storage: Storage, key: string, value: string): void {
   try {
-    localStorage.setItem(key, value);
+    storage.setItem(key, value);
   } catch (e: unknown) {
     if (isQuotaError(e)) {
       throw new StorageQuotaError();
@@ -30,14 +76,16 @@ function safeSetItem(key: string, value: string): void {
   }
 }
 
-const DEFAULT_APP_DATA: AppData = {
-  foods: [],
-  profiles: [],
-  activeProfileId: null,
-  deletedDayLogEntries: [],
-  deletedFoods: [],
-  deletedProfiles: [],
-};
+export function emptyAppData(): AppData {
+  return {
+    foods: [],
+    profiles: [],
+    activeProfileId: null,
+    deletedDayLogEntries: [],
+    deletedFoods: [],
+    deletedProfiles: [],
+  };
+}
 
 function normalizeAppData(data: AppData): AppData {
   return filterDeletedAppEntitiesFromAppData({
@@ -50,9 +98,15 @@ function normalizeAppData(data: AppData): AppData {
   });
 }
 
-export function loadAppData(): AppData {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw == null) return { ...DEFAULT_APP_DATA };
+export function loadAppData(keys: LocalKeys, storage: Storage = localStorage): AppData {
+  let raw: string | null;
+  try {
+    raw = storage.getItem(keys.data);
+  } catch {
+    // Storage blocked (privacy settings): run on the cloud copy alone.
+    return emptyAppData();
+  }
+  if (raw == null) return emptyAppData();
 
   try {
     const parsed = JSON.parse(raw) as AppData;
@@ -61,35 +115,39 @@ export function loadAppData(): AppData {
     // Data exists but is corrupt — stash the raw string so it can be recovered
     // manually via devtools, then fall back to the backup if available.
     try {
-      localStorage.setItem(CORRUPT_RECOVERY_KEY, raw);
+      storage.setItem(keys.corruptRecovery, raw);
     } catch {
       // Best-effort; quota may be full.
     }
 
-    const backup = localStorage.getItem(BACKUP_KEY);
-    if (backup != null) {
-      try {
+    try {
+      const backup = storage.getItem(keys.backup);
+      if (backup != null) {
         const parsed = JSON.parse(backup) as AppData;
         return normalizeAppData(parsed);
-      } catch {
-        // Backup also corrupt — nothing we can do.
       }
+    } catch {
+      // Backup also corrupt — nothing we can do.
     }
 
-    return { ...DEFAULT_APP_DATA };
+    return emptyAppData();
   }
 }
 
-export function saveAppData(data: AppData): void {
-  const previous = localStorage.getItem(STORAGE_KEY);
+export function saveAppData(
+  keys: LocalKeys,
+  data: AppData,
+  storage: Storage = localStorage,
+): void {
+  const previous = storage.getItem(keys.data);
   if (previous != null) {
     try {
-      localStorage.setItem(BACKUP_KEY, previous);
+      storage.setItem(keys.backup, previous);
     } catch {
       // Best-effort; if quota is tight we still want the primary write to succeed.
     }
   }
-  safeSetItem(STORAGE_KEY, JSON.stringify(data));
+  safeSetItem(storage, keys.data, JSON.stringify(data));
 }
 
 /**
