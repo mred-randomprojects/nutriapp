@@ -1,0 +1,65 @@
+rules_version = '2';
+
+// NutriApp (Firebase project nutriapp-9ac19).
+//
+// The client (src/cloudStorage.ts) touches exactly one document per user,
+// users/{uid}/data/appData: getDoc() on sign-in and when the app comes back
+// into view, and a runTransaction() that reads it (transaction.get) and
+// writes it back with transaction.set() (create the first time, update after).
+// Nothing is ever listed or deleted, so nothing else is allowed.
+//
+// Test: `npm run test:rules` (scripts/rules-test.mjs) sends this file and every
+// client path and attack to the Rules API :test endpoint. It does not publish.
+// Publish only after review: firebase deploy --only firestore:rules --project nutriapp-9ac19
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The Google accounts that may sync. The client has no allowlist of its
+    // own: any Google account can sign in, and for any other one every sync
+    // is denied.
+    function isAllowedUser(userId) {
+      return request.auth != null
+        && request.auth.uid == userId
+        && request.auth.token.firebase.sign_in_provider == "google.com"
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+             "maxiredigonda@gmail.com",
+             "marisolpaez227@gmail.com"
+           ];
+    }
+
+    function absentOrList(d, key) {
+      return !(key in d) || d[key] is list;
+    }
+
+    // The shape payloadFromAppData() writes: at most these six fields (a
+    // field can be missing, since undefined values are stripped), the lists
+    // as lists. Adding a top-level AppData field needs a matching change here,
+    // or every save of that build is denied (the sync pill shows it).
+    function isAppData(d) {
+      return d.keys().hasOnly([
+               "foods", "profiles", "activeProfileId",
+               "deletedDayLogEntries", "deletedFoods", "deletedProfiles"
+             ])
+        && absentOrList(d, "foods")
+        && absentOrList(d, "profiles")
+        && (!("activeProfileId" in d) || d.activeProfileId == null || d.activeProfileId is string)
+        && absentOrList(d, "deletedDayLogEntries")
+        && absentOrList(d, "deletedFoods")
+        && absentOrList(d, "deletedProfiles");
+    }
+
+    match /users/{userId}/data/appData {
+      allow get: if isAllowedUser(userId);
+      allow create, update: if isAllowedUser(userId)
+        && isAppData(request.resource.data);
+      // No list and no delete: the client never does either. Deleting the
+      // document, if ever needed, is done from the console, which bypasses rules.
+    }
+
+    // Explicit default deny (Firestore already denies anything unmatched).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

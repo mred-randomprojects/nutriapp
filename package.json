@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "check": "tsc -b && eslint . && npm test",
     "test": "tsc -p tsconfig.test.json && node --test .tmp/test-dist/src/*.test.js .tmp/test-dist/src/components/*.test.js",
+    "test:rules": "node scripts/rules-test.mjs",
     "preview": "vite preview",
     "add-food": "node scripts/add-food.mjs"
   },
