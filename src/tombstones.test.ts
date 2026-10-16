@@ -9,7 +9,17 @@ import {
   buildDeletedFoodSet,
   mergeDeletedFoods,
 } from "./deletedAppEntities.js";
-import type { AppData, DeletedFood, FoodId, Food } from "./types.js";
+import { mergeAppData } from "./mergeAppData.js";
+import type {
+  AppData,
+  DayLogItem,
+  DeletedFood,
+  FoodId,
+  Food,
+  LogEntryId,
+  Profile,
+  ProfileId,
+} from "./types.js";
 
 const T0 = "2026-07-01T00:00:00.000Z";
 const T1 = "2026-07-02T00:00:00.000Z";
@@ -26,6 +36,31 @@ function food(id: string, name: string): Food {
     ingredients: null,
     createdAt: T0,
   };
+}
+
+function profile(id: string, entries: DayLogItem[] = []): Profile {
+  return {
+    id: id as ProfileId,
+    name: id,
+    dayLogs: entries.length > 0 ? [{ date: DAY, entries }] : [],
+    createdAt: T0,
+    goals: null,
+    schedule: null,
+    userMetrics: null,
+    weightLossPlan: null,
+    mealPlans: [],
+    weeklyPlan: {},
+  };
+}
+
+function entry(id: string, grams = 100): DayLogItem {
+  return { id: id as LogEntryId, foodId: "f1" as FoodId, grams };
+}
+
+const DAY = "2026-07-10";
+
+function entryIds(data: AppData): string[] {
+  return data.profiles.flatMap((p) => p.dayLogs.flatMap((d) => d.entries.map((e) => e.id)));
 }
 
 function emptyAppData(overrides: Partial<AppData> = {}): AppData {
@@ -141,5 +176,86 @@ describe("reconcileTombstonesForRestore", () => {
     assert.deepEqual(restored.deletedFoods, [
       { foodId: "f" as FoodId, deletedAt: T1 },
     ]);
+  });
+});
+
+describe("reconcileTombstonesForRestore: undoing an addition", () => {
+  const NOW = "2026-07-04T00:00:00.000Z";
+
+  it("tombstones the entry, food and profile the undo removes", () => {
+    const before = emptyAppData({ profiles: [profile("p1", [entry("e1")])] });
+    const after = emptyAppData({
+      foods: [food("f2", "Rice")],
+      profiles: [profile("p1", [entry("e1"), entry("e2")]), profile("p2")],
+    });
+
+    const undone = reconcileTombstonesForRestore(before, after, NOW);
+
+    assert.deepEqual(undone.deletedDayLogEntries, [
+      { profileId: "p1", date: DAY, entryId: "e2", deletedAt: NOW },
+    ]);
+    assert.deepEqual(undone.deletedFoods, [{ foodId: "f2", deletedAt: NOW }]);
+    assert.deepEqual(undone.deletedProfiles, [{ profileId: "p2", deletedAt: NOW }]);
+  });
+
+  it("makes a device that already pulled the undone entry drop it (nutriapp undo-add-resurrects)", () => {
+    const before = emptyAppData({ profiles: [profile("p1", [entry("e1")])] });
+    const after = emptyAppData({ profiles: [profile("p1", [entry("e1"), entry("e2")])] });
+    const undone = reconcileTombstonesForRestore(before, after, NOW);
+
+    // The phone pulled `after` before the undo: e2 is in its own copy. It
+    // merges the cloud's copy, which is now the undone state.
+    const phone = mergeAppData(after, undone);
+    assert.deepEqual(entryIds(phone), ["e1"]);
+    // And the cloud, merging the phone's copy back, keeps it gone.
+    assert.deepEqual(entryIds(mergeAppData(phone, undone)), ["e1"]);
+  });
+
+  it("tombstones every entry an undone meal-plan apply added, separators included", () => {
+    const before = emptyAppData({ profiles: [profile("p1", [entry("e1")])] });
+    const after = emptyAppData({
+      profiles: [
+        profile("p1", [
+          entry("e1"),
+          { type: "separator", id: "s1" as LogEntryId, label: "Lunch" },
+          entry("e2"),
+          entry("e3"),
+        ]),
+      ],
+    });
+    const undone = reconcileTombstonesForRestore(before, after, NOW);
+    assert.deepEqual(
+      undone.deletedDayLogEntries.map((t) => t.entryId).sort(),
+      ["e2", "e3", "s1"],
+    );
+  });
+
+  it("redo brings the addition back, and the restore beats the undo's tombstone", () => {
+    const before = emptyAppData({ profiles: [profile("p1", [entry("e1")])] });
+    const after = emptyAppData({ profiles: [profile("p1", [entry("e1"), entry("e2")])] });
+    const undone = reconcileTombstonesForRestore(before, after, NOW);
+    const later = "2026-07-05T00:00:00.000Z";
+    const redone = reconcileTombstonesForRestore(after, undone, later);
+
+    assert.deepEqual(entryIds(redone), ["e1", "e2"]);
+    // A device still holding the undo's tombstone does not re-delete it.
+    assert.deepEqual(entryIds(mergeAppData(undone, redone)), ["e1", "e2"]);
+  });
+
+  it("adds no tombstone when the undo only changes values", () => {
+    const before = emptyAppData({ profiles: [profile("p1", [entry("e1", 100)])] });
+    const after = emptyAppData({ profiles: [profile("p1", [entry("e1", 150)])] });
+    const undone = reconcileTombstonesForRestore(before, after, NOW);
+    assert.deepEqual(undone.deletedDayLogEntries, []);
+    assert.deepEqual(undone.deletedFoods, []);
+    assert.deepEqual(undone.deletedProfiles, []);
+  });
+
+  it("gives the entries of a removed profile no tombstones of their own", () => {
+    const before = emptyAppData();
+    const after = emptyAppData({ profiles: [profile("p2", [entry("e1"), entry("e2")])] });
+    const undone = reconcileTombstonesForRestore(before, after, NOW);
+    assert.deepEqual(undone.deletedProfiles, [{ profileId: "p2", deletedAt: NOW }]);
+    assert.deepEqual(undone.deletedDayLogEntries, []);
   });
 });
