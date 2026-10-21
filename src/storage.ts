@@ -98,6 +98,16 @@ function normalizeAppData(data: AppData): AppData {
   });
 }
 
+/** Whether a stored copy is worth keeping as the backup: a JSON object. */
+function isRestorable(raw: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed != null && typeof parsed === "object" && !Array.isArray(parsed);
+  } catch {
+    return false;
+  }
+}
+
 export function loadAppData(keys: LocalKeys, storage: Storage = localStorage): AppData {
   let raw: string | null;
   try {
@@ -106,7 +116,18 @@ export function loadAppData(keys: LocalKeys, storage: Storage = localStorage): A
     // Storage blocked (privacy settings): run on the cloud copy alone.
     return emptyAppData();
   }
-  if (raw == null) return emptyAppData();
+  if (raw == null) {
+    // No copy at all is a first visit, or something else on the shared
+    // origin removed it (devtools, a cleaner, a sibling app). Then the backup
+    // is the newest copy there is; starting empty would let the second save
+    // roll the empty copy over it.
+    try {
+      const backup = storage.getItem(keys.backup);
+      return backup == null ? emptyAppData() : normalizeAppData(JSON.parse(backup) as AppData);
+    } catch {
+      return emptyAppData();
+    }
+  }
 
   try {
     const parsed = JSON.parse(raw) as AppData;
@@ -140,7 +161,9 @@ export function saveAppData(
   storage: Storage = localStorage,
 ): void {
   const previous = storage.getItem(keys.data);
-  if (previous != null) {
+  // A copy that does not parse is what loadAppData fell back past: rolling it
+  // into the backup slot would replace the only good copy with the bad one.
+  if (previous != null && isRestorable(previous)) {
     try {
       storage.setItem(keys.backup, previous);
     } catch {

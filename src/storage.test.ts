@@ -135,4 +135,25 @@ describe("loadAppData", () => {
     assert.equal(storage.getItem(marisol.corruptRecovery), "{not json");
     assert.equal(storage.getItem("nutriapp-data-corrupt-recovery"), null);
   });
+
+  it("never rolls a corrupt copy over the good backup it fell back to", () => {
+    const storage = memoryStorage();
+    const keys = localKeysFor("uid-max", storage);
+    storage.setItem(keys.data, "{not json");
+    storage.setItem(keys.backup, JSON.stringify(data("p-good")));
+    const loaded = loadAppData(keys, storage);
+    // The first save after the fallback: the corrupt copy must not take the backup slot.
+    saveAppData(keys, { ...loaded, activeProfileId: null }, storage);
+    assert.deepEqual(profileIds(JSON.parse(storage.getItem(keys.backup) ?? "null") as AppData), ["p-good"]);
+  });
+
+  it("falls back to the backup when the copy itself is missing", () => {
+    // Removed by something else on the shared origin: the backup is the
+    // newest copy there is, and starting empty would roll that empty copy
+    // over it at the second save.
+    const storage = memoryStorage();
+    const keys = localKeysFor("uid-max", storage);
+    storage.setItem(keys.backup, JSON.stringify(data("p-backup")));
+    assert.deepEqual(profileIds(loadAppData(keys, storage)), ["p-backup"]);
+  });
 });
