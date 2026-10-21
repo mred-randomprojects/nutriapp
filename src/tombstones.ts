@@ -46,20 +46,23 @@ export function mergeTombstonePair<T extends TombstoneTimes>(a: T, b: T): T {
 }
 
 /**
- * Reconciles one tombstone array against another so the result expresses
- * `target`'s deletion intent while remaining durable against `current` (and,
- * transitively, the cloud copy `current` was last synced from).
- *
- * For each key the desired "deleted?" status is whatever `target` says. Where
- * that disagrees with `current`, the flipping timestamp is stamped to `now` so
- * it wins any subsequent max-merge:
- *   - flip to deleted  → bump `deletedAt` to now
- *   - flip to restored → bump `restoredAt` to now (keeping the original deletedAt)
+ * Reconciles the tombstones of one kind for a restore of `target` over
+ * `current`. Whether an entity ends up deleted follows from `target`'s live
+ * data, not from its tombstone list: an entity `target` holds must not be
+ * deleted, and one it lacks must stay deleted. (Going by the list alone, an
+ * undo back past an addition and its later deletion found no tombstone in
+ * `target`, restored the deletion, and the entity, which `target` lacks, came
+ * back from the cloud copy and every other device.) Where the result
+ * disagrees with `current`, the flipping timestamp is stamped `now` so it
+ * wins every later max-merge:
+ *   - must stay deleted, but restored in `current` → bump `deletedAt` to now
+ *   - must be live, but deleted in `current`      → bump `restoredAt` to now
  */
 function reconcileTombstoneArray<T extends TombstoneTimes>(
   targetArr: ReadonlyArray<T>,
   currentArr: ReadonlyArray<T>,
   keyOf: (tombstone: T) => string,
+  isLiveInTarget: (key: string) => boolean,
   now: string,
 ): T[] {
   const targetMap = new Map(targetArr.map((t) => [keyOf(t), t]));
@@ -70,32 +73,37 @@ function reconcileTombstoneArray<T extends TombstoneTimes>(
   for (const key of keys) {
     const target = targetMap.get(key);
     const current = currentMap.get(key);
-    const targetActive = target != null && isTombstoneActive(target);
-    const currentActive = current != null && isTombstoneActive(current);
-
-    // `base` always exists because the key came from one of the two maps.
-    const base = (target ?? current) as T;
-
-    if (targetActive === currentActive) {
-      result.push(base);
-      continue;
-    }
-
-    if (targetActive) {
-      // Re-delete: make deletedAt newer than any restoredAt.
-      result.push({
-        ...base,
-        deletedAt: now,
-        restoredAt: maxTimestamp(target?.restoredAt, current?.restoredAt),
-      });
-    } else {
+    // Both copies descend from one history, so merging by max loses nothing.
+    const merged =
+      target != null && current != null
+        ? sameTimes(target, current)
+          ? target
+          : mergeTombstonePair(target, current)
+        : ((target ?? current) as T);
+    const live = isLiveInTarget(key);
+    if (live && isTombstoneActive(merged)) {
       // Un-delete: keep the original deletedAt but restore more recently.
-      const deletedAt = current?.deletedAt ?? target?.deletedAt ?? now;
-      result.push({ ...base, deletedAt, restoredAt: now });
+      result.push({ ...merged, restoredAt: now });
+    } else if (!live && !isTombstoneActive(merged)) {
+      // Re-delete: make deletedAt newer than any restoredAt.
+      result.push({ ...merged, deletedAt: now });
+    } else {
+      result.push(withoutUndefinedRestore(merged));
     }
   }
 
   return result;
+}
+
+function sameTimes(a: TombstoneTimes, b: TombstoneTimes): boolean {
+  return a.deletedAt === b.deletedAt && a.restoredAt === b.restoredAt;
+}
+
+function withoutUndefinedRestore<T extends TombstoneTimes>(tombstone: T): T {
+  if (tombstone.restoredAt !== undefined || !("restoredAt" in tombstone)) return tombstone;
+  const copy = { ...tombstone };
+  delete copy.restoredAt;
+  return copy;
 }
 
 /**
@@ -158,13 +166,28 @@ const profileKey = (t: DeletedProfile) => t.profileId;
 const entryKey = (t: DeletedDayLogEntry) =>
   `${t.profileId}\u0000${t.date}\u0000${t.entryId}`;
 
+/** The keys of everything `data` holds live, in the tombstones' key format. */
+function liveKeys(data: AppData) {
+  const foods = new Set<string>(data.foods.map((f) => f.id));
+  const profiles = new Set<string>(data.profiles.map((p) => p.id));
+  const entries = new Set<string>();
+  for (const profile of data.profiles) {
+    for (const day of profile.dayLogs) {
+      for (const entry of day.entries) {
+        entries.add(`${profile.id}\u0000${day.date}\u0000${entry.id}`);
+      }
+    }
+  }
+  return { foods, profiles, entries };
+}
+
 /**
  * Produces the AppData to persist when restoring `target` (an earlier snapshot)
  * over the live `current` state. Live entities come straight from `target`;
  * only the tombstone arrays are reconciled, so that the restore survives the
  * next cloud merge: a deletion it undoes is not silently re-applied, and what
- * it removes (an undone addition) gets a fresh tombstone instead of coming
- * back from a device that already had it.
+ * it removes (an undone addition) gets a fresh tombstone, or keeps its
+ * existing one, instead of coming back from a device that already had it.
  */
 export function reconcileTombstonesForRestore(
   target: AppData,
@@ -172,10 +195,17 @@ export function reconcileTombstonesForRestore(
   now: string,
 ): AppData {
   const removed = removalTombstones(target, current, now);
+  const live = liveKeys(target);
   return {
     ...target,
     deletedFoods: withRemovals(
-      reconcileTombstoneArray(target.deletedFoods ?? [], current.deletedFoods ?? [], foodKey, now),
+      reconcileTombstoneArray(
+        target.deletedFoods ?? [],
+        current.deletedFoods ?? [],
+        foodKey,
+        (key) => live.foods.has(key),
+        now,
+      ),
       removed.foods,
       foodKey,
     ),
@@ -184,6 +214,7 @@ export function reconcileTombstonesForRestore(
         target.deletedProfiles ?? [],
         current.deletedProfiles ?? [],
         profileKey,
+        (key) => live.profiles.has(key),
         now,
       ),
       removed.profiles,
@@ -194,6 +225,7 @@ export function reconcileTombstonesForRestore(
         target.deletedDayLogEntries ?? [],
         current.deletedDayLogEntries ?? [],
         entryKey,
+        (key) => live.entries.has(key),
         now,
       ),
       removed.entries,

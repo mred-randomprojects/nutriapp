@@ -251,6 +251,22 @@ describe("reconcileTombstonesForRestore: undoing an addition", () => {
     assert.deepEqual(undone.deletedProfiles, []);
   });
 
+  it("keeps an entry deleted when the undo goes back past both its addition and its deletion", () => {
+    // History: add e2, then delete e2. Undoing both lands on a snapshot that
+    // never had e2 and has no tombstone for it either.
+    const before = emptyAppData({ profiles: [profile("p1", [entry("e1")])] });
+    const current = emptyAppData({
+      profiles: [profile("p1", [entry("e1")])],
+      deletedDayLogEntries: [{ profileId: "p1" as ProfileId, date: DAY, entryId: "e2" as LogEntryId, deletedAt: T1 }],
+    });
+    const undone = reconcileTombstonesForRestore(before, current, NOW);
+
+    // A device that still has e2 (it pulled between the add and the delete)
+    // must drop it, not get it back everywhere.
+    const phone = emptyAppData({ profiles: [profile("p1", [entry("e1"), entry("e2")])] });
+    assert.deepEqual(entryIds(mergeAppData(phone, undone)), ["e1"]);
+  });
+
   it("gives the entries of a removed profile no tombstones of their own", () => {
     const before = emptyAppData();
     const after = emptyAppData({ profiles: [profile("p2", [entry("e1"), entry("e2")])] });
