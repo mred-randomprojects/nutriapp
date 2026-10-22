@@ -6,7 +6,8 @@
  * can be offline per device, and rejects documents over a size cap.
  */
 import type { AppData } from "./types.js";
-import type { CloudPort, CloudWrite } from "./syncEngine.js";
+import type { CloudPort, CloudWrite, SafetyStore } from "./syncEngine.js";
+import type { SafetyCopy } from "./dataLoss.js";
 import { SyncEngine } from "./syncEngine.js";
 import { mergeAppData } from "./mergeAppData.js";
 import {
@@ -233,6 +234,40 @@ export class FakeCloud implements CloudPort {
   }
 }
 
+/** The IndexedDB safety store of one browser, in memory, answering a tick later. */
+export class MemorySafetyStore implements SafetyStore {
+  readonly copies = new Map<string, string>();
+
+  async load(uid: string): Promise<SafetyCopy | null> {
+    await tick();
+    const raw = this.copies.get(uid);
+    return raw == null ? null : (JSON.parse(raw) as SafetyCopy);
+  }
+
+  async save(uid: string, copy: SafetyCopy): Promise<boolean> {
+    await tick();
+    this.copies.set(uid, JSON.stringify(copy));
+    return true;
+  }
+
+  async clear(uid: string): Promise<void> {
+    await tick();
+    this.copies.delete(uid);
+  }
+}
+
+/** One safety store per browser (per FakeStorage), as IndexedDB is per origin. */
+const safetyStores = new WeakMap<FakeStorage, MemorySafetyStore>();
+
+export function safetyStoreOf(storage: FakeStorage): MemorySafetyStore {
+  let store = safetyStores.get(storage);
+  if (store == null) {
+    store = new MemorySafetyStore();
+    safetyStores.set(storage, store);
+  }
+  return store;
+}
+
 /** Retry timers the test fires by hand. */
 export class ManualTimers {
   private readonly timers = new Set<{ fn: () => void; ms: number }>();
@@ -301,6 +336,7 @@ export function openDevice(name: string, options: DeviceOptions): Device {
     schedule: timers.schedule,
     now: options.now,
     log: options.log,
+    safety: safetyStoreOf(storage),
     stampNonce: options.stampNonce,
   });
   engine.start();

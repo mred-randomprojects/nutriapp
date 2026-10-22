@@ -144,6 +144,12 @@ The values are the same as in your `.env` file.
   - **Full storage:** when the shared origin's `localStorage` is full, edits keep going to the
     cloud from memory; a mark is only stored together with the version it is for, so a
     relaunch never lets an older local copy win.
+- **Safety copy:** when a pull takes something away from this device (entries, foods,
+  profiles, weights or meal plans: a delete on another device, or an older build writing its
+  older copy), the data from just before is kept in IndexedDB (`nutriapp-safety`) and a banner
+  says what went, with **Restore it** (brings back what is missing, everywhere, as one undoable
+  action) and **Dismiss**. A second loss is added to the same copy; it goes away by itself once
+  nothing it holds is missing.
 - **Backup:** Account → **Download backup (JSON)** saves exactly what the `nutriapp-data` key
   holds, as `nutriapp-backup-YYYY-MM-DD.json`. There is no import.
 - Firestore document path: `users/{uid}/data/appData`

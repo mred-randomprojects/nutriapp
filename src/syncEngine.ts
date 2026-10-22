@@ -25,6 +25,13 @@ import {
 import { mergeAppData } from "./mergeAppData.js";
 import { reconcileTombstonesForRestore } from "./tombstones.js";
 import { CLOUD_DOC_LIMIT_BYTES, cloudDocBytes } from "./cloudDoc.js";
+import {
+  detectDataLoss,
+  restoreMissing,
+  safetyCopyAfterMerge,
+  type DataLoss,
+  type SafetyCopy,
+} from "./dataLoss.js";
 
 /** Maximum number of undoable actions kept in the session history. */
 export const MAX_HISTORY = 50;
@@ -89,6 +96,28 @@ export interface SyncSnapshot {
   saveStatus: SaveStatus;
   /** Firestore's size of the cloud copy as last read or written; null until known. */
   cloudBytes: number | null;
+  /** What a pull took away from this device, kept until restored or dismissed. */
+  safetyCopy: SafetyNotice | null;
+}
+
+export interface SafetyNotice {
+  savedAt: string;
+  /** What the copy holds that this device no longer does. */
+  loss: DataLoss;
+  /** False when the copy could not be stored: it lasts only while the app stays open. */
+  persisted: boolean;
+}
+
+/**
+ * Where this account's safety copy lives across launches (IndexedDB in the
+ * app, safetyStore.ts: the copy is as big as the data, and localStorage is
+ * the shared origin's 5 MB).
+ */
+export interface SafetyStore {
+  load(uid: string): Promise<SafetyCopy | null>;
+  /** False when it could not be stored. */
+  save(uid: string, copy: SafetyCopy): Promise<boolean>;
+  clear(uid: string): Promise<void>;
 }
 
 export interface SyncEngineOptions {
@@ -99,6 +128,8 @@ export interface SyncEngineOptions {
   /** Runs `fn` after `ms` and returns a function that cancels it. */
   schedule?: (fn: () => void, ms: number) => () => void;
   log?: (message: string, detail?: unknown) => void;
+  /** Without one, a safety copy lasts only while the app stays open. */
+  safety?: SafetyStore;
   /** Tells this tab's stamps from other tabs' (random by default; tests fix it). */
   stampNonce?: string;
 }
@@ -207,6 +238,10 @@ export class SyncEngine {
   private cloudGeneration = 0;
 
   private running = false;
+  private readonly safetyStore: SafetyStore | null;
+  private safety: SafetyCopy | null = null;
+  private safetyPersisted = false;
+  private safetyChain: Promise<void> = Promise.resolve();
   private cancelRetry: (() => void) | null = null;
   private retryDelay = RETRY_FIRST_MS;
   private stampSeq = 0;
@@ -243,7 +278,12 @@ export class SyncEngine {
       cloudError: null,
       saveStatus: { kind: "idle" },
       cloudBytes: null,
+      safetyCopy: null,
     };
+    this.safetyStore = options.safety ?? null;
+    // Every change to the safety copy goes through this chain, so a loss
+    // found before the stored copy was read is added to it, not written over it.
+    this.safetyChain = this.loadSafety();
   }
 
   // --- what the UI reads -------------------------------------------------
@@ -263,7 +303,9 @@ export class SyncEngine {
   }
 
   private update(patch: Partial<SyncSnapshot>): void {
+    const dataChanged = patch.data != null && patch.data !== this.snapshot.data;
     this.snapshot = { ...this.snapshot, ...patch };
+    if (dataChanged && this.safety != null) this.refreshSafety();
     for (const listener of [...this.listeners]) listener();
   }
 
@@ -824,10 +866,96 @@ export class SyncEngine {
 
   /** Takes a merge as this device's data. */
   private adopt(merged: AppData): void {
+    const before = this.snapshot.data;
+    this.keepSafetyCopy(before, merged);
     // Undo frames captured before the merge are pre-merge snapshots; undoing
     // to one would drop what the merge brought in. Drop the session history.
     this.update({ data: merged, undoStack: [], redoStack: [] });
     this.writeLocal(merged);
+  }
+
+  // --- safety copy ---------------------------------------------------------
+
+  private async loadSafety(): Promise<void> {
+    if (this.safetyStore == null) return;
+    try {
+      const stored = await this.safetyStore.load(this.uid);
+      if (stored == null) return;
+      // A copy kept in this session already holds what it lost; add to it.
+      this.safety =
+        this.safety == null
+          ? stored
+          : { savedAt: this.safety.savedAt, data: restoreMissing(this.safety.data, stored.data, this.isoNow()) };
+      this.safetyPersisted = true;
+      this.refreshSafety();
+    } catch (e) {
+      this.log("safety copy load failed", e);
+    }
+  }
+
+  /** A pull is about to turn `before` into `after`: keep what it takes away. */
+  private keepSafetyCopy(before: AppData, after: AppData): void {
+    if (detectDataLoss(before, after) == null) return;
+    this.safetyChain = this.safetyChain.then(async () => {
+      const copy = safetyCopyAfterMerge(this.safety, before, after, this.isoNow());
+      if (copy == null) return;
+      this.safety = copy;
+      this.safetyPersisted = false;
+      this.refreshSafety();
+      this.log("a pull removed data from this device; kept a safety copy");
+      if (this.safetyStore == null) return;
+      try {
+        this.safetyPersisted = await this.safetyStore.save(this.uid, copy);
+      } catch (e) {
+        this.log("safety copy save failed", e);
+      }
+      if (this.safety === copy) this.refreshSafety();
+    });
+  }
+
+  /** Recomputes what the copy holds that this device lacks; lets it go when nothing. */
+  private refreshSafety(): void {
+    const copy = this.safety;
+    if (copy == null) return;
+    const loss = detectDataLoss(copy.data, this.snapshot.data);
+    if (loss == null) {
+      // Everything it held is back (restored, or synced back from elsewhere).
+      this.dismissSafetyCopy();
+      return;
+    }
+    this.snapshot = {
+      ...this.snapshot,
+      safetyCopy: { savedAt: copy.savedAt, loss, persisted: this.safetyPersisted },
+    };
+    for (const listener of [...this.listeners]) listener();
+  }
+
+  /** Brings back everything the safety copy holds and this device lacks, as one undoable action. */
+  restoreSafetyCopy(): void {
+    const copy = this.safety;
+    if (copy == null) return;
+    const current = this.snapshot.data;
+    const restored = restoreMissing(current, copy.data, this.isoNow());
+    this.record("Restore what sync removed", current, restored);
+    this.persist(restored, current);
+  }
+
+  /** Forgets the safety copy, here and in its store. */
+  dismissSafetyCopy(): void {
+    if (this.safety == null && this.snapshot.safetyCopy == null) return;
+    this.safety = null;
+    this.snapshot = { ...this.snapshot, safetyCopy: null };
+    for (const listener of [...this.listeners]) listener();
+    const store = this.safetyStore;
+    if (store == null) return;
+    this.safetyChain = this.safetyChain.then(async () => {
+      if (this.safety != null) return; // a new loss arrived meanwhile
+      try {
+        await store.clear(this.uid);
+      } catch (e) {
+        this.log("safety copy clear failed", e);
+      }
+    });
   }
 
   private onSuccess(): void {

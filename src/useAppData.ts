@@ -31,6 +31,7 @@ import type {
 import { generateId } from "./types";
 import { loadCloudData, writeCloudData } from "./cloudStorage";
 import { SyncEngine, type CloudPort } from "./syncEngine";
+import { indexedDbSafetyStore } from "./safetyStore";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
 import { upsertDeletedDayLogEntry } from "./deletedDayLogEntries";
@@ -145,9 +146,15 @@ function insertDayLogItem(
  */
 export function useAppData(uid: string) {
   const [engine] = useState(
-    () => new SyncEngine({ uid, cloud: firestore, log: logCloudSync }),
+    () =>
+      new SyncEngine({
+        uid,
+        cloud: firestore,
+        log: logCloudSync,
+        safety: indexedDbSafetyStore,
+      }),
   );
-  const { data, undoStack, redoStack, storageError, cloudError, saveStatus } =
+  const { data, undoStack, redoStack, storageError, cloudError, saveStatus, safetyCopy } =
     useSyncExternalStore(engine.subscribe, engine.getSnapshot);
 
   useEffect(() => {
@@ -198,6 +205,8 @@ export function useAppData(uid: string) {
     (message: string | null) => engine.setStorageError(message),
     [engine],
   );
+  const restoreSafetyCopy = useCallback(() => engine.restoreSafetyCopy(), [engine]);
+  const dismissSafetyCopy = useCallback(() => engine.dismissSafetyCopy(), [engine]);
 
   const rawFoods = useMemo(
     () => [...builtinFoods, ...data.foods],
@@ -924,6 +933,10 @@ export function useAppData(uid: string) {
     updateDayLogWeight,
     setWeightLossPlan,
     setStorageError,
+    // --- What a pull removed from this device ---
+    safetyCopy,
+    restoreSafetyCopy,
+    dismissSafetyCopy,
     // --- Undo/redo history ---
     undoStack,
     redoStack,

@@ -798,3 +798,111 @@ function mapEntriesOf(d: AppData, change: (entries: DayLogItem[]) => DayLogItem[
     ),
   };
 }
+
+describe("a pull that removes data leaves a safety copy (nutriapp-pull-loss-silent)", () => {
+  async function phoneDeletes() {
+    const server = new FakeServer();
+    const macStorage = new FakeStorage();
+    const mac = openDevice("mac", { server, uid: UID, storage: macStorage });
+    await seed(mac);
+    const phone = openDevice("phone", { server, uid: UID });
+    await settle();
+    edit(phone, (d) => ({
+      ...mapEntriesOf(d, (entries) => entries.filter((e) => e.id !== "e1")),
+      deletedDayLogEntries: [
+        ...d.deletedDayLogEntries,
+        { profileId: P1, date: DAY, entryId: "e1" as LogEntryId, deletedAt: "2026-10-16T10:00:00.000Z" },
+      ],
+    }));
+    edit(phone, deletePlan("m-cut"));
+    await settle();
+    mac.engine.notifyReturn();
+    await settle();
+    return { server, mac, macStorage, phone };
+  }
+
+  it("keeps what this device had, says what went, and restores it everywhere", async () => {
+    const { server, mac, phone } = await phoneDeletes();
+    assert.deepEqual(entryIds(mac.data), [], "the pull itself is adopted");
+    const safety = mac.engine.getSnapshot().safetyCopy;
+    assert.ok(safety != null, "a safety copy is kept");
+    assert.equal(safety.loss.entries, 1);
+    assert.deepEqual(safety.loss.mealPlans, ["Cut"]);
+
+    mac.engine.restoreSafetyCopy();
+    await settle();
+    assert.deepEqual(entryIds(mac.data), ["e1"]);
+    assert.deepEqual(planNames(mac.data), ["Cut"]);
+    assert.deepEqual(entryIds(server.doc(UID)), ["e1"]);
+    assert.equal(mac.engine.getSnapshot().safetyCopy, null, "nothing is missing any more");
+    phone.engine.notifyReturn();
+    await settle();
+    assert.deepEqual(entryIds(phone.data), ["e1"]);
+    assert.deepEqual(planNames(phone.data), ["Cut"]);
+    mac.close();
+    phone.close();
+  });
+
+  it("survives a relaunch until restored or dismissed", async () => {
+    const { server, mac, macStorage, phone } = await phoneDeletes();
+    mac.close();
+    const relaunch = openDevice("mac2", { server, uid: UID, storage: macStorage });
+    await settle();
+    assert.equal(relaunch.engine.getSnapshot().safetyCopy?.loss.entries, 1);
+    relaunch.engine.dismissSafetyCopy();
+    await settle();
+    assert.equal(relaunch.engine.getSnapshot().safetyCopy, null);
+    relaunch.close();
+    const again = openDevice("mac3", { server, uid: UID, storage: macStorage });
+    await settle();
+    assert.equal(again.engine.getSnapshot().safetyCopy, null);
+    assert.deepEqual(entryIds(again.data), []);
+    again.close();
+    phone.close();
+  });
+
+  it("keeps no copy when a pull removes nothing", async () => {
+    const server = new FakeServer();
+    const mac = openDevice("mac", { server, uid: UID });
+    await seed(mac);
+    const phone = openDevice("phone", { server, uid: UID });
+    await settle();
+    edit(phone, addEntry(quick("x", "X")));
+    edit(phone, setGrams("e1", 140));
+    await settle();
+    mac.engine.notifyReturn();
+    await settle();
+    assert.equal(grams(mac.data, "e1"), 140);
+    assert.equal(mac.engine.getSnapshot().safetyCopy, null);
+    mac.close();
+    phone.close();
+  });
+
+  it("catches what an old build's whole-document write cleared (a weight, a meal plan)", async () => {
+    const server = new FakeServer();
+    const mac = openDevice("mac", { server, uid: UID });
+    const old = new LegacyTab(server, UID, {
+      foods: [],
+      profiles: [],
+      activeProfileId: null,
+      deletedDayLogEntries: [],
+      deletedFoods: [],
+      deletedProfiles: [],
+    });
+    await seed(mac);
+    old.pull();
+    edit(mac, savePlan("m-new", "New plan"));
+    edit(mac, setWeight(77));
+    await settle();
+    // The old build saves its copy, from before the plan and the new weight.
+    old.edit((d) => d);
+    mac.engine.notifyReturn();
+    await settle();
+    const safety = mac.engine.getSnapshot().safetyCopy;
+    assert.deepEqual(safety?.loss.mealPlans, ["New plan"]);
+    mac.engine.restoreSafetyCopy();
+    await settle();
+    assert.deepEqual(planNames(server.doc(UID)).sort(), ["Cut", "New plan"]);
+    mac.close();
+  });
+});

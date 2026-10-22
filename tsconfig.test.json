@@ -37,6 +37,8 @@
     "src/storage.ts",
     "src/storage.test.ts",
     "src/cloudDoc.ts",
+    "src/dataLoss.ts",
+    "src/dataLoss.test.ts",
     "src/cloudDoc.test.ts",
     "src/syncMerge.ts",
     "src/syncEngine.ts",

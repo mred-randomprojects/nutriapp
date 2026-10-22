@@ -28,6 +28,7 @@ import { SaveIndicator } from "./components/SaveIndicator";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import type { Command } from "./components/CommandPalette";
+import { SafetyCopyBanner } from "./components/SafetyCopyBanner";
 
 const NAV_SHORTCUTS = {
   "1": "/foods",
@@ -269,6 +270,14 @@ function AuthenticatedApp({ uid }: { uid: string }) {
             Dismiss
           </button>
         </div>
+      )}
+
+      {appData.safetyCopy != null && (
+        <SafetyCopyBanner
+          notice={appData.safetyCopy}
+          onRestore={appData.restoreSafetyCopy}
+          onDismiss={appData.dismissSafetyCopy}
+        />
       )}
 
       <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">

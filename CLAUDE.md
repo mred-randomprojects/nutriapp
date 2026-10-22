@@ -151,4 +151,4 @@ browser scopes by origin is a single pool they all share:
 
 <!-- /mred-randomprojects:shared-origin -->
 
-**In this repo:** Served at `/nutriapp/`. Keys: `nutriapp-data`, `nutriapp-data-backup`, `nutriapp-data-corrupt-recovery` (each also as `…:<uid>` for a second account, with the owner in `nutriapp-data-owner`), the pending marks `nutriapp-sync:<uid>`, and `nutriapp:food-form-draft:*`. Uses Firebase, so its session is one of the records in `firebaseLocalStorageDb`.
+**In this repo:** Served at `/nutriapp/`. Keys: `nutriapp-data`, `nutriapp-data-backup`, `nutriapp-data-corrupt-recovery` (each also as `…:<uid>` for a second account, with the owner in `nutriapp-data-owner`), the pending marks `nutriapp-sync:<uid>`, and `nutriapp:food-form-draft:*`; IndexedDB database `nutriapp-safety` (the safety copy). Uses Firebase, so its session is one of the records in `firebaseLocalStorageDb`.
