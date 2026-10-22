@@ -151,9 +151,9 @@ The values are the same as in your `.env` file.
   person just came back and nothing is being edited (no unsaved form, dialog, text focus, and
   the local copy fully stored), and otherwise shows a "New version available — reload" pill.
   This is what moves the Dock app, which stays open for days, onto new builds.
-- **Safety copy:** when a pull takes something away from this device (entries, foods,
-  profiles, weights or meal plans: a delete on another device, or an older build writing its
-  older copy), the data from just before is kept in IndexedDB (`nutriapp-safety`) and a banner
+- **Safety copy:** when a pull takes something away from this device that no tombstone
+  explains (entries, foods or profiles without a delete, weights, meal plans: an older build
+  writing its older copy, a bad write; ordinary deletes on another device do not count), the data from just before is kept in IndexedDB (`nutriapp-safety`) and a banner
   says what went, with **Restore it** (brings back what is missing, everywhere, as one undoable
   action) and **Dismiss**. A second loss is added to the same copy; it goes away by itself once
   nothing it holds is missing.

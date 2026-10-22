@@ -821,23 +821,23 @@ describe("a pull that removes data leaves a safety copy (nutriapp-pull-loss-sile
     return { server, mac, macStorage, phone };
   }
 
-  it("keeps what this device had, says what went, and restores it everywhere", async () => {
+  it("keeps what this device had, says what went untombstoned, and restores that everywhere", async () => {
     const { server, mac, phone } = await phoneDeletes();
     assert.deepEqual(entryIds(mac.data), [], "the pull itself is adopted");
     const safety = mac.engine.getSnapshot().safetyCopy;
     assert.ok(safety != null, "a safety copy is kept");
-    assert.equal(safety.loss.entries, 1);
+    assert.equal(safety.loss.entries, 0, "the entry's delete is a tombstone: an ordinary delete");
     assert.deepEqual(safety.loss.mealPlans, ["Cut"]);
 
     mac.engine.restoreSafetyCopy();
     await settle();
-    assert.deepEqual(entryIds(mac.data), ["e1"]);
+    assert.deepEqual(entryIds(mac.data), [], "the tombstoned entry stays deleted");
     assert.deepEqual(planNames(mac.data), ["Cut"]);
-    assert.deepEqual(entryIds(server.doc(UID)), ["e1"]);
+    assert.deepEqual(planNames(server.doc(UID)), ["Cut"]);
     assert.equal(mac.engine.getSnapshot().safetyCopy, null, "nothing is missing any more");
     phone.engine.notifyReturn();
     await settle();
-    assert.deepEqual(entryIds(phone.data), ["e1"]);
+    assert.deepEqual(entryIds(phone.data), []);
     assert.deepEqual(planNames(phone.data), ["Cut"]);
     mac.close();
     phone.close();
@@ -848,7 +848,7 @@ describe("a pull that removes data leaves a safety copy (nutriapp-pull-loss-sile
     mac.close();
     const relaunch = openDevice("mac2", { server, uid: UID, storage: macStorage });
     await settle();
-    assert.equal(relaunch.engine.getSnapshot().safetyCopy?.loss.entries, 1);
+    assert.deepEqual(relaunch.engine.getSnapshot().safetyCopy?.loss.mealPlans, ["Cut"]);
     relaunch.engine.dismissSafetyCopy();
     await settle();
     assert.equal(relaunch.engine.getSnapshot().safetyCopy, null);
@@ -858,6 +858,33 @@ describe("a pull that removes data leaves a safety copy (nutriapp-pull-loss-sile
     assert.equal(again.engine.getSnapshot().safetyCopy, null);
     assert.deepEqual(entryIds(again.data), []);
     again.close();
+    phone.close();
+  });
+
+  it("keeps no copy for an ordinary delete on another device (a tombstone explains it)", async () => {
+    const server = new FakeServer();
+    const mac = openDevice("mac", { server, uid: UID });
+    await seed(mac);
+    const phone = openDevice("phone", { server, uid: UID });
+    await settle();
+    edit(phone, (d) => ({
+      ...mapEntriesOf(d, (entries) => entries.filter((e) => e.id !== "e1")),
+      deletedDayLogEntries: [
+        ...d.deletedDayLogEntries,
+        { profileId: P1, date: DAY, entryId: "e1" as LogEntryId, deletedAt: "2026-10-16T10:00:00.000Z" },
+      ],
+    }));
+    edit(phone, (d) => ({
+      ...d,
+      foods: d.foods.filter((f) => f.id !== "f1"),
+      deletedFoods: [...d.deletedFoods, { foodId: "f1" as FoodId, deletedAt: "2026-10-16T10:00:00.000Z" }],
+    }));
+    await settle();
+    mac.engine.notifyReturn();
+    await settle();
+    assert.deepEqual(mac.data.foods, []);
+    assert.equal(mac.engine.getSnapshot().safetyCopy, null);
+    mac.close();
     phone.close();
   });
 
@@ -913,25 +940,19 @@ describe("safety copies of two tabs", () => {
     const macStorage = new FakeStorage();
     const tab1 = openDevice("tab1", { server, uid: UID, storage: macStorage });
     await seed(tab1);
-    edit(tab1, addEntry(food("e2", "f1", 50)));
+    edit(tab1, savePlan("m-bulk", "Bulk"));
     await settle();
     const tab2 = openDevice("tab2", { server, uid: UID, storage: macStorage });
     await settle();
     const phone = openDevice("phone", { server, uid: UID });
     await settle();
-    const remove = (id: string) => (d: AppData): AppData => ({
-      ...mapEntriesOf(d, (entries) => entries.filter((e) => e.id !== id)),
-      deletedDayLogEntries: [
-        ...d.deletedDayLogEntries,
-        { profileId: P1, date: DAY, entryId: id as LogEntryId, deletedAt: "2026-10-16T10:00:00.000Z" },
-      ],
-    });
-    edit(phone, remove("e1"));
+    // Meal plans have no tombstones: a removed one is never an explained delete.
+    edit(phone, deletePlan("m-cut"));
     await settle();
     tab1.engine.notifyReturn();
     await settle();
-    assert.equal(tab1.engine.getSnapshot().safetyCopy?.loss.entries, 1);
-    edit(phone, remove("e2"));
+    assert.deepEqual(tab1.engine.getSnapshot().safetyCopy?.loss.mealPlans, ["Cut"]);
+    edit(phone, deletePlan("m-bulk"));
     await settle();
     tab2.engine.notifyReturn();
     await settle();
@@ -939,11 +960,16 @@ describe("safety copies of two tabs", () => {
     tab2.close();
     const relaunch = openDevice("mac", { server, uid: UID, storage: macStorage });
     await settle();
-    assert.equal(relaunch.engine.getSnapshot().safetyCopy?.loss.entries, 2, "both removed entries are in the copy");
+    assert.deepEqual(
+      relaunch.engine.getSnapshot().safetyCopy?.loss.mealPlans.sort(),
+      ["Bulk", "Cut"],
+      "both removed plans are in the copy",
+    );
     relaunch.engine.restoreSafetyCopy();
     await settle();
-    assert.deepEqual(entryIds(server.doc(UID)).sort(), ["e1", "e2"]);
+    assert.deepEqual(planNames(server.doc(UID)).sort(), ["Bulk", "Cut"]);
     relaunch.close();
     phone.close();
   });
 });
+

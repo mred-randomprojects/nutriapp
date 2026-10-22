@@ -1,6 +1,21 @@
 import type { AppData, SavedMealPlan } from "./types.js";
 import { mergeAppData } from "./mergeAppData.js";
 import { reconcileTombstonesForRestore } from "./tombstones.js";
+import { filterDeletedAppEntitiesFromAppData } from "./deletedAppEntities.js";
+
+/**
+ * `data` without what `tombstones`' active tombstones delete: entries,
+ * foods (and the entries that log them) and profiles. What a merge removed
+ * that way was deleted on purpose (on this device or another), not lost.
+ */
+function withoutDeleted(data: AppData, tombstones: AppData): AppData {
+  return filterDeletedAppEntitiesFromAppData({
+    ...data,
+    deletedDayLogEntries: tombstones.deletedDayLogEntries,
+    deletedFoods: tombstones.deletedFoods,
+    deletedProfiles: tombstones.deletedProfiles,
+  });
+}
 
 /**
  * What a merge took away from this device's data, by name where the app
@@ -47,11 +62,16 @@ function plans(data: AppData): Map<string, SavedMealPlan> {
 
 /**
  * What `after` lacks that `before` had, or null when it lacks nothing. Run on
- * every merge the cloud imposes on this device: a delete on another device,
- * an old build's whole-document write, or a bad write shows up here before
- * it replaces the only copy this device has.
+ * every merge the cloud imposes on this device: an old build's
+ * whole-document write or a bad write shows up here before it replaces the
+ * only copy this device has. An entry, food or profile that an active
+ * tombstone in `after` removed does not count: that is an ordinary delete
+ * (made on another device), and a banner for each one would teach people to
+ * ignore it. Weights and meal plans have no tombstones, so any removal of
+ * them counts.
  */
-export function detectDataLoss(before: AppData, after: AppData): DataLoss | null {
+export function detectDataLoss(rawBefore: AppData, after: AppData): DataLoss | null {
+  const before = withoutDeleted(rawBefore, after);
   const afterProfiles = new Set<string>(after.profiles.map((p) => p.id));
   const afterFoods = new Set<string>(after.foods.map((f) => f.id));
   const afterEntries = entryKeys(after);
@@ -100,11 +120,16 @@ function withoutTombstones(data: AppData): AppData {
 
 /**
  * `current` plus everything `copy` has that `current` lacks: profiles, foods,
- * entries, days, weights and meal plans, deleted or not. What both have keeps
- * `current`'s version. The tombstones of what comes back are marked restored
- * (stamped `now`), so every other device brings it back too.
+ * entries, days, weights and meal plans, except what `current`'s active
+ * tombstones delete (ordinary deletes). What both have keeps `current`'s
+ * version. A tombstone that was restored more recently than its delete does
+ * not count, and the restore is stamped `now`, so every other device brings
+ * the item back too.
  */
-export function restoreMissing(current: AppData, copy: AppData, now: string): AppData {
+export function restoreMissing(current: AppData, rawCopy: AppData, now: string): AppData {
+  // What `current`'s tombstones delete stays deleted: only what was lost
+  // without one (see detectDataLoss) comes back.
+  const copy = withoutDeleted(rawCopy, current);
   // `current` plays the cloud: it wins every id both have, and a value it
   // lacks (a day's weight, a weight plan) is filled in from the copy.
   const union = mergeAppData(withoutTombstones(copy), withoutTombstones(current));

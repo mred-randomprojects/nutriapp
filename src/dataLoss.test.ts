@@ -73,8 +73,30 @@ describe("detectDataLoss", () => {
   });
 });
 
+describe("detectDataLoss: ordinary deletes", () => {
+  it("does not count entries, foods or profiles that a tombstone in `after` removed", () => {
+    const before = data([profile("p1", [entry("e1"), entry("e2")]), profile("p2", [entry("e3")])], ["f1", "f2"]);
+    const after = data([profile("p1", [entry("e1")])], ["f1"], {
+      deletedDayLogEntries: [{ profileId: "p1" as ProfileId, date: DAY, entryId: "e2" as LogEntryId, deletedAt: NOW }],
+      deletedFoods: [{ foodId: "f2" as FoodId, deletedAt: NOW }],
+      deletedProfiles: [{ profileId: "p2" as ProfileId, deletedAt: NOW }],
+    });
+    assert.equal(detectDataLoss(before, after), null);
+  });
+
+  it("still counts a removal whose tombstone was restored, and one with no tombstone", () => {
+    const before = data([profile("p1", [entry("e1"), entry("e2")])]);
+    const after = data([profile("p1", [])], [], {
+      deletedDayLogEntries: [
+        { profileId: "p1" as ProfileId, date: DAY, entryId: "e1" as LogEntryId, deletedAt: T0, restoredAt: NOW },
+      ],
+    });
+    assert.equal(detectDataLoss(before, after)?.entries, 2);
+  });
+});
+
 describe("restoreMissing", () => {
-  it("brings back what the copy has and the current data lacks, deleted or not, keeping the current versions", () => {
+  it("brings back what the copy has and the current data lacks, keeping the current versions and ordinary deletes", () => {
     const copy = data([profile("p1", [entry("e1"), entry("e2")], 80, ["m1"])], ["f1", "f2"]);
     const current = data([profile("p1", [{ ...entry("e1"), grams: 150 } as DayLogItem, entry("e9")], undefined, [])], ["f1"], {
       deletedDayLogEntries: [{ profileId: "p1" as ProfileId, date: DAY, entryId: "e2" as LogEntryId, deletedAt: "2026-10-20T00:00:00.000Z" }],
@@ -82,11 +104,11 @@ describe("restoreMissing", () => {
     });
     const restored = restoreMissing(current, copy, NOW);
     const day = restored.profiles[0].dayLogs[0];
-    assert.deepEqual(day.entries.map((e) => e.id).sort(), ["e1", "e2", "e9"]);
+    assert.deepEqual(day.entries.map((e) => e.id).sort(), ["e1", "e9"], "the tombstoned e2 stays deleted");
     assert.equal((day.entries.find((e) => e.id === "e1") as { grams: number }).grams, 150, "current version kept");
     assert.equal(day.weightKg, 80);
     assert.deepEqual(restored.profiles[0].mealPlans?.map((m) => m.id), ["m1"]);
-    assert.deepEqual(restored.foods.map((f) => f.id).sort(), ["f1", "f2"]);
+    assert.deepEqual(restored.foods.map((f) => f.id), ["f1"], "the tombstoned f2 stays deleted");
     assert.equal(detectDataLoss(copy, restored), null);
     // A device still holding the tombstones keeps the restored items.
     const elsewhere = mergeAppData(current, restored);
