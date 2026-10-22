@@ -24,7 +24,7 @@ import {
 } from "./syncMerge.js";
 import { mergeAppData } from "./mergeAppData.js";
 import { reconcileTombstonesForRestore } from "./tombstones.js";
-import { CLOUD_DOC_LIMIT_BYTES, cloudDocBytes } from "./cloudDoc.js";
+import { CLOUD_DOC_LIMIT_BYTES, cloudDocBytes, markFence } from "./cloudDoc.js";
 import {
   detectDataLoss,
   restoreMissing,
@@ -730,12 +730,16 @@ export class SyncEngine {
         carried = new Map(this.pending);
         this.inFlight = carried;
         let written = mergeForSave(this.snapshot.data, cloud, { pending: new Set(carried.keys()) });
-        // Letting go of a change another tab handed over takes a real write
-        // even when the cloud already holds it: Firestore then refuses any
-        // transaction that read before this one, such as that tab's last
-        // write still on its way with an older version.
+        // Letting go of a change another tab handed over takes a write that
+        // changes the stored document even when the cloud already holds the
+        // change: Firestore then refuses any transaction that read before
+        // this one, such as that tab's last write still on its way with an
+        // older version. An identical rewrite would not (it leaves the update
+        // time alone), so the fence changes what the app cannot see: the
+        // order of a tombstone list, or an empty field left out
+        // (cloudDoc.ts payloadForWrite).
         if (written == null && cloud != null && [...carried.values()].some((stamp) => !this.isOwn(stamp))) {
-          written = cloud;
+          written = markFence(cloud);
         }
         const holds = written ?? cloud;
         bytes = holds == null ? null : cloudDocBytes(this.uid, holds);

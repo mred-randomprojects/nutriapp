@@ -20,6 +20,7 @@ import {
   type Device,
 } from "./syncTestKit.js";
 import { CLOUD_DOC_FULL, CLOUD_SYNC_FAILED } from "./syncEngine.js";
+import { sameData } from "./syncMerge.js";
 
 // Each scenario is a finding from the 2026-10-16 audit, replayed on the real
 // SyncEngine (storage, merge, tombstones) against a Firestore stand-in. The
@@ -973,3 +974,54 @@ describe("safety copies of two tabs", () => {
   });
 });
 
+
+describe("the test kit's Firestore keeps its version on an identical write (as the emulator does)", () => {
+  it("bumps the version only when the stored document changes", () => {
+    const server = new FakeServer();
+    const data: AppData = {
+      foods: [],
+      profiles: [],
+      activeProfileId: null,
+      deletedDayLogEntries: [],
+      deletedFoods: [],
+      deletedProfiles: [],
+    };
+    server.put(UID, data);
+    const first = server.version(UID);
+    server.put(UID, JSON.parse(JSON.stringify(data)) as AppData);
+    assert.equal(server.version(UID), first, "an identical write does not advance it");
+    server.put(UID, { ...data, activeProfileId: P1 });
+    assert.equal(server.version(UID), first + 1);
+  });
+});
+
+describe("letting go of another tab's edit fences that tab's late write", () => {
+  it("writes a real change even when the cloud already holds the edit, and then goes quiet", async () => {
+    const server = new FakeServer();
+    const storage = new FakeStorage();
+    const a = openDevice("A", { server, uid: UID, storage, latency: { commit: 20 } });
+    await seed(a);
+    const b = openDevice("B", { server, uid: UID, storage });
+    await settle();
+    edit(a, setGrams("e1", 150));
+    await settle(3); // B takes A's mark over
+    assert.equal(b.engine.pendingCount, 1);
+    a.kill(true); // A's write lands, but A never lets go of its mark
+    await settle();
+    assert.equal(grams(server.doc(UID), "e1"), 150);
+    const before = server.doc(UID)!;
+    const version = server.version(UID);
+
+    b.engine.notifyReturn();
+    await settle();
+    assert.equal(b.engine.pendingCount, 0, "B let go of it");
+    assert.equal(server.version(UID), version + 1, "through a write that changed the stored document");
+    assert.ok(sameData(server.doc(UID)!, before), "without changing the data");
+
+    const quiet = server.version(UID);
+    b.engine.notifyReturn();
+    await settle();
+    assert.equal(server.version(UID), quiet, "and nothing more is written");
+    b.close();
+  });
+});

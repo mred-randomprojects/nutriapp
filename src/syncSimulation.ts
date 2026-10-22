@@ -157,7 +157,7 @@ function readRecord(d: AppData | null, key: string): Value | typeof DELETED {
     case "weight":
       return profile?.dayLogs.find((dl) => dl.date === a)?.weightKg;
     case "field":
-      return profile == null ? DELETED : (profile as unknown as Record<string, unknown>)[a];
+      return profile == null ? DELETED : new Map<string, unknown>(Object.entries(profile)).get(a);
     case "plan": {
       const plan = profile?.mealPlans?.find((m) => m.id === a);
       return plan == null ? DELETED : plan.name;
@@ -351,9 +351,10 @@ export async function simulate(options: SimOptions): Promise<string[]> {
 
   const trace: string[] = [];
   if (options.debug != null) {
-    const put = server.put.bind(server);
-    server.put = (uid, data, writer) => {
-      put(uid, data, writer);
+    const putRaw = server.putRaw.bind(server);
+    server.putRaw = (uid, raw, writer) => {
+      putRaw(uid, raw, writer);
+      const data = server.doc(uid);
       if (options.watch != null) options.debug?.(`  cloud (${writer}) ${options.watch} = ${String(readRecord(data, options.watch) === DELETED ? "deleted" : JSON.stringify(readRecord(data, options.watch)))}`);
     };
     const push = trace.push.bind(trace);

@@ -1,7 +1,7 @@
 import { doc, getDocFromServer, runTransaction } from "firebase/firestore";
 import { db } from "./firebase";
 import type { AppData } from "./types";
-import { appDataFromRaw, payloadFromAppData } from "./cloudDoc";
+import { appDataFromRaw, payloadForWrite } from "./cloudDoc";
 import type { CloudWrite } from "./syncEngine";
 
 function userDocRef(uid: string) {
@@ -33,9 +33,10 @@ export async function writeCloudData(
   const ref = userDocRef(uid);
   return runTransaction(db, async (transaction) => {
     const snap = await transaction.get(ref);
-    const cloud = snap.exists() ? appDataFromRaw(snap.data()) : null;
+    const raw = snap.exists() ? snap.data() : null;
+    const cloud = raw != null ? appDataFromRaw(raw) : null;
     const written = build(cloud);
-    if (written != null) transaction.set(ref, payloadFromAppData(written));
+    if (written != null) transaction.set(ref, payloadForWrite(written, raw));
     return { cloud, written };
   });
 }

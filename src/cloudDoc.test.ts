@@ -3,10 +3,14 @@ import { describe, it } from "node:test";
 import {
   appDataFromRaw,
   CLOUD_DOC_LIMIT_BYTES,
+  canonicalJson,
   cloudDocBytes,
   firestoreValueSize,
+  markFence,
+  payloadForWrite,
   payloadFromAppData,
 } from "./cloudDoc.js";
+import { sameData } from "./syncMerge.js";
 import type { AppData, LogEntryId, ProfileId } from "./types.js";
 
 const EMPTY: AppData = {
@@ -86,5 +90,48 @@ describe("appDataFromRaw / payloadFromAppData", () => {
       "profiles",
     ]);
     assert.equal(JSON.stringify(payload).includes("restoredAt"), false);
+  });
+});
+
+describe("payloadForWrite: a fence changes the stored document, never the data", () => {
+  const tomb = (id: string) => ({
+    profileId: "p1" as ProfileId,
+    date: "2026-10-01",
+    entryId: id as LogEntryId,
+    deletedAt: "2026-10-01T00:00:00.000Z",
+  });
+  const base = (): AppData =>
+    appDataFromRaw({ foods: [], profiles: [], activeProfileId: "p1", deletedDayLogEntries: [], deletedFoods: [], deletedProfiles: [] });
+
+  it("writes plain fields for an ordinary write", () => {
+    const data = base();
+    assert.deepEqual(payloadForWrite(data, payloadFromAppData(data)), payloadFromAppData(data));
+  });
+
+  it("rotates a tombstone list of two or more", () => {
+    const data: AppData = { ...base(), deletedDayLogEntries: [tomb("a"), tomb("b"), tomb("c")] };
+    const raw = payloadFromAppData(data);
+    const fenced = payloadForWrite(markFence(data), raw);
+    assert.notEqual(canonicalJson(fenced), canonicalJson(raw));
+    assert.deepEqual((fenced.deletedDayLogEntries as Array<{ entryId: string }>).map((t) => t.entryId), ["b", "c", "a"]);
+    assert.ok(sameData(appDataFromRaw(fenced), data));
+  });
+
+  it("leaves out an empty list when no list can rotate, which reads back the same", () => {
+    const data = base();
+    const raw = payloadFromAppData(data);
+    const fenced = payloadForWrite(markFence(data), raw);
+    assert.notEqual(canonicalJson(fenced), canonicalJson(raw));
+    assert.ok(!("deletedDayLogEntries" in fenced));
+    assert.ok(sameData(appDataFromRaw(fenced), data));
+    // The next write puts the field back: a change too, never a loop of fences.
+    const again = payloadForWrite(markFence(appDataFromRaw(fenced)), fenced);
+    assert.ok("deletedDayLogEntries" in again);
+  });
+
+  it("does not fence a write that already changes something", () => {
+    const data: AppData = { ...base(), activeProfileId: null };
+    const raw = payloadFromAppData(base());
+    assert.deepEqual(payloadForWrite(markFence(data), raw), payloadFromAppData(data));
   });
 });

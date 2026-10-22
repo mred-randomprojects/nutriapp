@@ -9,6 +9,7 @@ import type { AppData } from "./types.js";
 import type { CloudPort, CloudWrite, SafetyStore } from "./syncEngine.js";
 import type { SafetyCopy } from "./dataLoss.js";
 import { SyncEngine } from "./syncEngine.js";
+import { appDataFromRaw, canonicalJson, payloadForWrite, payloadFromAppData } from "./cloudDoc.js";
 import { mergeAppData } from "./mergeAppData.js";
 import {
   filterDeletedAppEntitiesFromAppData,
@@ -139,21 +140,37 @@ export class FakeFirestoreError extends Error {
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 export class FakeServer {
-  readonly docs = new Map<string, { data: AppData; version: number }>();
+  /** The stored fields of each document, as Firestore holds them, and a version that
+   * advances only when they change (an identical write leaves it, like updateTime). */
+  readonly docs = new Map<string, { raw: Record<string, unknown>; version: number }>();
   readonly log: string[] = [];
   /** Characters of JSON a document may hold (stands in for the 1 MiB limit). */
   maxDocChars = Infinity;
 
   doc(uid: string): AppData | null {
-    return clone(this.docs.get(uid)?.data ?? null);
+    const stored = this.docs.get(uid);
+    return stored == null ? null : appDataFromRaw(clone(stored.raw));
+  }
+
+  raw(uid: string): Record<string, unknown> | null {
+    return clone(this.docs.get(uid)?.raw ?? null);
+  }
+
+  version(uid: string): number {
+    return this.docs.get(uid)?.version ?? 0;
   }
 
   /** Who wrote each version, oldest first (the simulation's debug output reads it). */
   readonly writers: string[] = [];
 
   put(uid: string, data: AppData, writer = "?"): void {
+    this.putRaw(uid, payloadFromAppData(data), writer);
+  }
+
+  putRaw(uid: string, raw: Record<string, unknown>, writer = "?"): void {
     const previous = this.docs.get(uid);
-    this.docs.set(uid, { data: clone(data), version: (previous?.version ?? 0) + 1 });
+    if (previous != null && canonicalJson(previous.raw) === canonicalJson(raw)) return;
+    this.docs.set(uid, { raw: clone(raw), version: (previous?.version ?? 0) + 1 });
     this.writers.push(writer);
   }
 }
@@ -208,12 +225,13 @@ export class FakeCloud implements CloudPort {
 
   async write(uid: string, build: (cloud: AppData | null) => AppData | null): Promise<CloudWrite> {
     for (let attempt = 1; attempt <= 5; attempt++) {
-      const version = this.server.docs.get(uid)?.version ?? 0;
+      const version = this.server.version(uid);
+      const raw = this.server.raw(uid);
       const cloud = this.server.doc(uid);
       await this.trip("read", this.latency.read);
       const written = build(clone(cloud));
       await this.trip("commit", this.latency.commit);
-      if ((this.server.docs.get(uid)?.version ?? 0) !== version) {
+      if (this.server.version(uid) !== version) {
         this.server.log.push(`${this.name}:retry#${attempt}`);
         continue;
       }
@@ -225,7 +243,7 @@ export class FakeCloud implements CloudPort {
             `Document exceeds the maximum allowed size (${chars} > ${this.server.maxDocChars}).`,
           );
         }
-        this.server.put(uid, written, this.name);
+        this.server.putRaw(uid, payloadForWrite(written, raw), this.name);
         this.server.log.push(`${this.name}:committed`);
       }
       return { cloud, written: clone(written) };

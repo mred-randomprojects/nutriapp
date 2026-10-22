@@ -123,3 +123,69 @@ export function cloudDocBytes(uid: string, data: AppData): number {
   });
   return name + fields + 32;
 }
+
+/** Writes the engine marks as fences (see markFence). */
+const fences = new WeakSet<AppData>();
+
+/**
+ * Marks `data`, which equals the cloud copy, as a write that must still
+ * change the stored document. Firestore refuses a transaction whose read
+ * predates a later write, but only a write that changed something: an
+ * identical rewrite leaves the update time alone and fences nothing
+ * (checked on the emulator).
+ */
+export function markFence(data: AppData): AppData {
+  fences.add(data);
+  return data;
+}
+
+/** JSON with sorted object keys: Firestore maps have no key order, arrays do. */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) => {
+    if (v == null || typeof v !== "object" || Array.isArray(v)) return v;
+    return Object.fromEntries(
+      Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    );
+  });
+}
+
+const TOMBSTONE_FIELDS = ["deletedDayLogEntries", "deletedFoods", "deletedProfiles"] as const;
+
+/**
+ * The fields to store for `data` over `raw`, the stored fields. For a fence
+ * that would store exactly `raw` again, a change the app cannot see: the
+ * first tombstone list with two or more tombstones rotated by one (a list of
+ * tombstones is a set: every merge ignores its order), or else an empty list
+ * (or a null active profile) left out, which reads back the same. When
+ * not even that is possible (every tombstone list holds exactly one and a
+ * profile is active), the write is an identical one and fences nothing.
+ */
+export function payloadForWrite(
+  data: AppData,
+  raw: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const payload = payloadFromAppData(data);
+  if (!fences.has(data) || raw == null || canonicalJson(payload) !== canonicalJson(raw)) {
+    return payload;
+  }
+  for (const field of TOMBSTONE_FIELDS) {
+    const list = payload[field];
+    if (Array.isArray(list) && list.length >= 2) {
+      return { ...payload, [field]: [...list.slice(1), list[0]] };
+    }
+  }
+  for (const field of TOMBSTONE_FIELDS) {
+    const list = payload[field];
+    if (Array.isArray(list) && list.length === 0) {
+      const fenced = { ...payload };
+      delete fenced[field];
+      return fenced;
+    }
+  }
+  if (payload.activeProfileId == null) {
+    const fenced = { ...payload };
+    delete fenced.activeProfileId;
+    return fenced;
+  }
+  return payload;
+}
