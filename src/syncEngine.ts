@@ -99,6 +99,8 @@ export interface SyncEngineOptions {
   /** Runs `fn` after `ms` and returns a function that cancels it. */
   schedule?: (fn: () => void, ms: number) => () => void;
   log?: (message: string, detail?: unknown) => void;
+  /** Tells this tab's stamps from other tabs' (random by default; tests fix it). */
+  stampNonce?: string;
 }
 
 /** A write refused before it was sent: the document would pass Firestore's limit. */
@@ -212,7 +214,7 @@ export class SyncEngine {
   private localStale = false;
   /** The last write of the pending marks failed: some of this tab's edits are not marked. */
   private marksStale = false;
-  private readonly stampNonce = Math.random().toString(36).slice(2, 8);
+  private readonly stampNonce: string;
 
   constructor(options: SyncEngineOptions) {
     this.uid = options.uid;
@@ -221,6 +223,7 @@ export class SyncEngine {
     this.now = options.now ?? Date.now;
     this.schedule = options.schedule ?? defaultSchedule;
     this.log = options.log ?? (() => {});
+    this.stampNonce = options.stampNonce ?? Math.random().toString(36).slice(2, 8);
 
     this.keys = localKeysFor(this.uid, this.storage);
     const data = loadAppData(this.keys, this.storage);
@@ -325,7 +328,6 @@ export class SyncEngine {
         // write it straight back, so a relaunch does not start from nothing.
         this.log("the local copy was removed, writing it back");
         this.writeLocal(this.snapshot.data);
-        this.writeMeta();
         return;
       }
     }
@@ -504,13 +506,12 @@ export class SyncEngine {
 
   private persist(next: AppData, prev: AppData): void {
     const changes = changedKeys(prev, next);
-    this.update({ data: next });
-    this.writeLocal(next);
     if (changes.size > 0) {
       const stamp = `${this.now().toString(36)}.${(this.stampSeq++).toString(36)}.${this.stampNonce}`;
       for (const change of changes) this.pending.set(change, stamp);
-      this.writeMeta();
     }
+    this.update({ data: next });
+    this.writeLocal(next);
     // A change to tombstones alone (deleting something only they track)
     // still has to reach the cloud; tombstones merge, so it needs no key.
     if (changes.size > 0 || !sameTombstoneLists(prev, next)) {
@@ -519,31 +520,50 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * Stores `data` as this account's local copy, the pending marks for it
+   * first. A copy is only written once its marks are: storage then never
+   * holds an unmarked version, which other tabs would take for an older one
+   * (and write their own over, back and forth) and a relaunch would let the
+   * cloud overwrite. When the marks do not fit, the copy waits in memory
+   * (the edits still go to the cloud) until space frees up.
+   */
   private writeLocal(data: AppData): void {
+    const failure = this.writeMeta(data) ?? this.writeCopy(data);
+    if (failure == null) {
+      this.localStale = false;
+      this.marksStale = false;
+      if (this.snapshot.storageError != null) this.update({ storageError: null });
+      return;
+    }
+    this.localStale = true;
+    this.log("local save failed", failure);
+    this.update({
+      storageError: failure instanceof StorageQuotaError ? failure.message : STORAGE_BLOCKED,
+    });
+  }
+
+  private writeCopy(data: AppData): unknown {
     try {
       saveAppData(this.keys, data, this.storage);
-      if (this.snapshot.storageError != null) this.update({ storageError: null });
-      if (this.localStale || this.marksStale) {
-        this.localStale = false;
-        // The stored copy holds this tab's pending changes again: mark them.
-        this.writeMeta();
-      }
+      return null;
     } catch (e) {
-      this.localStale = true;
-      this.log("local save failed", e);
-      this.update({
-        storageError: e instanceof StorageQuotaError ? e.message : STORAGE_BLOCKED,
-      });
+      return e;
     }
   }
 
   /**
-   * Stores the pending list. Every tab of this account shares it, so it is
-   * read, merged and written: another tab's entries stay, the newer stamp
-   * wins a change both have, and what a cloud write of this tab carried
-   * leaves.
+   * Stores the pending marks; returns the error when they did not fit. Every
+   * tab of this account shares them, so they are read, merged and written:
+   * another tab's marks stay, the newer stamp wins a change both have, and
+   * what a cloud write of this tab carried leaves.
+   *
+   * `copy` is the copy about to be stored: this tab's marks name its
+   * versions. Without it, they name memory's, and only while the stored copy
+   * holds memory (not after a failed write: an older stored copy must not
+   * win at the next launch).
    */
-  private writeMeta(): void {
+  private writeMeta(copy: AppData | null = null): unknown {
     const result: Record<string, PendingMark> = {};
     const stored = loadSyncMeta(this.keys, this.storage).pending;
     for (const [change, mark] of Object.entries(stored)) {
@@ -555,18 +575,16 @@ export class SyncEngine {
       if (carried != null && compareStamps(mark.stamp, carried) <= 0) continue;
       result[change] = mark;
     }
+    const removalsOnly = { ...result };
     // A change another tab handed over and the list no longer names was
     // saved by some tab since: adding it back would resurrect a mark for a
     // version the cloud already holds, which then beats newer ones.
     for (const [change, stamp] of [...this.pending]) {
       if (!this.mustWrite(change, stamp) && stored[change] == null) this.pending.delete(change);
     }
-    // While the stored copy lags behind this tab (it did not fit), marking a
-    // change would make that older copy win at the next launch, over newer
-    // versions from the cloud. Such a change lives in memory and goes out
-    // with the next cloud write; it is marked once the copy is stored again.
-    if (!this.localStale) {
-      const data = this.snapshot.data;
+    const marking = copy != null || !this.localStale;
+    if (marking) {
+      const data = copy ?? this.snapshot.data;
       for (const [change, stamp] of this.pending) {
         const mark = result[change];
         if (mark == null || compareStamps(mark.stamp, stamp) <= 0) {
@@ -577,11 +595,21 @@ export class SyncEngine {
     try {
       saveSyncMeta(this.keys, { pending: result }, this.storage);
       this.carried.clear();
-      this.marksStale = this.localStale;
+      if (marking) this.marksStale = false;
+      return null;
     } catch (e) {
       this.marksStale = true;
-      // The data write right before it has already reported the space problem.
       this.log("sync state save failed", e);
+      // Letting go of what a write carried only shrinks the list, so it fits
+      // even when nothing else does; the other tabs must learn of it, or they
+      // would send the older versions those marks name again.
+      try {
+        saveSyncMeta(this.keys, { pending: removalsOnly }, this.storage);
+        this.carried.clear();
+      } catch {
+        // Storage blocked altogether.
+      }
+      return e;
     }
   }
 
@@ -647,7 +675,14 @@ export class SyncEngine {
       const result = await this.cloud.write(this.uid, (cloud) => {
         carried = new Map(this.pending);
         this.inFlight = carried;
-        const written = mergeForSave(this.snapshot.data, cloud, { pending: new Set(carried.keys()) });
+        let written = mergeForSave(this.snapshot.data, cloud, { pending: new Set(carried.keys()) });
+        // Letting go of a change another tab handed over takes a real write
+        // even when the cloud already holds it: Firestore then refuses any
+        // transaction that read before this one, such as that tab's last
+        // write still on its way with an older version.
+        if (written == null && cloud != null && [...carried.values()].some((stamp) => !this.isOwn(stamp))) {
+          written = cloud;
+        }
         const holds = written ?? cloud;
         bytes = holds == null ? null : cloudDocBytes(this.uid, holds);
         if (written != null && bytes != null && bytes > CLOUD_DOC_LIMIT_BYTES) {
@@ -748,10 +783,18 @@ export class SyncEngine {
       // When the merge adds nothing to the cloud copy, none does. Not while
       // a write of ours is on its way, though: this read may predate it, and
       // the write may still land an older version of the same change.
+      // Only this tab's own changes, though: one another tab handed over may
+      // still be on its way from that tab in an older version (a write sent
+      // just before it closed), which would land after this read. Those are
+      // let go by a write of this tab, which such a late write cannot pass.
       const settled = new Map<ChangeKey, string>();
+      let handedOverHeld = false;
       if (!this.saveInFlight) {
         for (const [change, stamp] of this.pending) {
-          if (!cloudChanged || changeHolds(change, local, cloud)) settled.set(change, stamp);
+          if (!cloudChanged || changeHolds(change, local, cloud)) {
+            if (this.isOwn(stamp)) settled.set(change, stamp);
+            else handedOverHeld = true;
+          }
         }
       }
       if (localChanged) {
@@ -761,7 +804,7 @@ export class SyncEngine {
       this.pulledThisSession = true;
       this.update({ cloudBytes: cloudDocBytes(this.uid, cloud) });
       this.settlePending(settled);
-      if (cloudChanged) {
+      if (cloudChanged || handedOverHeld) {
         if (!this.sizeBlocked) this.requestSave();
       } else {
         this.lastSaveFailed = false;

@@ -277,6 +277,8 @@ export interface DeviceOptions {
   latency?: Partial<Latency>;
   now?: () => number;
   log?: (message: string, detail?: unknown) => void;
+  /** This tab's stamp nonce; random when left out. */
+  stampNonce?: string;
 }
 
 /** A device (or a tab, when it shares `storage`) with the app open and syncing. */
@@ -299,6 +301,7 @@ export function openDevice(name: string, options: DeviceOptions): Device {
     schedule: timers.schedule,
     now: options.now,
     log: options.log,
+    stampNonce: options.stampNonce,
   });
   engine.start();
   return {

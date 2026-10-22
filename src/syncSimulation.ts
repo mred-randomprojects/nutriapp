@@ -158,6 +158,10 @@ function readRecord(d: AppData | null, key: string): Value | typeof DELETED {
       return profile?.dayLogs.find((dl) => dl.date === a)?.weightKg;
     case "field":
       return profile == null ? DELETED : (profile as unknown as Record<string, unknown>)[a];
+    case "plan": {
+      const plan = profile?.mealPlans?.find((m) => m.id === a);
+      return plan == null ? DELETED : plan.name;
+    }
     default:
       throw new Error(`unknown record ${key}`);
   }
@@ -300,6 +304,7 @@ export async function simulate(options: SimOptions): Promise<string[]> {
         commit: 1 + Math.floor(rng() * 6),
       },
       now,
+      stampNonce: Math.floor(rng() * 36 ** 6).toString(36).padStart(6, "0"),
       log:
         options.debug == null
           ? undefined
@@ -337,7 +342,10 @@ export async function simulate(options: SimOptions): Promise<string[]> {
   await settle();
   for (const slot of slots) {
     if (slot.tab == null) open(slot);
-    if (slot.field !== "") slot.records.set(JSON.stringify(["field", slot.field]), readRecord(server.doc(UID), JSON.stringify(["field", slot.field])));
+    // Meal plans merge plan by plan: each is a record of its own (below).
+    if (slot.field !== "" && slot.field !== "mealPlans") {
+      slot.records.set(JSON.stringify(["field", slot.field]), readRecord(server.doc(UID), JSON.stringify(["field", slot.field])));
+    }
   }
   await settle();
 
@@ -521,6 +529,17 @@ export async function simulate(options: SimOptions): Promise<string[]> {
       apply(slot, `weight ${slot.weightDate} ${weight}`, (d) => setWeight(d, slot.weightDate, weight), [
         JSON.stringify(["weight", slot.weightDate]),
       ]);
+    } else if (slot.field === "mealPlans") {
+      // Replaces the plans this tab shows with a new one: removes each plan
+      // it sees and adds one, plan by plan, as the app's own edits do.
+      const value = fieldValue(slot.field, n, slot.name) as Array<{ id: string }>;
+      const seen = (p1(tab.data)?.mealPlans ?? []).map((m) => m.id);
+      apply(
+        slot,
+        `set ${slot.field}`,
+        (d) => setProfileField(d, slot.field, value),
+        [...new Set([...seen, ...value.map((m) => m.id)])].map((id) => JSON.stringify(["plan", id])),
+      );
     } else if (slot.field !== "") {
       const value = fieldValue(slot.field, n, slot.name);
       apply(slot, `set ${slot.field}`, (d) => setProfileField(d, slot.field, value), [
