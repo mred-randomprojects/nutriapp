@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { useAppData } from "./useAppData";
@@ -85,6 +85,18 @@ function AuthenticatedApp({ uid }: { uid: string }) {
   const location = useLocation();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // The footer above the nav (storage bar, its warning, the sync error) grows
+  // and shrinks; the page reserves its height so nothing ends up under it.
+  const footerRef = useRef<HTMLDivElement>(null);
+  const [footerHeight, setFooterHeight] = useState(0);
+  useEffect(() => {
+    const footer = footerRef.current;
+    if (footer == null) return;
+    const observer = new ResizeObserver(() => setFooterHeight(footer.offsetHeight));
+    observer.observe(footer);
+    setFooterHeight(footer.offsetHeight);
+    return () => observer.disconnect();
+  }, []);
   const { undo, redo, canUndo, canRedo } = appData;
   const updateReady = useAppUpdate(appData.isLocalCopyStored);
 
@@ -220,7 +232,11 @@ function AuthenticatedApp({ uid }: { uid: string }) {
   }, [location.pathname, navigate]);
 
   return (
-    <div className="mx-auto min-h-dvh max-w-lg pb-20">
+    <div
+      className="mx-auto min-h-dvh max-w-lg"
+      // 4rem of nav, the footer on top of it, and a gap.
+      style={{ paddingBottom: `calc(4rem + ${footerHeight}px + 1rem)` }}
+    >
       <Routes>
         <Route path="/" element={<Navigate to={todayLogPath()} replace />} />
         <Route
@@ -282,7 +298,16 @@ function AuthenticatedApp({ uid }: { uid: string }) {
         />
       )}
 
-      <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">
+      <div
+        ref={footerRef}
+        className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4"
+      >
+        {/* A passing toast: floats over the page rather than taking room. */}
+        {appData.cloudError == null && (
+          <div className="pointer-events-none absolute bottom-full left-0 right-0 px-4">
+            <SaveIndicator status={appData.saveStatus} />
+          </div>
+        )}
         {updateReady && (
           <div className="mb-2 flex justify-center">
             <button
@@ -293,9 +318,6 @@ function AuthenticatedApp({ uid }: { uid: string }) {
               New version available — reload
             </button>
           </div>
-        )}
-        {appData.cloudError == null && (
-          <SaveIndicator status={appData.saveStatus} />
         )}
         {appData.cloudError != null && (
           <div className="mb-2 flex justify-center">
