@@ -121,21 +121,29 @@ The values are the same as in your `.env` file.
 - **User data** (custom foods, profiles, day logs) is stored in both:
   - **localStorage** — immediate reads/writes, works offline
   - **Firestore** — async cloud sync for cross-device access, one document per user
-- **On app load, and again each time the window regains focus or becomes visible,** the
-  cloud document is read and merged with this device's copy. Items
-  only one side has are kept (entries only this device has go to the end of their day). For
-  an item both sides have, **the cloud's version wins**. A value the cloud lacks (a day's
-  weight, a weight plan) is filled in from this device, even when it was cleared on purpose
-  elsewhere. Deletions are tombstones merged from both sides.
-  A refocus pull is skipped while a write is in flight or after a failed write (cloud-wins
-  would revert the unsynced edits), and discarded if the user changed something while it was
-  out; a pull that changes nothing keeps the undo history.
-- **Every change** writes this device's whole copy to the cloud; only the tombstones are
-  merged on the way. Pulling on refocus narrows, but does not close, audit finding
-  nutriapp-1: a change made elsewhere while this window keeps the focus is overwritten by
-  this window's next write. `src/mergeAppData.test.ts` pins this behaviour.
-- A failed cloud read or write shows a pill above the storage meter until a write succeeds.
-  Otherwise the same spot says "Saving…" while a change is written and "Saved" once it lands.
+- **Sync engine** (`src/syncEngine.ts`, merge rules in `src/syncMerge.ts`). Every change is
+  written to this device at once and remembered as *pending* (`nutriapp-sync:<uid>`, each
+  mark with a fingerprint of the version it is for) until a cloud write carries it, so a
+  reload or relaunch never forgets what the cloud lacks.
+  - **Merging:** for anything both sides have, the cloud's version wins, except this
+    device's pending changes, which win. Entries, foods, profiles, days and saved meal plans
+    merge one by one; only a tombstone removes an entry, food or profile, so a copy that
+    simply lacks something (an old build's whole-document write, a stale device) never
+    deletes it.
+  - **Writes** are Firestore transactions that read the server's copy and write the merge on
+    top of it (nothing when it already holds everything). A write can never replace the
+    cloud copy with an older one, even before the sign-in read, offline at launch, or while
+    another device writes.
+  - **Reads** come from the server only (`getDocFromServer`): on sign-in, whenever the window
+    regains focus or becomes visible, and when the browser comes back online. A failed read
+    or write is retried with backoff (5 s up to 5 min) and shown in the pill above the storage
+    meter; a write refused because the document would pass Firestore's 1 MiB is shown and only
+    tried again by the next edit.
+  - **Tabs** of one browser merge each other's writes from the `storage` event, so neither
+    drops what the other logged.
+  - **Full storage:** when the shared origin's `localStorage` is full, edits keep going to the
+    cloud from memory; a mark is only stored together with the version it is for, so a
+    relaunch never lets an older local copy win.
 - **Backup:** Account → **Download backup (JSON)** saves exactly what the `nutriapp-data` key
   holds, as `nutriapp-backup-YYYY-MM-DD.json`. There is no import.
 - Firestore document path: `users/{uid}/data/appData`

@@ -1,92 +1,41 @@
-import { doc, getDoc, runTransaction } from "firebase/firestore";
+import { doc, getDocFromServer, runTransaction } from "firebase/firestore";
 import { db } from "./firebase";
 import type { AppData } from "./types";
-import {
-  filterDeletedAppEntitiesFromAppData,
-  mergeDeletedFoods,
-  mergeDeletedProfiles,
-} from "./deletedAppEntities";
-import { mergeDeletedDayLogEntries } from "./deletedDayLogEntries";
-
-/**
- * Recursively strips keys whose value is `undefined` so that
- * Firestore's setDoc never sees an unsupported field value.
- */
-function stripUndefined(obj: unknown): unknown {
-  if (obj == null || typeof obj !== "object") return obj;
-  if (Array.isArray(obj)) return obj.map(stripUndefined);
-  const clean: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== undefined) {
-      clean[key] = stripUndefined(value);
-    }
-  }
-  return clean;
-}
+import { appDataFromRaw, payloadFromAppData } from "./cloudDoc";
+import type { CloudWrite } from "./syncEngine";
 
 function userDocRef(uid: string) {
   return doc(db, "users", uid, "data", "appData");
 }
 
-function appDataFromRaw(raw: Record<string, unknown>): AppData {
-  return {
-    foods: raw.foods ?? [],
-    profiles: raw.profiles ?? [],
-    activeProfileId: raw.activeProfileId ?? null,
-    deletedDayLogEntries: raw.deletedDayLogEntries ?? [],
-    deletedFoods: raw.deletedFoods ?? [],
-    deletedProfiles: raw.deletedProfiles ?? [],
-  } as AppData;
-}
-
-function payloadFromAppData(data: AppData): Record<string, unknown> {
-  return stripUndefined({
-    foods: data.foods,
-    profiles: data.profiles,
-    activeProfileId: data.activeProfileId,
-    deletedDayLogEntries: data.deletedDayLogEntries,
-    deletedFoods: data.deletedFoods,
-    deletedProfiles: data.deletedProfiles,
-  }) as Record<string, unknown>;
-}
-
+/**
+ * The server's copy, never the SDK's cache: offline this fails instead of
+ * answering with an older copy that a pull would take for the latest one.
+ */
 export async function loadCloudData(uid: string): Promise<AppData | null> {
-  const snap = await getDoc(userDocRef(uid));
+  const snap = await getDocFromServer(userDocRef(uid));
   if (!snap.exists()) return null;
   const raw = snap.data();
   if (raw == null) return null;
   return appDataFromRaw(raw);
 }
 
-export async function saveCloudData(
+/**
+ * Reads the user's document in a transaction and writes whatever `build`
+ * makes of it (nothing when it returns null). Firestore re-runs `build` on
+ * every retry with the copy that retry read, so the write always lands on
+ * top of the latest copy instead of replacing it with an older snapshot.
+ */
+export async function writeCloudData(
   uid: string,
-  data: AppData,
-): Promise<void> {
+  build: (cloud: AppData | null) => AppData | null,
+): Promise<CloudWrite> {
   const ref = userDocRef(uid);
-
-  await runTransaction(db, async (transaction) => {
+  return runTransaction(db, async (transaction) => {
     const snap = await transaction.get(ref);
-    const cloudData = snap.exists() ? appDataFromRaw(snap.data()) : null;
-    // Preserve remote tombstones so stale devices cannot resurrect deleted data.
-    const deletedDayLogEntries = mergeDeletedDayLogEntries(
-      data.deletedDayLogEntries ?? [],
-      cloudData?.deletedDayLogEntries ?? [],
-    );
-    const deletedFoods = mergeDeletedFoods(
-      data.deletedFoods ?? [],
-      cloudData?.deletedFoods ?? [],
-    );
-    const deletedProfiles = mergeDeletedProfiles(
-      data.deletedProfiles ?? [],
-      cloudData?.deletedProfiles ?? [],
-    );
-    const filteredData = filterDeletedAppEntitiesFromAppData({
-      ...data,
-      deletedDayLogEntries,
-      deletedFoods,
-      deletedProfiles,
-    });
-
-    transaction.set(ref, payloadFromAppData(filteredData));
+    const cloud = snap.exists() ? appDataFromRaw(snap.data()) : null;
+    const written = build(cloud);
+    if (written != null) transaction.set(ref, payloadFromAppData(written));
+    return { cloud, written };
   });
 }

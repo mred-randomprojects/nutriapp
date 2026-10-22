@@ -21,13 +21,29 @@ import {
   mergeDeletedProfiles,
 } from "./deletedAppEntities.js";
 
+export interface MergeOptions {
+  /**
+   * Fill a value the cloud lacks (a day's weight, a weight plan, metrics,
+   * meal plans) from this device. Without change tracking that is the only
+   * way to keep a local edit the cloud never got, but it also brings back a
+   * value cleared on purpose elsewhere (nutriapp-c1). The sync engine tracks
+   * this device's pending changes, so it turns this off: for everything it
+   * did not change, the cloud's version wins, absent values included.
+   */
+  fillMissingFromLocal?: boolean;
+}
+
 /**
  * Merges local and cloud AppData so that no live data is ever lost.
  * Mostly additive: items that exist in either source are kept unless an exact
  * deletion tombstone says that entry, food, or profile was intentionally removed.
  * For items with the same ID in both, cloud wins (most recently synced).
  */
-export function mergeAppData(local: AppData, cloud: AppData): AppData {
+export function mergeAppData(
+  local: AppData,
+  cloud: AppData,
+  { fillMissingFromLocal = true }: MergeOptions = {},
+): AppData {
   const deletedDayLogEntries = mergeDeletedDayLogEntries(
     local.deletedDayLogEntries ?? [],
     cloud.deletedDayLogEntries ?? [],
@@ -50,6 +66,7 @@ export function mergeAppData(local: AppData, cloud: AppData): AppData {
       local.profiles,
       cloud.profiles,
       deletedDayLogEntrySet,
+      fillMissingFromLocal,
     ),
     activeProfileId: cloud.activeProfileId ?? local.activeProfileId,
     deletedDayLogEntries,
@@ -71,6 +88,7 @@ function mergeProfiles(
   localProfiles: ReadonlyArray<Profile>,
   cloudProfiles: ReadonlyArray<Profile>,
   deletedDayLogEntrySet: ReadonlySet<string>,
+  fillMissingFromLocal: boolean,
 ): Profile[] {
   const cloudMap = new Map<ProfileId, Profile>(
     cloudProfiles.map((p) => [p.id, p]),
@@ -88,18 +106,21 @@ function mergeProfiles(
         ),
       };
     }
+    const dayLogs = mergeDayLogs(
+      cloudProfile.id,
+      localProfile.dayLogs,
+      cloudProfile.dayLogs,
+      deletedDayLogEntrySet,
+      fillMissingFromLocal,
+    );
+    if (!fillMissingFromLocal) return { ...cloudProfile, dayLogs };
     return {
       ...cloudProfile,
       userMetrics: cloudProfile.userMetrics ?? localProfile.userMetrics ?? null,
       weightLossPlan: cloudProfile.weightLossPlan ?? localProfile.weightLossPlan ?? null,
       mealPlans: cloudProfile.mealPlans ?? localProfile.mealPlans ?? [],
       weeklyPlan: cloudProfile.weeklyPlan ?? localProfile.weeklyPlan ?? {},
-      dayLogs: mergeDayLogs(
-        cloudProfile.id,
-        localProfile.dayLogs,
-        cloudProfile.dayLogs,
-        deletedDayLogEntrySet,
-      ),
+      dayLogs,
     };
   });
 
@@ -124,6 +145,7 @@ function mergeDayLogs(
   localLogs: ReadonlyArray<DayLog>,
   cloudLogs: ReadonlyArray<DayLog>,
   deletedDayLogEntrySet: ReadonlySet<string>,
+  fillMissingFromLocal: boolean,
 ): DayLog[] {
   const cloudMap = new Map<string, DayLog>(
     cloudLogs.map((dl) => [dl.date, dl]),
@@ -138,17 +160,19 @@ function mergeDayLogs(
         deletedDayLogEntrySet,
       );
     }
+    const entries = mergeEntries(
+      profileId,
+      cloudLog.date,
+      localLog.entries,
+      cloudLog.entries,
+      deletedDayLogEntrySet,
+    );
+    if (!fillMissingFromLocal) return { ...cloudLog, entries };
     return {
       ...cloudLog,
       weightKg: cloudLog.weightKg ?? localLog.weightKg,
       weightNotes: cloudLog.weightNotes ?? localLog.weightNotes,
-      entries: mergeEntries(
-        profileId,
-        cloudLog.date,
-        localLog.entries,
-        cloudLog.entries,
-        deletedDayLogEntrySet,
-      ),
+      entries,
     };
   });
 

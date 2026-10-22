@@ -1,4 +1,10 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useSyncExternalStore,
+} from "react";
 import type {
   AppData,
   DeletedDayLogEntry,
@@ -23,15 +29,8 @@ import type {
   WeightLossPlan,
 } from "./types";
 import { generateId } from "./types";
-import {
-  loadAppData,
-  localKeysFor,
-  saveAppData,
-  StorageQuotaError,
-} from "./storage";
-import { loadCloudData, saveCloudData } from "./cloudStorage";
-import { planCloudPull } from "./mergeAppData";
-import { reconcileTombstonesForRestore } from "./tombstones";
+import { loadCloudData, writeCloudData } from "./cloudStorage";
+import { SyncEngine, type CloudPort } from "./syncEngine";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
 import { upsertDeletedDayLogEntry } from "./deletedDayLogEntries";
@@ -40,32 +39,13 @@ import {
   upsertDeletedProfile,
 } from "./deletedAppEntities";
 
-/** Maximum number of undoable actions kept in the session history. */
-const MAX_HISTORY = 50;
+export type { HistoryFrame, SaveStatus } from "./syncEngine";
 
-/** Shown until a cloud write succeeds again. */
-const CLOUD_SYNC_FAILED = "Sync failed — your changes are saved on this device.";
+const firestore: CloudPort = { load: loadCloudData, write: writeCloudData };
 
-/**
- * Where the latest user change is: still being written, or written. "saved"
- * means it reached the cloud when signed in, and this device when not.
- * `at` makes two saves in a row distinct, so the indicator restarts.
- */
-export type SaveStatus =
-  | { kind: "idle" }
-  | { kind: "saving" }
-  | { kind: "saved"; at: number };
-
-/**
- * One undoable action. `before`/`after` are full immutable AppData snapshots;
- * thanks to the immutable update style they structurally share everything the
- * action did not touch, so keeping many frames is cheap.
- */
-export interface HistoryFrame {
-  label: string;
-  at: string;
-  before: AppData;
-  after: AppData;
+function logCloudSync(message: string, detail?: unknown): void {
+  if (detail === undefined) console.log(`[cloud-sync] ${message}`);
+  else console.error(`[cloud-sync] ${message}:`, detail);
 }
 
 function clonePlanEntries(entries: ReadonlyArray<DayLogItem>): DayLogItem[] {
@@ -160,254 +140,63 @@ function insertDayLogItem(
  * `uid` is the signed-in account. The local copy it reads and writes is that
  * account's own (see localKeysFor), so another account signed in on the same
  * browser never reaches it; App.tsx remounts the hook when the uid changes.
+ * Persistence and sync live in SyncEngine; this hook turns user actions into
+ * new AppData and hands them to it.
  */
 export function useAppData(uid: string) {
-  const [keys] = useState(() => localKeysFor(uid));
-  const [data, setData] = useState<AppData>(() => loadAppData(keys));
-  const [undoStack, setUndoStack] = useState<HistoryFrame[]>([]);
-  const [redoStack, setRedoStack] = useState<HistoryFrame[]>([]);
-  const [storageError, setStorageError] = useState<string | null>(null);
-  const [cloudError, setCloudError] = useState<string | null>(null);
-  const [cloudSynced, setCloudSynced] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
-  const cloudSaveInFlight = useRef(false);
-  const pendingCloudSave = useRef<AppData | null>(null);
-  /** Bumped on every local write, so a pull can tell it raced one. */
-  const localRevision = useRef(0);
-  const pullInFlight = useRef(false);
-  /** The last cloud write failed, so this device holds changes the cloud lacks. */
-  const hasUnsyncedChanges = useRef(false);
-
-  const flushCloudSave = useCallback(
-    (uid: string, dataToSave: AppData) => {
-      cloudSaveInFlight.current = true;
-      console.log("[cloud-sync] save started");
-      saveCloudData(uid, dataToSave)
-        .then(() => {
-          console.log("[cloud-sync] save succeeded");
-          hasUnsyncedChanges.current = false;
-          setCloudError(null);
-          // A queued save means a newer change is still on its way.
-          if (pendingCloudSave.current == null) {
-            setSaveStatus({ kind: "saved", at: Date.now() });
-          }
-        })
-        .catch((err: unknown) => {
-          console.error("[cloud-sync] save failed:", err);
-          hasUnsyncedChanges.current = true;
-          setCloudError(CLOUD_SYNC_FAILED);
-          setSaveStatus({ kind: "idle" });
-        })
-        .finally(() => {
-          const queued = pendingCloudSave.current;
-          pendingCloudSave.current = null;
-          if (queued != null) {
-            console.log("[cloud-sync] flushing queued save");
-            flushCloudSave(uid, queued);
-          } else {
-            cloudSaveInFlight.current = false;
-          }
-        });
-    },
-    [],
+  const [engine] = useState(
+    () => new SyncEngine({ uid, cloud: firestore, log: logCloudSync }),
   );
-
-  /**
-   * Pulls the cloud copy and merges it into this device's data (cloud wins on
-   * the same id, as at sign-in), then pushes the merge back if this device had
-   * something the cloud lacked. Runs at sign-in and again whenever the app
-   * comes back into view: the installed Dock app stays open for days, and
-   * without the re-pull it never sees what was logged in a browser tab.
-   */
-  const pullFromCloud = useCallback(
-    (uid: string, reason: "initial" | "refocus") => {
-      if (pullInFlight.current) return;
-      // A local write on its way up must land first; the next refocus retries.
-      // After a failed write, the cloud wins on the same id would revert the
-      // unsynced edits, so stay on this device's copy until a write succeeds.
-      if (
-        reason === "refocus" &&
-        (cloudSaveInFlight.current || hasUnsyncedChanges.current)
-      ) {
-        return;
-      }
-      pullInFlight.current = true;
-      const revisionAtStart = localRevision.current;
-      console.log(`[cloud-sync] ${reason} load started`);
-      return loadCloudData(uid)
-        .then((cloudData) => {
-          if (reason === "refocus" && localRevision.current !== revisionAtStart) {
-            // The user changed something while the pull was out; merging the
-            // older cloud copy over it could undo that change. Skip this one.
-            // The sign-in pull always merges: until it does, this device's
-            // writes would overwrite whatever only the cloud has.
-            console.log("[cloud-sync] local change during pull, skipping merge");
-            return;
-          }
-          const local = loadAppData(keys);
-          if (cloudData == null) {
-            console.log("[cloud-sync] no cloud data, uploading local");
-            saveCloudData(uid, local)
-              .then(() => {
-                console.log("[cloud-sync] initial upload succeeded");
-                hasUnsyncedChanges.current = false;
-                setCloudError(null);
-              })
-              .catch((err: unknown) => {
-                console.error("[cloud-sync] initial upload failed:", err);
-                hasUnsyncedChanges.current = true;
-                setCloudError(CLOUD_SYNC_FAILED);
-              });
-            return;
-          }
-          const { merged, localChanged, cloudChanged } = planCloudPull(
-            local,
-            cloudData,
-          );
-          if (localChanged) {
-            console.log("[cloud-sync] cloud data differs, merging with local");
-            setData(merged);
-            // Any undo frames captured before this point reference pre-merge
-            // snapshots; undoing to one would drop the just-merged cloud data.
-            // Drop the session history so undo can never clobber the merge.
-            setUndoStack([]);
-            setRedoStack([]);
-            saveAppData(keys, merged);
-          }
-          if (!cloudChanged) {
-            hasUnsyncedChanges.current = false;
-            setCloudError(null);
-            return;
-          }
-          saveCloudData(uid, merged)
-            .then(() => {
-              console.log("[cloud-sync] merge pushed to cloud");
-              hasUnsyncedChanges.current = false;
-              setCloudError(null);
-            })
-            .catch((err: unknown) => {
-              console.error("[cloud-sync] merge push failed:", err);
-              hasUnsyncedChanges.current = true;
-              setCloudError(CLOUD_SYNC_FAILED);
-            });
-        })
-        .catch((err: unknown) => {
-          console.error(`[cloud-sync] ${reason} load failed:`, err);
-          setCloudError(CLOUD_SYNC_FAILED);
-        })
-        .finally(() => {
-          pullInFlight.current = false;
-        });
-    },
-    [keys],
-  );
+  const { data, undoStack, redoStack, storageError, cloudError, saveStatus } =
+    useSyncExternalStore(engine.subscribe, engine.getSnapshot);
 
   useEffect(() => {
-    if (cloudSynced) return;
-    void pullFromCloud(uid, "initial")?.finally(() => setCloudSynced(true));
-  }, [uid, cloudSynced, pullFromCloud]);
-
-  useEffect(() => {
-    if (!cloudSynced) return;
+    engine.start();
     function handleReturn() {
       if (document.visibilityState !== "visible") return;
-      void pullFromCloud(uid, "refocus");
+      engine.notifyReturn();
+    }
+    function handleOnline() {
+      engine.notifyOnline();
+    }
+    // Another tab of this browser wrote to localStorage (the browser never
+    // reports a tab's own writes back to it).
+    function handleStorage(event: StorageEvent) {
+      if (event.storageArea !== window.localStorage) return;
+      engine.handleStorageEvent(event.key, event.newValue);
     }
     window.addEventListener("focus", handleReturn);
     document.addEventListener("visibilitychange", handleReturn);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("focus", handleReturn);
       document.removeEventListener("visibilitychange", handleReturn);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("storage", handleStorage);
+      engine.stop();
     };
-  }, [uid, cloudSynced, pullFromCloud]);
-
-  const persist = useCallback(
-    (next: AppData) => {
-      localRevision.current += 1;
-      try {
-        saveAppData(keys, next);
-        setData(next);
-        setStorageError(null);
-      } catch (e) {
-        if (e instanceof StorageQuotaError) {
-          setStorageError(e.message);
-        } else {
-          throw e;
-        }
-      }
-
-      setSaveStatus({ kind: "saving" });
-      if (cloudSaveInFlight.current) {
-        console.log("[cloud-sync] save in flight, queuing latest state");
-        pendingCloudSave.current = next;
-      } else {
-        flushCloudSave(uid, next);
-      }
-    },
-    [keys, uid, flushCloudSave],
-  );
+  }, [engine]);
 
   /**
    * Applies a user-initiated mutation and records it as an undoable action.
    * All mutations funnel through here so the history captures everything and
    * undo/redo restore exact prior snapshots. Starting a new action clears the
-   * redo stack, matching the standard linear-history model.
+   * redo stack, matching the standard linear-history model. `data` is what
+   * the mutation was computed from, so the engine can replay it if a pull
+   * landed in between.
    */
   const commit = useCallback(
-    (next: AppData, label: string) => {
-      const frame: HistoryFrame = {
-        label,
-        at: new Date().toISOString(),
-        before: data,
-        after: next,
-      };
-      setUndoStack((prev) => [...prev, frame].slice(-MAX_HISTORY));
-      setRedoStack([]);
-      persist(next);
-    },
-    [data, persist],
+    (next: AppData, label: string) => engine.commit(next, data, label),
+    [engine, data],
   );
 
-  const undo = useCallback(() => {
-    if (undoStack.length === 0) return;
-    const frame = undoStack[undoStack.length - 1];
-    const now = new Date().toISOString();
-    const restored = reconcileTombstonesForRestore(frame.before, data, now);
-    setUndoStack(undoStack.slice(0, -1));
-    setRedoStack((prev) => [...prev, frame].slice(-MAX_HISTORY));
-    persist(restored);
-  }, [undoStack, data, persist]);
-
-  const redo = useCallback(() => {
-    if (redoStack.length === 0) return;
-    const frame = redoStack[redoStack.length - 1];
-    const now = new Date().toISOString();
-    const restored = reconcileTombstonesForRestore(frame.after, data, now);
-    setRedoStack(redoStack.slice(0, -1));
-    setUndoStack((prev) => [...prev, frame].slice(-MAX_HISTORY));
-    persist(restored);
-  }, [redoStack, data, persist]);
-
-  /**
-   * Undoes every action from the top of the stack down to and including the
-   * frame at `index` in a single step. The undone frames are pushed onto the
-   * redo stack newest-first so a subsequent redo replays them oldest-first,
-   * one action at a time.
-   */
-  const undoTo = useCallback(
-    (index: number) => {
-      if (index < 0 || index >= undoStack.length) return;
-      const target = undoStack[index];
-      const now = new Date().toISOString();
-      const restored = reconcileTombstonesForRestore(target.before, data, now);
-      const undone = undoStack.slice(index);
-      setUndoStack(undoStack.slice(0, index));
-      setRedoStack((prev) =>
-        [...prev, ...undone.slice().reverse()].slice(-MAX_HISTORY),
-      );
-      persist(restored);
-    },
-    [undoStack, data, persist],
+  const undo = useCallback(() => engine.undo(), [engine]);
+  const redo = useCallback(() => engine.redo(), [engine]);
+  const undoTo = useCallback((index: number) => engine.undoTo(index), [engine]);
+  const setStorageError = useCallback(
+    (message: string | null) => engine.setStorageError(message),
+    [engine],
   );
 
   const rawFoods = useMemo(

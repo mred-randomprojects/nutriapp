@@ -36,6 +36,14 @@
     "src/storageQuota.test.ts",
     "src/storage.ts",
     "src/storage.test.ts",
+    "src/cloudDoc.ts",
+    "src/cloudDoc.test.ts",
+    "src/syncMerge.ts",
+    "src/syncEngine.ts",
+    "src/syncEngine.test.ts",
+    "src/syncEngine.random.test.ts",
+    "src/syncSimulation.ts",
+    "src/syncTestKit.ts",
     "src/types.ts"
   ]
 }
