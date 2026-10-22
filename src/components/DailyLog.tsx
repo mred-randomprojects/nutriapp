@@ -21,6 +21,7 @@ import {
   CalendarDays,
   Save,
   MoreVertical,
+  ShieldCheck,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -40,7 +41,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppDataHandle } from "../appDataType";
-import type { DayLog, DayLogItem, Food, LogEntry, LogEntryId, MealPlanId, NutritionGoals, NutritionValues, ProfileId, QuickAddEntry, WakeSleepSchedule } from "../types";
+import type { DayLog, DayLogItem, DaySignOff, DayTrust, Food, LogEntry, LogEntryId, MealPlanId, NutritionGoals, NutritionValues, ProfileId, QuickAddEntry, WakeSleepSchedule } from "../types";
 import { computeExpectedWeight } from "../calculator";
 import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
 import { normalizeForSearch } from "../search";
@@ -193,6 +194,18 @@ function buildMarkdownForDay(
     if (weightNotes != null && weightNotes.length > 0) {
       lines.push(`  - Note: ${weightNotes}`);
     }
+  }
+
+  const signOff = dayLog?.signOff;
+  if (signOff != null) {
+    const option = dayTrustOption(signOff.trust);
+    lines.push(`- Sign-off: ${option.label.toLowerCase()} (${option.description.toLowerCase()})`);
+    const signOffNote = signOff.note?.trim();
+    if (signOffNote != null && signOffNote.length > 0) {
+      lines.push(`  - Note: ${signOffNote}`);
+    }
+  } else {
+    lines.push("- Sign-off: not signed off");
   }
 
   if (items.length === 0) {
@@ -1420,6 +1433,264 @@ function WeightInput({
   );
 }
 
+const DAY_TRUST_OPTIONS: ReadonlyArray<{
+  trust: DayTrust;
+  label: string;
+  description: string;
+  badgeVariant: "success" | "warning" | "destructive";
+}> = [
+  { trust: "complete", label: "Complete", description: "Everything logged and estimated", badgeVariant: "success" },
+  { trust: "mostly", label: "Mostly", description: "A few guesses or a small gap", badgeVariant: "warning" },
+  { trust: "rough", label: "Rough", description: "Things forgotten or barely estimated", badgeVariant: "destructive" },
+];
+
+function dayTrustOption(trust: DayTrust) {
+  return DAY_TRUST_OPTIONS.find((option) => option.trust === trust) ?? DAY_TRUST_OPTIONS[0];
+}
+
+function countUnestimatedQuickAdds(items: ReadonlyArray<DayLogItem>): number {
+  return items.filter((item) => item.type === "quick-add" && !hasNutrition(item.nutrition)).length;
+}
+
+interface DaySignOffCardProps {
+  signOff: DaySignOff | undefined;
+  unestimatedCount: number;
+  openRequestNonce: number | null;
+  onSave: (signOff: DaySignOff | undefined) => void;
+}
+
+function DaySignOffCard({ signOff, unestimatedCount, openRequestNonce, onSave }: DaySignOffCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTrust, setEditTrust] = useState<DayTrust | null>(null);
+  const [editNote, setEditNote] = useState("");
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const lastHandledOpenRequestNonce = useRef<number | null>(null);
+  const optionRefs = useRef(new Map<DayTrust, HTMLButtonElement>());
+  const savedTrust = signOff?.trust ?? null;
+  const savedNote = signOff?.note ?? "";
+  const isDirty = isEditing && (editTrust !== savedTrust || editNote !== savedNote);
+
+  useUnsavedChanges(isDirty, {
+    title: "Discard sign-off changes?",
+    description: "Leaving now will lose the sign-off changes you have not saved.",
+  });
+
+  const startEditing = useCallback(() => {
+    setEditTrust(savedTrust);
+    setEditNote(savedNote);
+    setIsEditing(true);
+  }, [savedTrust, savedNote]);
+
+  useEffect(() => {
+    if (openRequestNonce == null || lastHandledOpenRequestNonce.current === openRequestNonce) {
+      return;
+    }
+    lastHandledOpenRequestNonce.current = openRequestNonce;
+    startEditing();
+  }, [openRequestNonce, startEditing]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    optionRefs.current.get(editTrust ?? "complete")?.focus();
+    // Focus the picked level once, when the editor opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing]);
+
+  function commitEdit(trust = editTrust) {
+    if (trust == null) return;
+    const trimmedNote = editNote.trim();
+    onSave({
+      trust,
+      signedAt: new Date().toISOString(),
+      note: trimmedNote.length > 0 ? trimmedNote : undefined,
+    });
+    setDiscardDialogOpen(false);
+    setIsEditing(false);
+  }
+
+  function requestCancel() {
+    if (isDirty) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    setIsEditing(false);
+  }
+
+  function handleTrustKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (event.key === "Enter") {
+      // Enter confirms: sign off with the level that has the focus.
+      const focused = DAY_TRUST_OPTIONS.find(
+        (option) => optionRefs.current.get(option.trust) === event.target,
+      );
+      if (focused == null) return;
+      event.preventDefault();
+      commitEdit(focused.trust);
+      return;
+    }
+    const step =
+      event.key === "ArrowLeft" || event.key === "ArrowUp"
+        ? -1
+        : event.key === "ArrowRight" || event.key === "ArrowDown"
+          ? 1
+          : 0;
+    if (step === 0) return;
+    // Taken here so the page's ← / → day navigation does not also run.
+    event.preventDefault();
+    const index = DAY_TRUST_OPTIONS.findIndex((option) => option.trust === editTrust);
+    const nextIndex =
+      index < 0
+        ? step > 0 ? 0 : DAY_TRUST_OPTIONS.length - 1
+        : (index + step + DAY_TRUST_OPTIONS.length) % DAY_TRUST_OPTIONS.length;
+    const next = DAY_TRUST_OPTIONS[nextIndex].trust;
+    setEditTrust(next);
+    optionRefs.current.get(next)?.focus();
+  }
+
+  if (isEditing) {
+    return (
+      <>
+        <Card
+          className="mb-4"
+          onKeyDown={(event) => handleFormEscapeCancel(event, requestCancel)}
+        >
+          <CardContent className="p-3">
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                commitEdit();
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">How much do you trust this day's log?</span>
+              </div>
+              <div
+                role="radiogroup"
+                aria-label="Trust in this day's log"
+                className="grid grid-cols-3 gap-2"
+                onKeyDown={handleTrustKeyDown}
+              >
+                {DAY_TRUST_OPTIONS.map((option) => {
+                  const isChecked = editTrust === option.trust;
+                  return (
+                    <button
+                      key={option.trust}
+                      ref={(node) => {
+                        if (node == null) optionRefs.current.delete(option.trust);
+                        else optionRefs.current.set(option.trust, node);
+                      }}
+                      type="button"
+                      role="radio"
+                      aria-checked={isChecked}
+                      // One tab stop for the group, so Tab goes on to the note.
+                      tabIndex={(editTrust ?? DAY_TRUST_OPTIONS[0].trust) === option.trust ? 0 : -1}
+                      onClick={() => setEditTrust(option.trust)}
+                      className={`rounded-md border px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${isChecked ? "border-primary bg-primary/10" : "border-input hover:bg-accent/50"}`}
+                    >
+                      <span className="block text-sm font-medium">{option.label}</span>
+                      <span className="block text-[11px] leading-tight text-muted-foreground">
+                        {option.description}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {unestimatedCount > 0 && (
+                <p className="flex items-center gap-1 text-xs text-amber-500">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  {unestimatedCount} quick add{unestimatedCount === 1 ? "" : "s"} not estimated yet
+                </p>
+              )}
+              <textarea
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                placeholder="What's missing or guessed? (optional)"
+                className="w-full resize-none rounded-md border border-input bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                rows={2}
+              />
+              <div className="flex items-center gap-2">
+                <Button type="submit" size="sm" className="h-8" disabled={editTrust == null}>
+                  Sign off
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className="h-8" onClick={requestCancel}>
+                  Cancel
+                </Button>
+                {signOff != null && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto h-8 text-muted-foreground"
+                    onClick={() => {
+                      onSave(undefined);
+                      setDiscardDialogOpen(false);
+                      setIsEditing(false);
+                    }}
+                  >
+                    Remove sign-off
+                  </Button>
+                )}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+        <DiscardChangesDialog
+          open={discardDialogOpen}
+          title="Discard sign-off changes?"
+          description="Closing now will lose the sign-off changes you have not saved."
+          onStay={() => setDiscardDialogOpen(false)}
+          onDiscard={() => {
+            setDiscardDialogOpen(false);
+            setIsEditing(false);
+          }}
+        />
+      </>
+    );
+  }
+
+  const option = signOff != null ? dayTrustOption(signOff.trust) : null;
+  const displayNote = signOff?.note?.trim();
+
+  return (
+    <Card className="mb-4 cursor-pointer transition-colors hover:bg-accent/50" onClick={startEditing}>
+      <CardContent className="p-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Sign-off</span>
+          {option != null && signOff != null ? (
+            <span className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {format(parseISO(signOff.signedAt), "MMM d, HH:mm")}
+              </span>
+              <Badge variant={option.badgeVariant} className="px-1.5 py-0 text-[10px]">
+                {option.label}
+              </Badge>
+            </span>
+          ) : (
+            <span className="ml-auto text-xs text-muted-foreground">
+              Not signed off · <kbd className="font-mono">S</kbd>
+            </span>
+          )}
+        </div>
+        {unestimatedCount > 0 && (
+          <p className="mt-1.5 flex items-center gap-1 text-xs text-amber-500">
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            {unestimatedCount} quick add{unestimatedCount === 1 ? "" : "s"} not estimated yet
+          </p>
+        )}
+        {displayNote != null && displayNote.length > 0 && (
+          <p className="mt-1.5 flex items-start gap-1 text-xs text-muted-foreground italic">
+            <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
+            <span className="line-clamp-2">{displayNote}</span>
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface EntryShortcutPanelProps {
   selectedCount: number;
 }
@@ -1475,6 +1746,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     saveMealPlanFromDay,
     applyMealPlanToDay,
     updateDayLogWeight,
+    updateDaySignOff,
   } = appData;
   const routeDate = useMemo(
     () => parseRouteDate(routeDateParam),
@@ -1545,6 +1817,7 @@ export function DailyLog({ appData }: DailyLogProps) {
   const isSelectedDayToday = isToday(selectedDate);
   const isEditable = editModeByDate.get(dateStr) ?? isSelectedDayToday;
   const isLocked = !isEditable;
+  const [signOffRequestNonce, setSignOffRequestNonce] = useState<number | null>(null);
   const dayLog = useMemo(() => {
     if (activeProfile == null) return undefined;
     return activeProfile.dayLogs.find((dl) => dl.date === dateStr);
@@ -1865,6 +2138,21 @@ export function DailyLog({ appData }: DailyLogProps) {
         return;
       } else if (e.key === "t" || e.key === "T") {
         goToToday();
+      } else if (e.code === "KeyS" || e.key === "s" || e.key === "S") {
+        if (
+          activeProfile == null ||
+          addDialogOpen ||
+          savePlanDialogOpen ||
+          savePlanDiscardOpen ||
+          pendingDelete != null ||
+          copyMenuOpen ||
+          planMenuOpen ||
+          e.repeat
+        ) {
+          return;
+        }
+        e.preventDefault();
+        setSignOffRequestNonce((nonce) => (nonce ?? 0) + 1);
       } else if (e.key === "ArrowLeft") {
         navigateToDate(subDays(selectedDate, 1));
       } else if (e.key === "ArrowRight") {
@@ -2662,6 +2950,14 @@ export function DailyLog({ appData }: DailyLogProps) {
           </div>
         </SortableContext>
       </DndContext>
+
+      {/* Sign-off */}
+      <DaySignOffCard
+        signOff={dayLog?.signOff}
+        unestimatedCount={countUnestimatedQuickAdds(dayLog?.entries ?? [])}
+        openRequestNonce={signOffRequestNonce}
+        onSave={(signOff) => updateDaySignOff(activeProfile.id, dateStr, signOff)}
+      />
 
       {!isLocked &&
         selectedVisibleItems.length > 0 &&

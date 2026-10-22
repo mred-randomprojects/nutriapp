@@ -89,6 +89,19 @@ export interface SectionSeparator {
 export type DayLogItem = LogEntry | QuickAddEntry | SectionSeparator;
 
 /**
+ * How far a day's log can be trusted, judged when signing the day off:
+ * "complete" — everything eaten is logged and estimated; "mostly" — some
+ * guesses or a small gap; "rough" — things forgotten or barely estimated.
+ */
+export type DayTrust = "complete" | "mostly" | "rough";
+
+export interface DaySignOff {
+  trust: DayTrust;
+  signedAt: string;
+  note?: string;
+}
+
+/**
  * All log items for a specific date within a profile.
  */
 export interface DayLog {
@@ -96,6 +109,7 @@ export interface DayLog {
   entries: DayLogItem[];
   weightKg?: number;
   weightNotes?: string;
+  signOff?: DaySignOff;
 }
 
 /**

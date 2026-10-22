@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type {
   AppData,
+  DayLog,
   DayLogItem,
   FoodId,
   LogEntry,
@@ -1084,5 +1085,36 @@ describe("the first launch after the upgrade keeps what only the previous build'
     assert.equal(server.doc(UID)?.profiles.find((p) => p.id === P1)?.weightLossPlan, null);
     relaunch.close();
     phone.close();
+  });
+});
+
+describe("day sign-off", () => {
+  const setSignOff = (signOff: DayLog["signOff"]) => (d: AppData): AppData =>
+    mapProfile(d, P1, (p) => ({
+      ...p,
+      dayLogs: p.dayLogs.map((dl) => (dl.date === DAY ? { ...dl, signOff } : dl)),
+    }));
+
+  it("syncs a sign-off and its removal alongside another device's concurrent entry", async () => {
+    const server = new FakeServer();
+    const a = openDevice("A", { server, uid: UID });
+    await seed(a);
+    const b = openDevice("B", { server, uid: UID });
+    await settle();
+
+    edit(a, setSignOff({ trust: "mostly", signedAt: T0, note: "forgot a snack" }));
+    edit(b, addEntry(quick("q1", "Snack")));
+    await settle();
+    const cloud = server.doc(UID);
+    assert.deepEqual(day(cloud)?.signOff, { trust: "mostly", signedAt: T0, note: "forgot a snack" });
+    assert.deepEqual(entryIds(cloud), ["e1", "q1"]);
+
+    // A, which shows the sign-off, removes it; the cloud keeps B's entry.
+    edit(a, setSignOff(undefined));
+    await settle();
+    assert.equal(day(server.doc(UID))?.signOff, undefined);
+    assert.deepEqual(entryIds(server.doc(UID)), ["e1", "q1"]);
+    a.close();
+    b.close();
   });
 });

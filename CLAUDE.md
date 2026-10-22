@@ -53,6 +53,7 @@ Daily log
 - `↑ / ↓` select entry · `Shift+↑/↓` extend · `Alt+↑/↓` move entry
 - `Enter` edit · `Delete`/`Backspace` delete · `a` add below · `m`/`b` toggle budgeted
 - `t` jump to today · `← / →` previous / next day · `?` shortcuts panel · `Esc` clear selection
+- `s` sign off the day (trust: `← / →` pick Complete / Mostly / Rough, `Enter` confirm, `Tab` to the note, `Esc` cancel)
 
 Plan editor (`/plans/:planId/edit`)
 - reuses the daily-log entry grammar: `↑ / ↓` select · `Alt+↑/↓` move · `Enter` edit ·

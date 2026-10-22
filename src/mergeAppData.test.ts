@@ -310,6 +310,15 @@ describe("mergeAppData: day logs", () => {
     assert.equal(onlyDay(merged).weightNotes, "after run");
   });
 
+  it("brings back a sign-off the cloud lacks", () => {
+    const signOff = { trust: "rough" as const, signedAt: T1, note: "forgot dinner" };
+    const merged = mergeAppData(
+      appData({ profiles: [profile("p1", { dayLogs: [dayLog(DAY, [], { signOff })] })] }),
+      appData({ profiles: [profile("p1", { dayLogs: [dayLog(DAY, [])] })] }),
+    );
+    assert.deepEqual(onlyDay(merged).signOff, signOff);
+  });
+
   it("keeps the cloud's weight when both sides have one", () => {
     const merged = mergeAppData(
       appData({ profiles: [profile("p1", { dayLogs: [dayLog(DAY, [], { weightKg: 82.4 })] })] }),

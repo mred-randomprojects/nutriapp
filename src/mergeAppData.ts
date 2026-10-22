@@ -172,6 +172,7 @@ function mergeDayLogs(
       ...cloudLog,
       weightKg: cloudLog.weightKg ?? localLog.weightKg,
       weightNotes: cloudLog.weightNotes ?? localLog.weightNotes,
+      signOff: cloudLog.signOff ?? localLog.signOff,
       entries,
     };
   });

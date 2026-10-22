@@ -16,6 +16,7 @@ import type {
   Profile,
   ProfileId,
   DayLog,
+  DaySignOff,
   LogEntry,
   LogEntryId,
   DayLogItem,
@@ -652,6 +653,29 @@ export function useAppData(uid: string) {
     [data, commit],
   );
 
+  const updateDaySignOff = useCallback(
+    (profileId: ProfileId, date: string, signOff: DaySignOff | undefined) => {
+      commit({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          const existingDay = p.dayLogs.find((dl) => dl.date === date);
+          if (existingDay != null) {
+            return {
+              ...p,
+              dayLogs: p.dayLogs.map((dl) =>
+                dl.date === date ? { ...dl, signOff } : dl,
+              ),
+            };
+          }
+          const newDayLog: DayLog = { date, entries: [], signOff };
+          return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
+        }),
+      }, signOff == null ? "Clear day sign-off" : "Sign off day");
+    },
+    [data, commit],
+  );
+
   const updateLogEntry = useCallback(
     (
       profileId: ProfileId,
@@ -932,6 +956,7 @@ export function useAppData(uid: string) {
     deleteMealPlan,
     applyMealPlanToDay,
     updateDayLogWeight,
+    updateDaySignOff,
     setWeightLossPlan,
     setStorageError,
     isLocalCopyStored,
