@@ -419,6 +419,13 @@ export class SyncEngine {
       // written by a tab that had not seen that edit yet does not; this tab
       // keeps its own version, and the edit's own write brings it.
       else if (changeFingerprint(change, other) === mark.print) theirs.set(change, mark.stamp);
+      // A newer edit than the one this tab holds exists, in a tab whose copy
+      // did not fit: that tab writes it. Sending the older one would
+      // overwrite it.
+      else if (held != null) {
+        this.pending.delete(change);
+        this.rewrite.delete(change);
+      }
     }
     for (const [change, stamp] of [...this.pending]) {
       if (change in marks) continue;
