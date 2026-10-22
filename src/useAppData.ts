@@ -205,6 +205,7 @@ export function useAppData(uid: string) {
     (message: string | null) => engine.setStorageError(message),
     [engine],
   );
+  const isLocalCopyStored = useCallback(() => engine.localCopyStored, [engine]);
   const restoreSafetyCopy = useCallback(() => engine.restoreSafetyCopy(), [engine]);
   const dismissSafetyCopy = useCallback(() => engine.dismissSafetyCopy(), [engine]);
 
@@ -933,6 +934,7 @@ export function useAppData(uid: string) {
     updateDayLogWeight,
     setWeightLossPlan,
     setStorageError,
+    isLocalCopyStored,
     // --- What a pull removed from this device ---
     safetyCopy,
     restoreSafetyCopy,

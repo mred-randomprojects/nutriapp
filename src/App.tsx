@@ -29,6 +29,7 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import type { Command } from "./components/CommandPalette";
 import { SafetyCopyBanner } from "./components/SafetyCopyBanner";
+import { useAppUpdate } from "./useAppUpdate";
 
 const NAV_SHORTCUTS = {
   "1": "/foods",
@@ -85,6 +86,7 @@ function AuthenticatedApp({ uid }: { uid: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { undo, redo, canUndo, canRedo } = appData;
+  const updateReady = useAppUpdate(appData.isLocalCopyStored);
 
   const commands: Command[] = [
     { id: "nav-foods", title: "Go to Foods", section: "Go to", keywords: "food list", hint: "1", run: () => navigate("/foods") },
@@ -281,6 +283,17 @@ function AuthenticatedApp({ uid }: { uid: string }) {
       )}
 
       <div className="fixed bottom-16 left-1/2 w-full max-w-lg -translate-x-1/2 px-4">
+        {updateReady && (
+          <div className="mb-2 flex justify-center">
+            <button
+              type="button"
+              className="rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground shadow-sm"
+              onClick={() => window.location.reload()}
+            >
+              New version available — reload
+            </button>
+          </div>
+        )}
         {appData.cloudError == null && (
           <SaveIndicator status={appData.saveStatus} />
         )}

@@ -12,3 +12,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** The commit this build was made from (vite.config.ts), or "dev". */
+declare const __APP_COMMIT__: string;

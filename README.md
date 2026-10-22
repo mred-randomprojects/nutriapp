@@ -144,6 +144,13 @@ The values are the same as in your `.env` file.
   - **Full storage:** when the shared origin's `localStorage` is full, edits keep going to the
     cloud from memory; a mark is only stored together with the version it is for, so a
     relaunch never lets an older local copy win.
+- **New builds:** each build knows its commit (`__APP_COMMIT__`, from `GITHUB_SHA` in CI;
+  `dev` locally) and the deploy publishes the live one in `version.json`. When the app comes
+  back into view, when the network returns, and every 30 minutes while it is in view, it
+  fetches `version.json` (`cache: "no-store"`); on a newer build it reloads at once if the
+  person just came back and nothing is being edited (no unsaved form, dialog, text focus, and
+  the local copy fully stored), and otherwise shows a "New version available — reload" pill.
+  This is what moves the Dock app, which stays open for days, onto new builds.
 - **Safety copy:** when a pull takes something away from this device (entries, foods,
   profiles, weights or meal plans: a delete on another device, or an older build writing its
   older copy), the data from just before is kept in IndexedDB (`nutriapp-safety`) and a banner

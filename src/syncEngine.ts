@@ -297,6 +297,11 @@ export class SyncEngine {
     };
   };
 
+  /** This device's copy and its pending marks are all stored: a reload loses nothing. */
+  get localCopyStored(): boolean {
+    return !this.localStale && !this.marksStale;
+  }
+
   /** How many changes this device holds that the cloud copy lacks. */
   get pendingCount(): number {
     return this.pending.size;
