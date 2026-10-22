@@ -1025,3 +1025,64 @@ describe("letting go of another tab's edit fences that tab's late write", () => 
     b.close();
   });
 });
+
+describe("the first launch after the upgrade keeps what only the previous build's copy has", () => {
+  const plan = { startDate: "2026-10-01", startWeightKg: 90, targetWeightKg: 80, weeklyLossRateKg: 0.5 };
+  const metrics = {
+    sex: "female" as const,
+    age: 30,
+    heightCm: 165,
+    weightKg: 60,
+    activityLevel: "active" as const,
+    targetWeightKg: null,
+    proteinPerKg: 1.8,
+    weightLossRateKg: 0.5,
+  };
+
+  async function upgrade() {
+    // The cloud copy, as the previous build last managed to save it.
+    const server = new FakeServer();
+    const seeder = openDevice("seeder", { server, uid: UID });
+    await seed(seeder);
+    seeder.close();
+    const cloud = server.doc(UID)!;
+    // The previous build's local copy: a weight plan, metrics and a weight
+    // the cloud never got (its saves failed), and no sync state of the new build.
+    const local: AppData = mapProfile(cloud, P1, (p) => ({
+      ...p,
+      weightLossPlan: plan,
+      userMetrics: { ...metrics },
+      dayLogs: [...p.dayLogs, { date: "2026-10-14", entries: [], weightKg: 61 }],
+    }));
+    const storage = new FakeStorage();
+    storage.setItem("nutriapp-data", JSON.stringify(local));
+    const mac = openDevice("mac", { server, uid: UID, storage });
+    await settle();
+    return { server, storage, mac };
+  }
+
+  it("sends them to the cloud instead of dropping them", async () => {
+    const { server, mac } = await upgrade();
+    const profile = (d: AppData | null) => d?.profiles.find((p) => p.id === P1);
+    assert.deepEqual(profile(mac.data)?.weightLossPlan, plan);
+    assert.deepEqual(profile(server.doc(UID))?.weightLossPlan, plan);
+    assert.equal(profile(server.doc(UID))?.userMetrics?.heightCm, 165);
+    assert.equal(day(server.doc(UID), "2026-10-14")?.weightKg, 61);
+    mac.close();
+  });
+
+  it("does it once: a value cleared elsewhere afterwards stays cleared", async () => {
+    const { server, storage, mac } = await upgrade();
+    const phone = openDevice("phone", { server, uid: UID });
+    await settle();
+    edit(phone, (d) => mapProfile(d, P1, (p) => ({ ...p, weightLossPlan: null })));
+    await settle();
+    mac.close();
+    const relaunch = openDevice("mac2", { server, uid: UID, storage });
+    await settle();
+    assert.equal(relaunch.data.profiles.find((p) => p.id === P1)?.weightLossPlan, null);
+    assert.equal(server.doc(UID)?.profiles.find((p) => p.id === P1)?.weightLossPlan, null);
+    relaunch.close();
+    phone.close();
+  });
+});

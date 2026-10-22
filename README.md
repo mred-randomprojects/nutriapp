@@ -139,6 +139,11 @@ The values are the same as in your `.env` file.
     or write is retried with backoff (5 s up to 5 min) and shown in the pill above the storage
     meter; a write refused because the document would pass Firestore's 1 MiB is shown and only
     tried again by the next edit.
+  - **Upgrade:** the first successful pull on a device after moving from the previous build
+    marks the values only its local copy has and the cloud lacks (a weight plan, metrics, meal
+    plans, the weekly plan, a weight) as this device's changes, as the previous build would
+    have filled them in; once only (`filled` in `nutriapp-sync:<uid>`), so a value cleared
+    elsewhere later stays cleared.
   - **Tabs** of one browser merge each other's writes from the `storage` event, so neither
     drops what the other logged.
   - **Full storage:** when the shared origin's `localStorage` is full, edits keep going to the

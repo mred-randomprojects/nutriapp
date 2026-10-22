@@ -245,6 +245,8 @@ export class SyncEngine {
   private cancelRetry: (() => void) | null = null;
   private retryDelay = RETRY_FIRST_MS;
   private stampSeq = 0;
+  /** The upgrade fill has run on this device (see runPull); persisted with the marks. */
+  private filled: boolean;
   /** The last write of this tab's copy to localStorage failed: it is older than memory. */
   private localStale = false;
   /** The last write of the pending marks failed: some of this tab's edits are not marked. */
@@ -267,7 +269,9 @@ export class SyncEngine {
     // an older version over it) would make an older version win over the
     // cloud's: the cloud's version wins instead.
     this.pending = new Map();
-    for (const [change, mark] of Object.entries(loadSyncMeta(this.keys, this.storage).pending)) {
+    const meta = loadSyncMeta(this.keys, this.storage);
+    this.filled = meta.filled === true;
+    for (const [change, mark] of Object.entries(meta.pending)) {
       if (mark.print === changeFingerprint(change, data)) this.pending.set(change, mark.stamp);
     }
     this.snapshot = {
@@ -647,7 +651,8 @@ export class SyncEngine {
       }
     }
     try {
-      saveSyncMeta(this.keys, { pending: result }, this.storage);
+      const filled = this.filled || loadSyncMeta(this.keys, this.storage).filled === true;
+      saveSyncMeta(this.keys, filled ? { pending: result, filled } : { pending: result }, this.storage);
       this.carried.clear();
       if (marking) this.marksStale = false;
       return null;
@@ -658,7 +663,11 @@ export class SyncEngine {
       // even when nothing else does; the other tabs must learn of it, or they
       // would send the older versions those marks name again.
       try {
-        saveSyncMeta(this.keys, { pending: removalsOnly }, this.storage);
+        saveSyncMeta(
+          this.keys,
+          this.filled ? { pending: removalsOnly, filled: true } : { pending: removalsOnly },
+          this.storage,
+        );
         this.carried.clear();
       } catch {
         // Storage blocked altogether.
@@ -824,6 +833,7 @@ export class SyncEngine {
       if (cloud == null) {
         // A first sign-in: nothing in the cloud yet.
         this.pulledThisSession = true;
+        this.markFilled();
         this.update({ cloudBytes: null });
         if (!isEmpty(local) || this.pending.size > 0) {
           this.requestSave();
@@ -833,6 +843,7 @@ export class SyncEngine {
         }
         return;
       }
+      if (!this.filled) this.fillFromPreviousBuild(local, cloud);
       const { merged, localChanged, cloudChanged } = mergeForPull(local, cloud, {
         pending: new Set(this.pending.keys()),
       });
@@ -878,6 +889,33 @@ export class SyncEngine {
       this.pullInFlight = null;
       if (this.pullQueued) this.pull();
     }
+  }
+
+  /**
+   * The first pull on this device after the upgrade. The previous build
+   * filled a value the cloud lacked (a weight plan, metrics, meal plans, the
+   * weekly plan, a day's weight) from its local copy, and kept no record of
+   * what it had not synced; this build lets the cloud's absence win. So once,
+   * with the copy the previous build left, the values the cloud lacks are
+   * marked as this device's changes, and reach the cloud. Only once: after
+   * that, an absent value in the cloud is a value cleared elsewhere.
+   */
+  private fillFromPreviousBuild(local: AppData, cloud: AppData): void {
+    const plain = mergeAppData(local, cloud, { fillMissingFromLocal: false });
+    const filled = mergeAppData(local, cloud, { fillMissingFromLocal: true });
+    const changes = changedKeys(plain, filled);
+    if (changes.size > 0) {
+      this.log(`kept ${changes.size} values only the previous build's copy had`);
+      const stamp = `${this.now().toString(36)}.${(this.stampSeq++).toString(36)}.${this.stampNonce}`;
+      for (const change of changes) if (!this.pending.has(change)) this.pending.set(change, stamp);
+    }
+    this.markFilled();
+  }
+
+  private markFilled(): void {
+    if (this.filled) return;
+    this.filled = true;
+    this.writeMeta();
   }
 
   /** Takes a merge as this device's data. */

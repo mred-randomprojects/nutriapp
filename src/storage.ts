@@ -224,6 +224,12 @@ export interface SyncMeta {
    * They win the next merge.
    */
   pending: Record<string, PendingMark>;
+  /**
+   * The first pull of the sync engine on this device has merged the local
+   * copy the previous build left (see SyncEngine's upgrade fill). Absent in
+   * a copy only the previous build wrote.
+   */
+  filled?: boolean;
 }
 
 export function loadSyncMeta(keys: LocalKeys, storage: Storage = localStorage): SyncMeta {
@@ -246,7 +252,7 @@ export function loadSyncMeta(keys: LocalKeys, storage: Storage = localStorage): 
         if (typeof stamp === "string" && typeof print === "string") pending[change] = { stamp, print };
       }
     }
-    return { pending };
+    return record.filled === true ? { pending, filled: true } : { pending };
   } catch {
     return { pending: {} };
   }
