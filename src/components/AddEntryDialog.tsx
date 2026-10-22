@@ -540,6 +540,8 @@ export function AddEntryDialog({
             <div>
               <Label htmlFor="quick-notes">Notes (optional)</Label>
               <textarea
+                spellCheck={false}
+                autoCorrect="off"
                 id="quick-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -813,6 +815,8 @@ export function AddEntryDialog({
             <div>
               <Label htmlFor="entry-notes">Notes (optional)</Label>
               <textarea
+                spellCheck={false}
+                autoCorrect="off"
                 id="entry-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

@@ -16,6 +16,10 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           className,
         )}
         ref={ref}
+        // Food names are mostly Spanish: Safari's automatic spelling
+        // correction rewrites them into English words as you type.
+        spellCheck={false}
+        autoCorrect="off"
         onFocus={handleFocus}
         {...props}
       />

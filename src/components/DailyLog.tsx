@@ -828,6 +828,8 @@ export function FoodEntryCard({ item, food, isLocked, editRequestNonce, onAddAbo
                 </Button>
               </div>
               <textarea
+                spellCheck={false}
+                autoCorrect="off"
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
                 placeholder="Add a note…"
@@ -1134,6 +1136,8 @@ export function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove
                   />
                 </div>
                 <textarea
+                  spellCheck={false}
+                  autoCorrect="off"
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
                   placeholder="Add a note..."
@@ -1366,6 +1370,8 @@ function WeightInput({
                 </Button>
               </div>
               <textarea
+                spellCheck={false}
+                autoCorrect="off"
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
                 placeholder="Add a note..."
@@ -1604,6 +1610,8 @@ function DaySignOffCard({ signOff, unestimatedCount, openRequestNonce, onSave }:
                 </p>
               )}
               <textarea
+                spellCheck={false}
+                autoCorrect="off"
                 value={editNote}
                 onChange={(e) => setEditNote(e.target.value)}
                 placeholder="What's missing or guessed? (optional)"
