@@ -28,3 +28,16 @@ describe("random histories (offline, relaunches, deaths mid-save, full quota): e
     await runSeeds({ browsers: 1, tabsPerBrowser: 3, steps: 160 }, 50, 5000);
   });
 });
+
+describe("random histories that once broke the engine (replayed exactly)", () => {
+  it("a full quota, a newer edit in another tab, a longer history", async () => {
+    // A tab sent its older version of an edit over the newer one another
+    // tab made while the quota was full.
+    assert.deepEqual(await simulate({ browsers: 2, tabsPerBrowser: 2, steps: 400, seed: 1002049 }), []);
+  });
+
+  it("a mark another tab rewrote stays until written", async () => {
+    // A tab dropped another tab's mark when a third tab's copy lacked it.
+    assert.deepEqual(await simulate({ browsers: 1, tabsPerBrowser: 3, steps: 400, seed: 2000905 }), []);
+  });
+});

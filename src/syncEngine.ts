@@ -427,7 +427,7 @@ export class SyncEngine {
       // A newer edit than the one this tab holds exists, in a tab whose copy
       // did not fit: that tab writes it. Sending the older one would
       // overwrite it.
-      else if (held != null) {
+      else if (held != null && order < 0) {
         this.pending.delete(change);
         this.rewrite.delete(change);
       }
