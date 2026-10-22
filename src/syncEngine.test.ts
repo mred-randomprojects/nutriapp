@@ -906,3 +906,44 @@ describe("a pull that removes data leaves a safety copy (nutriapp-pull-loss-sile
     mac.close();
   });
 });
+
+describe("safety copies of two tabs", () => {
+  it("a second tab's loss is added to the copy the first tab kept, not written over it", async () => {
+    const server = new FakeServer();
+    const macStorage = new FakeStorage();
+    const tab1 = openDevice("tab1", { server, uid: UID, storage: macStorage });
+    await seed(tab1);
+    edit(tab1, addEntry(food("e2", "f1", 50)));
+    await settle();
+    const tab2 = openDevice("tab2", { server, uid: UID, storage: macStorage });
+    await settle();
+    const phone = openDevice("phone", { server, uid: UID });
+    await settle();
+    const remove = (id: string) => (d: AppData): AppData => ({
+      ...mapEntriesOf(d, (entries) => entries.filter((e) => e.id !== id)),
+      deletedDayLogEntries: [
+        ...d.deletedDayLogEntries,
+        { profileId: P1, date: DAY, entryId: id as LogEntryId, deletedAt: "2026-10-16T10:00:00.000Z" },
+      ],
+    });
+    edit(phone, remove("e1"));
+    await settle();
+    tab1.engine.notifyReturn();
+    await settle();
+    assert.equal(tab1.engine.getSnapshot().safetyCopy?.loss.entries, 1);
+    edit(phone, remove("e2"));
+    await settle();
+    tab2.engine.notifyReturn();
+    await settle();
+    tab1.close();
+    tab2.close();
+    const relaunch = openDevice("mac", { server, uid: UID, storage: macStorage });
+    await settle();
+    assert.equal(relaunch.engine.getSnapshot().safetyCopy?.loss.entries, 2, "both removed entries are in the copy");
+    relaunch.engine.restoreSafetyCopy();
+    await settle();
+    assert.deepEqual(entryIds(server.doc(UID)).sort(), ["e1", "e2"]);
+    relaunch.close();
+    phone.close();
+  });
+});

@@ -909,7 +909,23 @@ export class SyncEngine {
   private keepSafetyCopy(before: AppData, after: AppData): void {
     if (detectDataLoss(before, after) == null) return;
     this.safetyChain = this.safetyChain.then(async () => {
-      const copy = safetyCopyAfterMerge(this.safety, before, after, this.isoNow());
+      // Another tab of this account may have kept a copy since this one read
+      // the store: add to that one too, never write over it.
+      let existing = this.safety;
+      if (this.safetyStore != null) {
+        try {
+          const stored = await this.safetyStore.load(this.uid);
+          if (stored != null) {
+            existing =
+              existing == null
+                ? stored
+                : { savedAt: existing.savedAt, data: restoreMissing(existing.data, stored.data, this.isoNow()) };
+          }
+        } catch (e) {
+          this.log("safety copy load failed", e);
+        }
+      }
+      const copy = safetyCopyAfterMerge(existing, before, after, this.isoNow());
       if (copy == null) return;
       this.safety = copy;
       this.safetyPersisted = false;
