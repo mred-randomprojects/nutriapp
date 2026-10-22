@@ -246,7 +246,7 @@ export function AddEntryDialog({
 
   function handleQuickAdd() {
     const trimmedName = quickName.trim();
-    if (trimmedName.length === 0 || !quickHasNutrition) return;
+    if (trimmedName.length === 0) return;
 
     const trimmedNotes = notes.trim();
     const entry: QuickAddEntry = {
@@ -450,6 +450,10 @@ export function AddEntryDialog({
               />
             </div>
 
+            <p className="text-xs text-muted-foreground">
+              Leave the numbers empty to log what you ate now and estimate it later.
+            </p>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="quick-calories">Calories</Label>
@@ -548,7 +552,7 @@ export function AddEntryDialog({
             <Button
               type="submit"
               className="w-full"
-              disabled={quickName.trim().length === 0 || !quickHasNutrition}
+              disabled={quickName.trim().length === 0}
             >
               {isBudgeted ? "Add Budgeted" : "Add to Log"}
             </Button>

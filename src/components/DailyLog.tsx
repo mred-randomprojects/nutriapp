@@ -214,7 +214,7 @@ function buildMarkdownForDay(
       const sectionPrefix = currentSection != null ? `[${currentSection}] ` : "";
       const statusPrefix = item.isBudgeted === true ? "[Budgeted] " : "";
       lines.push(
-        `  - ${sectionPrefix}${statusPrefix}${item.name}: quick add; ${formatNutritionSummary(item.nutrition)}`,
+        `  - ${sectionPrefix}${statusPrefix}${item.name}: quick add; ${hasNutrition(item.nutrition) ? formatNutritionSummary(item.nutrition) : "not estimated yet"}`,
       );
 
       if (item.notes != null && item.notes.trim().length > 0) {
@@ -1174,6 +1174,11 @@ export function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove
             {isBudgeted && (
               <Badge variant="warning" className="px-1.5 py-0 text-[10px]">
                 Budgeted
+              </Badge>
+            )}
+            {!hasNutrition(item.nutrition) && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                Not estimated
               </Badge>
             )}
           </div>
