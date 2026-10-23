@@ -7,11 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "check": "tsc -b && eslint . && npm test",
+    "check": "tsc -b && tsc -p tsconfig.cli.json --noEmit && eslint . && npm test",
     "test": "tsc -p tsconfig.test.json && node --test .tmp/test-dist/src/*.test.js .tmp/test-dist/src/components/*.test.js",
     "test:rules": "node scripts/rules-test.mjs",
     "preview": "vite preview",
-    "add-food": "node scripts/add-food.mjs"
+    "add-food": "node scripts/add-food.mjs",
+    "nutri": "tsc -p tsconfig.cli.json && node .tmp/cli-dist/cli/nutri.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

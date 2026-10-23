@@ -201,3 +201,15 @@ refresh installed metadata on their own schedule.
 
 This adds install metadata and branding. It does not add a service worker or
 change the app's existing storage/sync behavior.
+
+## Estimating a quick-add from the terminal
+
+`npm run nutri -- show <date>` lists a day's entries (with their ids), and
+`npm run nutri -- estimate <date> <entry-id> --kcal N [--protein N --satfat N --fiber N --note "…"] --write`
+fills in the nutrition of a quick-add logged "to estimate later", straight on the
+cloud document (auth: your `gcloud` login). Without `--write` it is a dry run. It
+only touches unestimated quick-adds (`--force` to replace an estimate), saves the
+whole document to `~/.nutriapp/backups/` first, writes with the document's update
+time as a precondition (if the app saved in between, nothing is written), and
+checks that the one entry is all that changed. The app takes it on its next sync.
+Code: `cli/nutri.ts`, `src/estimateEntry.ts`.

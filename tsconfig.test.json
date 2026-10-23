@@ -48,6 +48,8 @@
     "src/syncEngine.random.test.ts",
     "src/syncSimulation.ts",
     "src/syncTestKit.ts",
+    "src/estimateEntry.ts",
+    "src/estimateEntry.test.ts",
     "src/types.ts"
   ]
 }

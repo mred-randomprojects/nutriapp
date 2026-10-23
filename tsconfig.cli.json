@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": { "outDir": "./.tmp/cli-dist" },
+  "include": ["cli/nutri.ts", "src/estimateEntry.ts", "src/types.ts"]
+}
