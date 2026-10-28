@@ -210,6 +210,14 @@ export function PlanEditor({ appData }: PlanEditorProps) {
     [],
   );
 
+  useEffect(() => {
+    if (entrySelection.focusedId == null) return;
+    entryRowRefs.current.get(entrySelection.focusedId)?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [currentEntriesKey, entrySelection.focusedId]);
+
   const selectVisibleEntry = useCallback(
     (id: LogEntryId) => {
       setEntrySelection(selectEntry(id, visibleEntryIds));
