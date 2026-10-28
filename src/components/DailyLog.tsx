@@ -1734,7 +1734,7 @@ function EntryShortcutPanel({ selectedCount }: EntryShortcutPanelProps) {
   ];
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-40 w-[min(calc(100vw-2rem),44rem)] -translate-x-1/2 rounded-lg border bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur">
+    <div className="fixed bottom-20 left-1/2 z-40 w-[min(calc(100vw-2rem),44rem)] -translate-x-1/2 rounded-lg border bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur">
       <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
         <span className="font-medium text-foreground">
           {selectedCount} {rowLabel} selected
