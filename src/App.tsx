@@ -97,6 +97,15 @@ function AuthenticatedApp({ uid }: { uid: string }) {
     setFooterHeight(footer.offsetHeight);
     return () => observer.disconnect();
   }, []);
+  // The nav and the footer are fixed over the window, so scrolling a row into
+  // view (the selected entry, as the arrows move it) must stop above them.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.scrollPaddingBottom = `calc(4rem + ${footerHeight}px)`;
+    return () => {
+      root.style.scrollPaddingBottom = "";
+    };
+  }, [footerHeight]);
   const { undo, redo, canUndo, canRedo } = appData;
   const updateReady = useAppUpdate(appData.isLocalCopyStored);
 
