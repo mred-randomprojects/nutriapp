@@ -364,6 +364,44 @@ describe("daily log keyboard shortcut classification", () => {
     );
   });
 
+  it("maps Cmd/Ctrl+C, V and D to copy, paste and duplicate", () => {
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "c", metaKey: true }), {
+      type: "copy-selection",
+    });
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "v", ctrlKey: true }), {
+      type: "paste",
+    });
+    assert.deepEqual(getDailyLogKeyboardAction({ key: "D", metaKey: true }), {
+      type: "duplicate-selection",
+    });
+  });
+
+  it("leaves C, V and D alone without exactly one command modifier", () => {
+    assert.equal(getDailyLogKeyboardAction({ key: "c" }), null);
+    assert.equal(getDailyLogKeyboardAction({ key: "v" }), null);
+    assert.equal(getDailyLogKeyboardAction({ key: "d" }), null);
+    assert.equal(
+      getDailyLogKeyboardAction({ key: "c", metaKey: true, ctrlKey: true }),
+      null,
+    );
+    assert.equal(
+      getDailyLogKeyboardAction({ key: "v", metaKey: true, shiftKey: true }),
+      null,
+    );
+    assert.equal(
+      getDailyLogKeyboardAction({ key: "d", metaKey: true, altKey: true }),
+      null,
+    );
+  });
+
+  it("does not repeat copy, paste or duplicate while the key is held", () => {
+    assert.equal(canRepeatDailyLogKeyboardAction({ type: "paste" }), false);
+    assert.equal(
+      canRepeatDailyLogKeyboardAction({ type: "duplicate-selection" }),
+      false,
+    );
+  });
+
   it("marks only continuous movement actions as repeatable", () => {
     assert.equal(
       canRepeatDailyLogKeyboardAction({

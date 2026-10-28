@@ -30,6 +30,7 @@ import type {
   WeightLossPlan,
 } from "./types";
 import { generateId } from "./types";
+import { insertItemsAt } from "./components/entryClipboard";
 import { loadCloudData, writeCloudData } from "./cloudStorage";
 import { SyncEngine, type CloudPort } from "./syncEngine";
 import { indexedDbSafetyStore } from "./safetyStore";
@@ -437,6 +438,43 @@ export function useAppData(uid: string) {
             };
           }
           const newDayLog: DayLog = { date, entries: [item] };
+          return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
+        }),
+      }, label);
+    },
+    [data, commit],
+  );
+
+  /**
+   * Inserts several rows at once (a paste or a duplicate): one change in the
+   * history and one write, so an undo or another device sees all of them or
+   * none. The rows must already have their own new ids.
+   */
+  const insertLogItems = useCallback(
+    (
+      profileId: ProfileId,
+      date: string,
+      items: ReadonlyArray<DayLogItem>,
+      insertIndex: number,
+      label: string,
+    ) => {
+      if (items.length === 0) return;
+      commit({
+        ...data,
+        profiles: data.profiles.map((p) => {
+          if (p.id !== profileId) return p;
+          const existingDay = p.dayLogs.find((dl) => dl.date === date);
+          if (existingDay != null) {
+            return {
+              ...p,
+              dayLogs: p.dayLogs.map((dl) =>
+                dl.date === date
+                  ? { ...dl, entries: insertItemsAt(dl.entries, items, insertIndex) }
+                  : dl,
+              ),
+            };
+          }
+          const newDayLog: DayLog = { date, entries: [...items] };
           return { ...p, dayLogs: [...p.dayLogs, newDayLog] };
         }),
       }, label);
@@ -945,6 +983,7 @@ export function useAppData(uid: string) {
     addLogEntry,
     addQuickAddEntry,
     addSeparator,
+    insertLogItems,
     removeLogEntry,
     removeLogEntries,
     reorderLogEntries,

@@ -26,6 +26,7 @@ import type {
   ProfileId,
   QuickAddEntry,
 } from "../types";
+import { generateId } from "../types";
 import { sumNutrition } from "../nutrition";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
@@ -40,6 +41,7 @@ import {
   SortableItem,
 } from "./DailyLog";
 import {
+  hasPageTextSelection,
   isActivatableControlTarget,
   isCompositeWidgetTarget,
   isEditableShortcutTarget,
@@ -61,6 +63,18 @@ import {
   toggleBudgetedForSelectedItems,
   type EntrySelectionState,
 } from "./dailyLogKeyboard";
+import {
+  cloneItemsWithNewIds,
+  collectSelectedItems,
+  describeRowCount,
+  getDuplicateInsertIndex,
+  getEntryClipboard,
+  getPasteInsertIndex,
+  insertItemsAt,
+  selectInsertedItems,
+  setEntryClipboard,
+  withoutUnknownFoods,
+} from "./entryClipboard";
 
 interface PlanEditorProps {
   appData: AppDataHandle;
@@ -125,6 +139,7 @@ export function PlanEditor({ appData }: PlanEditorProps) {
   } | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [clipboardFeedback, setClipboardFeedback] = useState<string | null>(null);
   const nextEditNonce = useRef(0);
   const entryRowRefs = useRef(new Map<LogEntryId, HTMLElement | null>());
 
@@ -295,6 +310,56 @@ export function PlanEditor({ appData }: PlanEditorProps) {
     [entrySelection.selectedIds],
   );
 
+  useEffect(() => {
+    if (clipboardFeedback == null) return;
+    const timeout = window.setTimeout(() => setClipboardFeedback(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [clipboardFeedback]);
+
+  const copySelection = useCallback(() => {
+    const copied = collectSelectedItems(
+      entries,
+      entrySelection.selectedIds,
+      NO_COLLAPSED_SECTIONS,
+    );
+    if (copied.length === 0) return;
+    setEntryClipboard(copied);
+    setClipboardFeedback(`Copied ${describeRowCount(copied.length)}`);
+  }, [entries, entrySelection.selectedIds]);
+
+  const insertAndSelect = useCallback(
+    (items: ReadonlyArray<DayLogItem>, insertIndex: number) => {
+      setEntries((prev) => insertItemsAt(prev, items, insertIndex));
+      const selection = selectInsertedItems(items);
+      if (selection != null) setEntrySelection(selection);
+    },
+    [],
+  );
+
+  const pasteClipboard = useCallback(() => {
+    const rows = withoutUnknownFoods(getEntryClipboard(), (foodId) =>
+      foodsMap.has(foodId),
+    );
+    if (rows.length === 0) return;
+    insertAndSelect(
+      cloneItemsWithNewIds(rows, generateId),
+      getPasteInsertIndex(entries, normalizeEntrySelection(entrySelection, visibleEntryIds)),
+    );
+  }, [entries, entrySelection, foodsMap, insertAndSelect, visibleEntryIds]);
+
+  const duplicateSelection = useCallback(() => {
+    const copied = collectSelectedItems(
+      entries,
+      entrySelection.selectedIds,
+      NO_COLLAPSED_SECTIONS,
+    );
+    if (copied.length === 0) return;
+    insertAndSelect(
+      cloneItemsWithNewIds(copied, generateId),
+      getDuplicateInsertIndex(entries, copied),
+    );
+  }, [entries, entrySelection.selectedIds, insertAndSelect]);
+
   const requestEditSelectedEntry = useCallback(() => {
     const normalized = normalizeEntrySelection(entrySelection, visibleEntryIds);
     const focusedId = normalized.focusedId;
@@ -355,6 +420,18 @@ export function PlanEditor({ appData }: PlanEditorProps) {
         return;
       }
 
+      // With nothing of ours to act on, `⌘C` / `⌘V` / `⌘D` stay the
+      // browser's: copying selected text, for one.
+      if (
+        (action.type === "copy-selection" &&
+          (entrySelection.selectedIds.length === 0 || hasPageTextSelection())) ||
+        (action.type === "duplicate-selection" &&
+          entrySelection.selectedIds.length === 0) ||
+        (action.type === "paste" && getEntryClipboard().length === 0)
+      ) {
+        return;
+      }
+
       e.preventDefault();
       if (e.repeat && !canRepeatDailyLogKeyboardAction(action)) return;
 
@@ -374,6 +451,12 @@ export function PlanEditor({ appData }: PlanEditorProps) {
         toggleBudgetedForSelection();
       } else if (action.type === "add-below") {
         openAddEntry(getKeyboardAddEntryInsertIndex(entries, entrySelection));
+      } else if (action.type === "copy-selection") {
+        copySelection();
+      } else if (action.type === "paste") {
+        pasteClipboard();
+      } else if (action.type === "duplicate-selection") {
+        duplicateSelection();
       }
     }
 
@@ -381,10 +464,13 @@ export function PlanEditor({ appData }: PlanEditorProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     addDialogOpen,
+    copySelection,
+    duplicateSelection,
     entries,
     entrySelection,
     moveSelection,
     openAddEntry,
+    pasteClipboard,
     removeEntries,
     requestEditSelectedEntry,
     toggleBudgetedForSelection,
@@ -490,6 +576,9 @@ export function PlanEditor({ appData }: PlanEditorProps) {
         </div>
         {saveError != null && (
           <p className="text-sm text-destructive">{saveError}</p>
+        )}
+        {clipboardFeedback != null && (
+          <p className="text-xs text-muted-foreground">{clipboardFeedback}</p>
         )}
       </div>
 

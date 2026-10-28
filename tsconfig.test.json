@@ -16,6 +16,8 @@
   "include": [
     "src/components/dailyLogKeyboard.ts",
     "src/components/dailyLogKeyboard.test.ts",
+    "src/components/entryClipboard.ts",
+    "src/components/entryClipboard.test.ts",
     "src/keyboardFocusParity.ts",
     "src/keyboardFocusParity.test.ts",
     "src/searchOptionKeyboard.ts",

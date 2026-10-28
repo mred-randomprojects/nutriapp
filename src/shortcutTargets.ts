@@ -108,3 +108,11 @@ export function isInteractiveShortcutTarget(
     isActivatableControlTarget(target)
   );
 }
+
+/**
+ * Text selected on the page: `⌘C` then copies that text, not the selected rows.
+ */
+export function hasPageTextSelection(): boolean {
+  const selection = window.getSelection();
+  return selection != null && !selection.isCollapsed;
+}

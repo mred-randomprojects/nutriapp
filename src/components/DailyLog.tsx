@@ -41,6 +41,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { AppDataHandle } from "../appDataType";
+import { generateId } from "../types";
 import type { DayLog, DayLogItem, DaySignOff, DayTrust, Food, LogEntry, LogEntryId, MealPlanId, NutritionGoals, NutritionValues, ProfileId, QuickAddEntry, WakeSleepSchedule } from "../types";
 import { computeExpectedWeight } from "../calculator";
 import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
@@ -64,6 +65,7 @@ import { useHasUnsavedChanges, useUnsavedChanges } from "../unsavedChanges";
 import { handleFormEscapeCancel, isFormEscapeCancel } from "../formEscapeCancel";
 import { useOptionListKeyboard } from "../useOptionListKeyboard";
 import {
+  hasPageTextSelection,
   isActivatableControlTarget,
   isCompositeWidgetTarget,
   isEditableShortcutTarget,
@@ -86,6 +88,17 @@ import {
   toggleBudgetedForSelectedItems,
   type EntrySelectionState,
 } from "./dailyLogKeyboard";
+import {
+  cloneItemsWithNewIds,
+  collectSelectedItems,
+  describeRowCount,
+  getDuplicateInsertIndex,
+  getEntryClipboard,
+  getPasteInsertIndex,
+  selectInsertedItems,
+  setEntryClipboard,
+  withoutUnknownFoods,
+} from "./entryClipboard";
 
 interface DailyLogProps {
   appData: AppDataHandle;
@@ -139,6 +152,9 @@ function isAddEntryShortcut(event: KeyboardEvent): boolean {
     event.key === "Spacebar"
   );
 }
+
+/** A paste or duplicate on a locked day: say why nothing happened, and the way out. */
+const LOCKED_DAY_FEEDBACK = "Day locked · press E to edit";
 
 function isEditModeShortcut(event: KeyboardEvent): boolean {
   return event.code === "KeyE" || event.key === "e" || event.key === "E";
@@ -1711,6 +1727,8 @@ function EntryShortcutPanel({ selectedCount }: EntryShortcutPanelProps) {
     { keys: "M/B", label: "Budget" },
     { keys: "Del", label: "Delete" },
     { keys: "Option ↑/↓", label: "Move" },
+    { keys: "⌘C/⌘V", label: "Copy/Paste" },
+    { keys: "⌘D", label: "Duplicate" },
     { keys: "Shift ↑/↓", label: "Extend" },
     { keys: "?", label: "Shortcuts" },
   ];
@@ -1746,6 +1764,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     addLogEntry,
     addQuickAddEntry,
     addSeparator,
+    insertLogItems,
     removeLogEntry,
     removeLogEntries,
     reorderLogEntries,
@@ -2011,6 +2030,83 @@ export function DailyLog({ appData }: DailyLogProps) {
     openAddEntry(insertIndex);
   }, [dayLog, entrySelection, isLocked, openAddEntry]);
 
+  const copySelectedEntries = useCallback(() => {
+    if (dayLog == null || selectedVisibleItems.length === 0) return;
+    const copied = collectSelectedItems(
+      dayLog.entries,
+      selectedVisibleItems.map((item) => item.id),
+      collapsedSections,
+    );
+    setEntryClipboard(copied);
+    setCopyFeedback(`Copied ${describeRowCount(copied.length)}`);
+  }, [collapsedSections, dayLog, selectedVisibleItems]);
+
+  const insertEntriesAndSelect = useCallback(
+    (items: ReadonlyArray<DayLogItem>, insertIndex: number, label: string) => {
+      if (activeProfile == null) return;
+      insertLogItems(activeProfile.id as ProfileId, dateStr, items, insertIndex, label);
+      // Rows pasted below a collapsed section's header land inside it: open
+      // it, or they would be selected and out of sight.
+      const focusedId = entrySelection.focusedId;
+      if (focusedId != null && collapsedSections.has(focusedId)) {
+        setCollapsedSections((prev) => {
+          const next = new Set(prev);
+          next.delete(focusedId);
+          return next;
+        });
+      }
+      const selection = selectInsertedItems(items);
+      if (selection != null) setEntrySelection(selection);
+    },
+    [activeProfile, collapsedSections, dateStr, entrySelection.focusedId, insertLogItems],
+  );
+
+  const pasteEntries = useCallback(() => {
+    if (activeProfile == null) return;
+    if (isLocked) {
+      setCopyFeedback(LOCKED_DAY_FEEDBACK);
+      return;
+    }
+    const rows = withoutUnknownFoods(getEntryClipboard(), (foodId) =>
+      foodsMap.has(foodId),
+    );
+    if (rows.length === 0) return;
+    const entries = dayLog?.entries ?? [];
+    const pasted = cloneItemsWithNewIds(rows, generateId);
+    insertEntriesAndSelect(
+      pasted,
+      getPasteInsertIndex(entries, normalizeEntrySelection(entrySelection, visibleEntryIds)),
+      `Paste ${describeRowCount(pasted.length)}`,
+    );
+  }, [
+    activeProfile,
+    dayLog,
+    entrySelection,
+    foodsMap,
+    insertEntriesAndSelect,
+    isLocked,
+    visibleEntryIds,
+  ]);
+
+  const duplicateSelectedEntries = useCallback(() => {
+    if (dayLog == null || selectedVisibleItems.length === 0) return;
+    if (isLocked) {
+      setCopyFeedback(LOCKED_DAY_FEEDBACK);
+      return;
+    }
+    const copied = collectSelectedItems(
+      dayLog.entries,
+      selectedVisibleItems.map((item) => item.id),
+      collapsedSections,
+    );
+    const duplicates = cloneItemsWithNewIds(copied, generateId);
+    insertEntriesAndSelect(
+      duplicates,
+      getDuplicateInsertIndex(dayLog.entries, copied),
+      `Duplicate ${describeRowCount(duplicates.length)}`,
+    );
+  }, [collapsedSections, dayLog, insertEntriesAndSelect, isLocked, selectedVisibleItems]);
+
   const requestEditSelectedEntry = useCallback(() => {
     if (isLocked || selectedVisibleItems.length !== 1) return;
 
@@ -2069,6 +2165,17 @@ export function DailyLog({ appData }: DailyLogProps) {
         ) {
           return;
         }
+        // With nothing of ours to act on, `⌘C` / `⌘V` / `⌘D` stay the
+        // browser's: copying selected text, for one.
+        if (
+          (keyboardAction.type === "copy-selection" &&
+            (selectedVisibleItems.length === 0 || hasPageTextSelection())) ||
+          (keyboardAction.type === "duplicate-selection" &&
+            selectedVisibleItems.length === 0) ||
+          (keyboardAction.type === "paste" && getEntryClipboard().length === 0)
+        ) {
+          return;
+        }
 
         e.preventDefault();
         if (e.repeat && !canRepeatDailyLogKeyboardAction(keyboardAction)) {
@@ -2096,6 +2203,12 @@ export function DailyLog({ appData }: DailyLogProps) {
           toggleBudgetedForSelectedEntries();
         } else if (keyboardAction.type === "toggle-shortcuts") {
           toggleShortcutPanel();
+        } else if (keyboardAction.type === "copy-selection") {
+          copySelectedEntries();
+        } else if (keyboardAction.type === "paste") {
+          pasteEntries();
+        } else if (keyboardAction.type === "duplicate-selection") {
+          duplicateSelectedEntries();
         } else {
           addBelowFocusedEntry();
         }
@@ -2174,11 +2287,14 @@ export function DailyLog({ appData }: DailyLogProps) {
     addBelowFocusedEntry,
     addDialogOpen,
     copyMenuOpen,
+    copySelectedEntries,
+    duplicateSelectedEntries,
     goToToday,
     hasUnsavedChanges,
     isLocked,
     navigateToDate,
     openAddEntry,
+    pasteEntries,
     pendingDelete,
     planMenuOpen,
     requestDeleteSelectedEntries,
@@ -2186,6 +2302,7 @@ export function DailyLog({ appData }: DailyLogProps) {
     savePlanDialogOpen,
     savePlanDiscardOpen,
     selectedDate,
+    selectedVisibleItems.length,
     moveSelectedEntries,
     toggleBudgetedForSelectedEntries,
     toggleShortcutPanel,

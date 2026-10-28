@@ -9,7 +9,10 @@ export type DailyLogKeyboardAction =
   | { type: "add-below" }
   | { type: "edit-selection" }
   | { type: "clear-selection" }
-  | { type: "toggle-shortcuts" };
+  | { type: "toggle-shortcuts" }
+  | { type: "copy-selection" }
+  | { type: "paste" }
+  | { type: "duplicate-selection" };
 
 export interface EntrySelectionState {
   focusedId: LogEntryId | null;
@@ -225,6 +228,9 @@ export function getVisibleEntryIds(
 export function getDailyLogKeyboardAction(
   event: KeyboardShortcutLike,
 ): DailyLogKeyboardAction | null {
+  const clipboardAction = getClipboardKeyboardAction(event);
+  if (clipboardAction != null) return clipboardAction;
+
   if (event.ctrlKey) return null;
 
   const isArrowUp = event.key === "ArrowUp";
@@ -273,6 +279,25 @@ export function getDailyLogKeyboardAction(
     return { type: "toggle-budgeted" };
   }
 
+  return null;
+}
+
+/**
+ * `⌘C` / `⌘V` / `⌘D` (or `Ctrl` instead of `⌘`): copy, paste and duplicate
+ * rows. `Shift` or `Option` held means some other shortcut.
+ */
+function getClipboardKeyboardAction(
+  event: KeyboardShortcutLike,
+): DailyLogKeyboardAction | null {
+  const hasOneCommandModifier = event.metaKey !== event.ctrlKey;
+  if (!hasOneCommandModifier || event.altKey || event.shiftKey) return null;
+
+  const key = event.key.toLowerCase();
+  if (key === "c" || event.code === "KeyC") return { type: "copy-selection" };
+  if (key === "v" || event.code === "KeyV") return { type: "paste" };
+  if (key === "d" || event.code === "KeyD") {
+    return { type: "duplicate-selection" };
+  }
   return null;
 }
 

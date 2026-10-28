@@ -36,6 +36,10 @@ re-implementing key handling:
   option lists use the shared `useOptionListKeyboard` hook (arrows move the
   highlight, `Enter` selects, hover syncs, scroll-into-view) — do not hand-roll.
 - `Shift+↑/↓` → extend a multi-selection; `Alt+↑/↓` → reorder the selection.
+- `Cmd/Ctrl+C` / `Cmd/Ctrl+V` / `Cmd/Ctrl+D` → copy the selected rows, paste
+  them below the focused row, duplicate them in place (`src/components/entryClipboard.ts`).
+  The clipboard is the app's own, in memory, so rows paste across days and plans;
+  with no rows selected (or page text selected, for `C`) the browser keeps the key.
 - `Space` → trigger the page's primary "add/create" action when not typing.
 - `?` → toggle the contextual keyboard-shortcut panel.
 - Single letters (`t`, `a`, `m`/`b`, …) → fast actions **only when focus is not
@@ -52,12 +56,14 @@ Global
 Daily log
 - `↑ / ↓` select entry · `Shift+↑/↓` extend · `Alt+↑/↓` move entry
 - `Enter` edit · `Delete`/`Backspace` delete · `a` add below · `m`/`b` toggle budgeted
+- `⌘C` copy rows (a collapsed section brings its rows) · `⌘V` paste below the focused row, or at the end · `⌘D` duplicate (a locked day says so: `e` unlocks it)
 - `t` jump to today · `← / →` previous / next day · `?` shortcuts panel · `Esc` clear selection
 - `s` sign off the day (trust: `← / →` pick Complete / Mostly / Rough, `Enter` confirm, `Tab` to the note, `Esc` cancel)
 
 Plan editor (`/plans/:planId/edit`)
 - reuses the daily-log entry grammar: `↑ / ↓` select · `Alt+↑/↓` move · `Enter` edit ·
   `Delete`/`Backspace` remove · `m`/`b` toggle budgeted · `a` add below · `Space` add ·
+  `⌘C` / `⌘V` / `⌘D` copy / paste / duplicate rows (to and from the daily log) ·
   `Esc` clear selection. Name + description are plain fields; `Save` commits, `Cancel`
   leaves (guarded by the unsaved-changes prompt).
 
