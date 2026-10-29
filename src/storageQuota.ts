@@ -31,6 +31,51 @@ export function storageUsage(isMine: (key: string) => boolean): StorageSplit {
   return { mine, others };
 }
 
+/**
+ * Which app on the origin writes which keys, by prefix (from each app's
+ * source, 2026-10-29). Keys no prefix matches are "Unknown".
+ */
+const APP_KEY_PREFIXES: [app: string, prefixes: string[]][] = [
+  ["NutriApp", ["nutriapp"]],
+  ["fulbito", ["fulbito"]],
+  ["dineros", ["dineros"]],
+  ["candito-tool", ["candito"]],
+  ["cuentas", ["cuentas"]],
+  ["execute", ["execute"]],
+  ["age-defense", ["age-defense"]],
+  ["viaje-matematico", ["mathjourney"]],
+  ["minecraft-ladder", ["minecraft-ladder"]],
+  ["terrateniente", ["terrateniente"]],
+  ["guess-class-lol", ["guess-class-lol", "skills-trainer-history"]],
+  ["Firebase", ["firebase:"]],
+];
+
+export function appOfKey(key: string): string {
+  for (const [app, prefixes] of APP_KEY_PREFIXES) {
+    if (prefixes.some((prefix) => key.startsWith(prefix))) return app;
+  }
+  return "Unknown";
+}
+
+/** Each app's share of the origin's localStorage, biggest first. Reads lengths only. */
+export function storageByApp(): { app: string; bytes: number; keys: number }[] {
+  const byApp = new Map<string, { bytes: number; keys: number }>();
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key === null) continue;
+      const app = appOfKey(key);
+      const entry = byApp.get(app) ?? { bytes: 0, keys: 0 };
+      entry.bytes += (key.length + (localStorage.getItem(key)?.length ?? 0)) * 2;
+      entry.keys += 1;
+      byApp.set(app, entry);
+    }
+  } catch {
+    /* storage blocked */
+  }
+  return [...byApp].map(([app, entry]) => ({ app, ...entry })).sort((a, b) => b.bytes - a.bytes);
+}
+
 /** NutriApp's keys: `nutriapp-data*` and `nutriapp:food-form-draft:*`. */
 export function isNutriAppKey(key: string): boolean {
   return key.startsWith("nutriapp");

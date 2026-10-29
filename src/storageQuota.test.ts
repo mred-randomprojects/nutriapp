@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   ORIGIN_QUOTA_BYTES,
+  appOfKey,
   formatBytes,
   isNutriAppKey,
   isQuotaError,
@@ -120,5 +121,17 @@ describe("formatBytes", () => {
     assert.equal(formatBytes(512), "512 B");
     assert.equal(formatBytes(1536), "1.5 KB");
     assert.equal(formatBytes(ORIGIN_QUOTA_BYTES), "5.00 MB");
+  });
+});
+
+describe("appOfKey", () => {
+  it("names the app that writes each key on the shared origin", () => {
+    assert.equal(appOfKey("nutriapp-data-backup"), "NutriApp");
+    assert.equal(appOfKey("nutriapp:food-form-draft:new"), "NutriApp");
+    assert.equal(appOfKey("fulbito-data"), "fulbito");
+    assert.equal(appOfKey("candito-history"), "candito-tool");
+    assert.equal(appOfKey("mathjourney.progress.v1"), "viaje-matematico");
+    assert.equal(appOfKey("skills-trainer-history"), "guess-class-lol");
+    assert.equal(appOfKey("settings"), "Unknown");
   });
 });

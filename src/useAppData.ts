@@ -34,6 +34,7 @@ import { insertItemsAt } from "./components/entryClipboard";
 import { loadCloudData, writeCloudData } from "./cloudStorage";
 import { SyncEngine, type CloudPort } from "./syncEngine";
 import { indexedDbSafetyStore } from "./safetyStore";
+import { mirroredLocalStorage, startStorageMirror } from "./storageMirrorIdb";
 import { builtinFoods } from "./data/builtinFoods";
 import { buildResolvedFoodsMap } from "./nutrition";
 import { upsertDeletedDayLogEntry } from "./deletedDayLogEntries";
@@ -154,6 +155,9 @@ export function useAppData(uid: string) {
         cloud: firestore,
         log: logCloudSync,
         safety: indexedDbSafetyStore,
+        // localStorage, with every write also copied to IndexedDB (phase 1
+        // of docs/indexeddb-migration.md).
+        storage: mirroredLocalStorage() ?? undefined,
       }),
   );
   const { data, undoStack, redoStack, storageError, cloudError, saveStatus, safetyCopy } =
@@ -161,6 +165,7 @@ export function useAppData(uid: string) {
 
   useEffect(() => {
     engine.start();
+    startStorageMirror();
     function handleReturn() {
       if (document.visibilityState !== "visible") return;
       engine.notifyReturn();

@@ -1,8 +1,55 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useAuth } from "../auth";
 import { Download, LogOut } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
 import { downloadBackup } from "../downloadBackup";
+import { ORIGIN_QUOTA_BYTES, formatBytes, storageByApp } from "../storageQuota";
+import type { MirrorState } from "../storageMirror";
+import { getStorageMirrorState, subscribeStorageMirror } from "../storageMirrorIdb";
+
+function mirrorSummary(state: MirrorState): string {
+  switch (state.status) {
+    case "checking":
+      return "IndexedDB copy: checking…";
+    case "failed":
+      return `IndexedDB copy: could not be checked (${state.error}).`;
+    case "identical":
+      return `IndexedDB copy: identical to localStorage (${state.report.keys} keys, ${formatBytes(state.report.chars * 2)}).`;
+    case "different":
+      return `IndexedDB copy: DIFFERENT from localStorage in ${state.report.mismatched.join(", ")}. Nothing was lost: localStorage still holds everything.`;
+  }
+}
+
+/**
+ * Every app's share of the origin's ~5 MB, and the state of the IndexedDB
+ * copy (docs/indexeddb-migration.md).
+ */
+function StorageDetails() {
+  const mirror = useSyncExternalStore(subscribeStorageMirror, getStorageMirrorState);
+  const apps = storageByApp();
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-card p-4 text-xs text-muted-foreground">
+      <p className="text-sm font-medium text-foreground">Storage on this device</p>
+      <p>
+        Every app on mred-randomprojects.github.io shares about{" "}
+        {formatBytes(ORIGIN_QUOTA_BYTES)} of localStorage:
+      </p>
+      <ul className="space-y-0.5">
+        {apps.map(({ app, bytes, keys }) => (
+          <li key={app} className="flex justify-between gap-2">
+            <span>
+              {app} ({keys} {keys === 1 ? "key" : "keys"})
+            </span>
+            <span>{formatBytes(bytes)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className={mirror.status === "different" || mirror.status === "failed" ? "text-destructive" : ""}>
+        {mirrorSummary(mirror)}
+      </p>
+    </div>
+  );
+}
 
 interface AccountPageProps {
   appData: AppDataHandle;
@@ -62,6 +109,8 @@ export function AccountPage({ appData }: AccountPageProps) {
           somewhere other than this browser.
         </p>
       </div>
+
+      <StorageDetails />
 
       <button
         onClick={handleSignOut}

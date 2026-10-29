@@ -36,6 +36,8 @@
     "src/backup.test.ts",
     "src/storageQuota.ts",
     "src/storageQuota.test.ts",
+    "src/storageMirror.ts",
+    "src/storageMirror.test.ts",
     "src/storage.ts",
     "src/storage.test.ts",
     "src/appVersion.ts",
