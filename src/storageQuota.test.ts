@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   ORIGIN_QUOTA_BYTES,
   appOfKey,
+  approximateBytes,
   formatBytes,
   isNutriAppKey,
   isQuotaError,
@@ -133,5 +134,18 @@ describe("appOfKey", () => {
     assert.equal(appOfKey("mathjourney.progress.v1"), "viaje-matematico");
     assert.equal(appOfKey("skills-trainer-history"), "guess-class-lol");
     assert.equal(appOfKey("settings"), "Unknown");
+  });
+});
+
+describe("approximateBytes", () => {
+  it("counts a record's text at 2 bytes a char, objects as JSON", () => {
+    assert.equal(approximateBytes("k", "abc"), 8);
+    assert.equal(approximateBytes("uid", { savedAt: "x" }), (3 + '{"savedAt":"x"}'.length) * 2);
+  });
+});
+
+describe("formatBytes in gigabytes", () => {
+  it("switches to GB past 1024 MB", () => {
+    assert.equal(formatBytes(3 * 1024 * 1024 * 1024), "3.00 GB");
   });
 });

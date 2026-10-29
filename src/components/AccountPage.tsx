@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useAuth } from "../auth";
 import { Download, LogOut } from "lucide-react";
 import type { AppDataHandle } from "../appDataType";
@@ -6,6 +6,13 @@ import { downloadBackup } from "../downloadBackup";
 import { ORIGIN_QUOTA_BYTES, formatBytes, storageByApp } from "../storageQuota";
 import type { MirrorState } from "../storageMirror";
 import { getStorageMirrorState, subscribeStorageMirror } from "../storageMirrorIdb";
+import {
+  NUTRIAPP_DATABASES,
+  estimateOrigin,
+  measureDatabase,
+  type OriginEstimate,
+} from "../indexedDbUsage";
+import { Progress } from "./ui/progress";
 
 function mirrorSummary(state: MirrorState): string {
   switch (state.status) {
@@ -47,6 +54,77 @@ function StorageDetails() {
       <p className={mirror.status === "different" || mirror.status === "failed" ? "text-destructive" : ""}>
         {mirrorSummary(mirror)}
       </p>
+      <IndexedDbMeter />
+    </div>
+  );
+}
+
+interface IndexedDbUsage {
+  origin: OriginEstimate | null;
+  /** NutriApp's databases, by name; null where one could not be read. */
+  databases: { name: string; bytes: number | null }[];
+}
+
+/**
+ * The origin's IndexedDB quota, the way the storage bar shows localStorage's:
+ * how much every app on the origin uses of it, and NutriApp's own share.
+ */
+function IndexedDbMeter() {
+  const [usage, setUsage] = useState<IndexedDbUsage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      estimateOrigin(),
+      Promise.all(
+        NUTRIAPP_DATABASES.map((name) =>
+          measureDatabase(name).then(
+            (bytes) => ({ name, bytes }),
+            () => ({ name, bytes: null }),
+          ),
+        ),
+      ),
+    ]).then(
+      ([origin, databases]) => {
+        if (!cancelled) setUsage({ origin, databases });
+      },
+      (e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (error != null) return <p className="text-destructive">IndexedDB: could not be measured ({error}).</p>;
+  if (usage == null) return <p>IndexedDB: measuring…</p>;
+
+  const { origin, databases } = usage;
+  const percentage = origin == null ? 0 : Math.min((origin.usage / origin.quota) * 100, 100);
+  return (
+    <div className="space-y-1.5">
+      {origin == null ? (
+        <p>IndexedDB: this browser does not say how much space it allows.</p>
+      ) : (
+        <>
+          <p>
+            IndexedDB and caches, also shared by every app on the site:{" "}
+            {formatBytes(origin.usage)} used of {formatBytes(origin.quota)} (
+            {formatBytes(Math.max(origin.quota - origin.usage, 0))} free).
+          </p>
+          <Progress value={percentage} />
+        </>
+      )}
+      <ul className="space-y-0.5">
+        {databases.map(({ name, bytes }) => (
+          <li key={name} className="flex justify-between gap-2">
+            <span>NutriApp: {name}</span>
+            <span>{bytes == null ? "could not be read" : `about ${formatBytes(bytes)}`}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

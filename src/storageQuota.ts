@@ -86,7 +86,8 @@ export function formatBytes(bytes: number): string {
   const kb = bytes / 1024;
   if (kb < 1024) return `${kb.toFixed(1)} KB`;
   const mb = kb / 1024;
-  return `${mb.toFixed(2)} MB`;
+  if (mb < 1024) return `${mb.toFixed(2)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
 }
 
 /**
@@ -104,4 +105,16 @@ export function storageSpaceMessage(split: StorageSplit, state: "full" | "almost
       ? "Download a backup from Account, then delete old profiles to free space."
       : "Most of it is other apps' data. Download a backup from Account to be safe.";
   return `${lead} ${share} ${advice}`;
+}
+
+/**
+ * What an IndexedDB record takes, counted the way the localStorage meter
+ * counts: its text, as JSON for anything that is not a string, at 2 bytes a
+ * char. The browser keeps its own encoding on disk, so this is an
+ * approximation.
+ */
+export function approximateBytes(key: unknown, value: unknown): number {
+  const keyText = typeof key === "string" ? key : (JSON.stringify(key) ?? "");
+  const valueText = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
+  return (keyText.length + valueText.length) * 2;
 }
