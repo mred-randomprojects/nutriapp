@@ -1,52 +1,23 @@
 /**
- * Fills in the nutrition of a quick-add entry that was logged "to estimate
- * later", writing straight to the cloud document. Safe by construction:
- *   - without --write it only shows what it would change;
- *   - before writing it saves the whole document to ~/.nutriapp/backups/;
- *   - the write carries the document's update time as a precondition, so if
- *     the app saved in between, Firestore refuses it and nothing changes;
- *   - it checks, before sending and again on what Firestore stored, that the
- *     one entry is the only thing that changed.
- * The app takes the change on its next pull: the cloud wins every merge
- * except for this device's own pending edits (src/syncMerge.ts).
+ * Edits the log from the terminal, writing straight to the cloud document:
+ * fills in the nutrition of a quick-add logged "to estimate later", or logs a
+ * new quick-add. Without --write it only shows what it would do; with it, the
+ * write goes through cli/ops.ts (backup, update-time precondition, and a check
+ * that only that one entry changed). The app takes the change on its next
+ * pull: day logs merge entry by entry (src/syncMerge.ts).
  *
  *   npm run nutri -- show 2026-10-22
  *   npm run nutri -- estimate 2026-10-22 <entry-id> --kcal 1300 --protein 52 --satfat 21 --fiber 6 [--note "…"] [--force] [--write]
+ *   npm run nutri -- add 2026-10-22 --name "Empanada de carne" --kcal 300 [--protein 12 --satfat 5 --fiber 2 --note "…" --section Cena --planned] [--write]
  *
- * Auth is the gcloud login (`gcloud auth print-access-token`), which owns the
- * Firebase project.
+ * The same operations are offered to Claude as MCP tools (cli/mcp.ts).
+ * Auth is the gcloud login (`gcloud auth print-access-token`).
  */
-import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import {
-  EstimateError,
-  listDay,
-  locateQuickAdd,
-  onlyEntryChanged,
-  profilesWithEstimate,
-  type FsDocument,
-} from "../src/estimateEntry.js";
-
-const PROJECT = process.env.NUTRIAPP_PROJECT ?? "nutriapp-9ac19";
-const DOC = process.env.NUTRIAPP_DOC ?? "users/w8uyqK5tE3gMScvin2yUI1VG8ec2/data/appData";
-const PROFILE = process.env.NUTRIAPP_PROFILE ?? "Me";
-const URL_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/${DOC}`;
-
-function token(): string {
-  return execFileSync("gcloud", ["auth", "print-access-token"], { encoding: "utf8" }).trim();
-}
-
-async function call(url: string, init: { method?: string; body?: string } = {}): Promise<FsDocument> {
-  const res = await fetch(url, {
-    ...init,
-    headers: { Authorization: `Bearer ${token()}`, "x-goog-user-project": PROJECT, "Content-Type": "application/json" },
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Firestore ${res.status}: ${text.slice(0, 500)}`);
-  return JSON.parse(text) as FsDocument;
-}
+import { randomUUID } from "node:crypto";
+import { profilesWithAddedEntry } from "../src/addEntry.js";
+import { EstimateError, listDay } from "../src/estimateEntry.js";
+import { PROFILE, readDoc } from "./firestore.js";
+import { addMeal, estimateEntry, planEstimate } from "./ops.js";
 
 function flag(args: string[], name: string): string | null {
   const i = args.indexOf(name);
@@ -64,51 +35,67 @@ function amount(args: string[], name: string, required: boolean): number {
   return n;
 }
 
+function nutritionFlags(args: string[]) {
+  return {
+    calories: amount(args, "--kcal", true),
+    protein: amount(args, "--protein", false),
+    saturatedFat: amount(args, "--satfat", false),
+    fiber: amount(args, "--fiber", false),
+  };
+}
+
+const USAGE =
+  "Usage: show <date> | estimate <date> <entry-id> --kcal N [--protein N --satfat N --fiber N --note T --force --write]" +
+  " | add <date> --name T --kcal N [--protein N --satfat N --fiber N --note T --section S --planned --write]";
+
 async function main(argv: string[]): Promise<void> {
-  const [cmd, date, entryId, ...rest] = argv;
+  const [cmd, date, ...rest] = argv;
   if (cmd === "show" && date) {
-    const doc = await call(URL_BASE);
+    const doc = await readDoc();
     for (const e of listDay(doc, PROFILE, date)) {
       const kcal = e.type === "quick-add" ? `${e.calories ?? 0} kcal` : "";
       console.log(`${e.type.padEnd(9)} ${e.id}  ${e.name}  ${kcal}${e.budgeted ? "  (plan)" : ""}`);
     }
     return;
   }
-  if (cmd !== "estimate" || !date || !entryId) {
-    throw new EstimateError("Usage: show <date> | estimate <date> <entry-id> --kcal N [--protein N --satfat N --fiber N --note T --force --write]");
-  }
-  const nutrition = {
-    calories: amount(rest, "--kcal", true),
-    protein: amount(rest, "--protein", false),
-    saturatedFat: amount(rest, "--satfat", false),
-    fiber: amount(rest, "--fiber", false),
-  };
-  const note = flag(rest, "--note");
-  const doc = await call(URL_BASE);
-  const loc = locateQuickAdd(doc, PROFILE, date, entryId, rest.includes("--force"));
-  const profiles = profilesWithEstimate(doc, loc, nutrition, note);
-  const planned = onlyEntryChanged(doc, { ...doc.fields, profiles }, loc, profiles);
-  if (planned != null) throw new EstimateError(`Refusing to write: ${planned}`);
-  const name = listDay(doc, PROFILE, date).find((e) => e.id === entryId)?.name;
-  console.log(`${date} · ${name}\n  → ${JSON.stringify(nutrition)}${note != null ? `\n  notes: ${note}` : ""}`);
-  if (!rest.includes("--write")) {
-    console.log("Dry run: nothing written. Add --write to save it.");
+  if (cmd === "estimate" && date && rest[0] != null) {
+    const [entryId, ...opts] = rest;
+    const input = { date, entryId, nutrition: nutritionFlags(opts), notes: flag(opts, "--note"), force: opts.includes("--force") };
+    const doc = await readDoc();
+    planEstimate(doc, input); // throws on anything it refuses
+    const name = listDay(doc, PROFILE, date).find((e) => e.id === entryId)?.name;
+    console.log(`${date} · ${name}\n  → ${JSON.stringify(input.nutrition)}${input.notes != null ? `\n  notes: ${input.notes}` : ""}`);
+    if (!opts.includes("--write")) {
+      console.log("Dry run: nothing written. Add --write to save it.");
+      return;
+    }
+    const result = await estimateEntry(input);
+    console.log(`Backup: ${result.backup}\nSaved and verified. The app picks it up on its next sync.`);
     return;
   }
-
-  const dir = join(homedir(), ".nutriapp", "backups");
-  mkdirSync(dir, { recursive: true });
-  const backup = join(dir, `${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
-  writeFileSync(backup, JSON.stringify(doc));
-  console.log(`Backup: ${backup}`);
-
-  const query = `updateMask.fieldPaths=profiles&currentDocument.updateTime=${encodeURIComponent(doc.updateTime)}`;
-  const stored = await call(`${URL_BASE}?${query}`, { method: "PATCH", body: JSON.stringify({ fields: { profiles } }) });
-  const check = onlyEntryChanged(doc, stored.fields, loc, profiles);
-  if (check != null) {
-    throw new Error(`Written, but the stored document is not what was expected (${check}). Restore from ${backup} if needed.`);
+  if (cmd === "add" && date) {
+    const name = flag(rest, "--name");
+    if (name == null) throw new EstimateError("Missing --name.");
+    const input = {
+      date,
+      name,
+      nutrition: nutritionFlags(rest),
+      notes: flag(rest, "--note"),
+      section: flag(rest, "--section"),
+      planned: rest.includes("--planned"),
+    };
+    // Plans it on the current document first, so a dry run refuses what the write would.
+    profilesWithAddedEntry(await readDoc(), PROFILE, date, { id: randomUUID(), name, nutrition: input.nutrition, notes: input.notes, budgeted: input.planned }, input.section);
+    console.log(`${date}${input.section != null ? ` · ${input.section}` : ""} + ${name}\n  → ${JSON.stringify(input.nutrition)}`);
+    if (!rest.includes("--write")) {
+      console.log("Dry run: nothing written. Add --write to save it.");
+      return;
+    }
+    const result = await addMeal(input);
+    console.log(`Added ${result.entryId}. Backup: ${result.backup}\nSaved and verified. The app picks it up on its next sync.`);
+    return;
   }
-  console.log(`Saved and verified (update time ${stored.updateTime}). The app picks it up on its next sync.`);
+  throw new EstimateError(USAGE);
 }
 
 main(process.argv.slice(2)).catch((error: unknown) => {

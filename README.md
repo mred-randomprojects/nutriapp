@@ -202,14 +202,32 @@ refresh installed metadata on their own schedule.
 This adds install metadata and branding. It does not add a service worker or
 change the app's existing storage/sync behavior.
 
-## Estimating a quick-add from the terminal
+## Logging from the terminal, and from Claude
 
-`npm run nutri -- show <date>` lists a day's entries (with their ids), and
+`npm run nutri -- show <date>` lists a day's entries (with their ids);
 `npm run nutri -- estimate <date> <entry-id> --kcal N [--protein N --satfat N --fiber N --note "…"] --write`
-fills in the nutrition of a quick-add logged "to estimate later", straight on the
-cloud document (auth: your `gcloud` login). Without `--write` it is a dry run. It
-only touches unestimated quick-adds (`--force` to replace an estimate), saves the
-whole document to `~/.nutriapp/backups/` first, writes with the document's update
-time as a precondition (if the app saved in between, nothing is written), and
-checks that the one entry is all that changed. The app takes it on its next sync.
-Code: `cli/nutri.ts`, `src/estimateEntry.ts`.
+fills in the nutrition of a quick-add logged "to estimate later" (`--force` to
+replace an estimate); and
+`npm run nutri -- add <date> --name "…" --kcal N [--protein N --satfat N --fiber N --note "…" --section Lunch --planned] --write`
+logs a new quick-add, at the end of the section whose label matches (ignoring
+case and accents) or of the day. Without `--write` they are dry runs.
+
+The same operations are an **MCP server** for Claude Code (`cli/mcp.ts`), so
+Claude can log meals with its own estimate while you talk: `nutriapp_show_day`,
+`nutriapp_add_meal`, `nutriapp_estimate_entry`. Registered once, for every folder:
+
+```bash
+claude mcp add --scope user nutriapp -- ~/Documents/Programming/nutriapp/scripts/mcp.sh
+```
+
+`scripts/mcp.sh` builds the CLI before starting, so it always runs the checked-out code.
+
+Every write goes straight to the cloud document (auth: your `gcloud` login),
+saves the whole document to `~/.nutriapp/backups/` first, writes with the
+document's update time as a precondition (if the app saved in between, nothing is
+written and it starts over once from a fresh read), and checks, before sending
+and on what Firestore stored, that the one entry is all that changed. The app
+takes it on its next pull (when its window gets the focus); day logs merge entry
+by entry, so a new entry survives edits another device still has pending.
+Deleting stays in the app. Code: `cli/`, `src/addEntry.ts`, `src/estimateEntry.ts`,
+`src/dayView.ts`.

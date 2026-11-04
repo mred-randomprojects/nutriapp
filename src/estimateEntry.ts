@@ -29,19 +29,19 @@ export interface FsDocument {
 
 export class EstimateError extends Error {}
 
-function mapFields(value: FsValue | undefined): Record<string, FsValue> | null {
+export function mapFields(value: FsValue | undefined): Record<string, FsValue> | null {
   return value != null && "mapValue" in value ? (value.mapValue.fields ?? {}) : null;
 }
 
-function arrayValues(value: FsValue | undefined): FsValue[] | null {
+export function arrayValues(value: FsValue | undefined): FsValue[] | null {
   return value != null && "arrayValue" in value ? (value.arrayValue.values ?? []) : null;
 }
 
-function str(value: FsValue | undefined): string | null {
+export function str(value: FsValue | undefined): string | null {
   return value != null && "stringValue" in value ? value.stringValue : null;
 }
 
-function num(value: FsValue | undefined): number | null {
+export function num(value: FsValue | undefined): number | null {
   if (value == null) return null;
   if ("integerValue" in value) return Number(value.integerValue);
   if ("doubleValue" in value) return value.doubleValue;
@@ -80,7 +80,7 @@ function findDay(
 }
 
 /** The ids of the day-log entries the app has deleted (and not restored) on `date`. */
-function deletedEntryIds(doc: FsDocument, profileId: string, date: string): Set<string> {
+export function deletedEntryIds(doc: FsDocument, profileId: string, date: string): Set<string> {
   const out = new Set<string>();
   for (const t of arrayValues(doc.fields.deletedDayLogEntries) ?? []) {
     const f = mapFields(t);
@@ -151,17 +151,17 @@ export function locateQuickAdd(
   return { profileIndex, dayIndex, entryIndex: matches[0] };
 }
 
-function numberValue(n: number): FsValue {
+export function numberValue(n: number): FsValue {
   if (!Number.isFinite(n) || n < 0) throw new EstimateError(`Not a valid amount: ${n}.`);
   return Number.isInteger(n) ? { integerValue: String(n) } : { doubleValue: n };
 }
 
 /** A copy of `fields` with `key` set; a copy, so the input document stays the "before". */
-function withField(fields: Record<string, FsValue>, key: string, value: FsValue): Record<string, FsValue> {
+export function withField(fields: Record<string, FsValue>, key: string, value: FsValue): Record<string, FsValue> {
   return { ...fields, [key]: value };
 }
 
-function withItem(values: FsValue[], index: number, value: FsValue): FsValue[] {
+export function withItem(values: FsValue[], index: number, value: FsValue): FsValue[] {
   return values.map((v, i) => (i === index ? value : v));
 }
 
@@ -197,7 +197,7 @@ export function profilesWithEstimate(
 }
 
 /** JSON with sorted object keys: Firestore maps have no key order, arrays do. */
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   return JSON.stringify(value, (_k, v: unknown) =>
     v == null || typeof v !== "object" || Array.isArray(v)
       ? v

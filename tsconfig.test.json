@@ -54,6 +54,10 @@
     "src/syncTestKit.ts",
     "src/estimateEntry.ts",
     "src/estimateEntry.test.ts",
-    "src/types.ts"
+    "src/types.ts",
+    "src/addEntry.ts",
+    "src/addEntry.test.ts",
+    "src/dayView.ts",
+    "src/dayView.test.ts"
   ]
 }
