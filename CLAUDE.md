@@ -58,6 +58,7 @@ Daily log
 - `Enter` edit · `Delete`/`Backspace` delete · `a` add below · `m`/`b` toggle budgeted
 - `⌘C` copy rows (a collapsed section brings its rows) · `⌘V` paste below the focused row, or at the end · `⌘D` duplicate (a locked day says so: `e` unlocks it)
 - `t` jump to today · `← / →` previous / next day · `?` shortcuts panel · `Esc` clear selection
+- `v` cycle the entry view: Compact (one line each) / Comfortable / Gallery (large photos); also the three buttons beside "Entries"
 - `s` sign off the day (trust: `← / →` pick Complete / Mostly / Rough, `Enter` confirm, `Tab` to the note, `Esc` cancel)
 
 Plan editor (`/plans/:planId/edit`)

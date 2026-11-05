@@ -681,6 +681,7 @@ export function PlanEditor({ appData }: PlanEditorProps) {
                       }
                     >
                       <QuickAddEntryCard
+                        view="comfortable"
                         item={item}
                         isLocked={false}
                         editRequestNonce={
@@ -761,6 +762,7 @@ export function PlanEditor({ appData }: PlanEditorProps) {
                     }
                   >
                     <FoodEntryCard
+                      view="comfortable"
                       item={item}
                       food={food}
                       isLocked={false}

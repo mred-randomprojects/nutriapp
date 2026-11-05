@@ -22,6 +22,9 @@ import {
   Save,
   MoreVertical,
   ShieldCheck,
+  Rows3,
+  LayoutList,
+  GalleryVerticalEnd,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -46,6 +49,14 @@ import type { DayLog, DayLogItem, DaySignOff, DayTrust, Food, LogEntry, LogEntry
 import { computeExpectedWeight } from "../calculator";
 import { nutritionForEntry, sumNutrition, getTimeBudgetFraction } from "../nutrition";
 import { normalizeForSearch } from "../search";
+import {
+  ENTRY_VIEWS,
+  ENTRY_VIEW_LABELS,
+  loadEntryView,
+  nextEntryView,
+  saveEntryView,
+  type EntryView,
+} from "../entryView";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -600,12 +611,178 @@ function DailyTotalsCard({ totals, budgetedTotals, goals, schedule, isSelectedDa
   );
 }
 
+interface EntryCardLayoutProps {
+  view: EntryView;
+  isBudgeted: boolean;
+  isLocked: boolean;
+  onEdit: () => void;
+  onToggleBudgeted: () => void;
+  onAddAbove: () => void;
+  onAddBelow: () => void;
+  onRemove: () => void;
+  imageUrl: string | null;
+  imageAlt: string;
+  /** Shown in the photo's place when there is none. */
+  placeholder: React.ReactNode;
+  title: string;
+  subtitle: string;
+  badges: React.ReactNode;
+  notes: string | undefined;
+  calories: number;
+  protein: number;
+}
+
+/**
+ * One day-log entry as the current view draws it: "compact" a single line
+ * (the day at a glance; the row's actions stay on the keyboard, the right
+ * click and the edit form), "comfortable" a card with a medium photo, and
+ * "gallery" a large photo above the card's row.
+ */
+function EntryCardLayout({
+  view,
+  isBudgeted,
+  isLocked,
+  onEdit,
+  onToggleBudgeted,
+  onAddAbove,
+  onAddBelow,
+  onRemove,
+  imageUrl,
+  imageAlt,
+  placeholder,
+  title,
+  subtitle,
+  badges,
+  notes,
+  calories,
+  protein,
+}: EntryCardLayoutProps) {
+  const hasNotes = notes != null && notes.length > 0;
+  const cardClass = `overflow-hidden transition-colors ${isBudgeted ? "border-amber-500/40 bg-amber-500/5" : ""} ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`;
+  const onContextMenu = isLocked
+    ? undefined
+    : (e: React.MouseEvent) => {
+        e.preventDefault();
+        onToggleBudgeted();
+      };
+  const thumb = (size: string) =>
+    imageUrl != null ? (
+      <img src={imageUrl} alt={imageAlt} loading="lazy" className={`${size} shrink-0 rounded-lg object-cover`} />
+    ) : (
+      <div className={`flex ${size} shrink-0 items-center justify-center rounded-lg bg-secondary text-xs font-medium`}>
+        {placeholder}
+      </div>
+    );
+
+  if (view === "compact") {
+    return (
+      <Card
+        className={cardClass}
+        onClick={isLocked ? undefined : onEdit}
+        onContextMenu={onContextMenu}
+        title={hasNotes ? notes : undefined}
+      >
+        <CardContent className="flex items-center gap-2 px-2 py-1.5">
+          {thumb("h-7 w-7")}
+          <p className="min-w-0 flex-1 truncate text-sm">
+            <span className="font-medium">{title}</span>
+            <span className="ml-1.5 text-xs text-muted-foreground">{subtitle}</span>
+            {hasNotes && <MessageSquare className="ml-1.5 inline h-3 w-3 text-muted-foreground" />}
+          </p>
+          {isBudgeted && (
+            <Badge variant="warning" className="shrink-0 px-1.5 py-0 text-[10px]">
+              Budgeted
+            </Badge>
+          )}
+          <p className="shrink-0 text-right text-xs">
+            <span className="font-medium text-primary">{Math.round(calories)} kcal</span>
+            <span className="ml-1.5 text-muted-foreground">{formatNumber(protein)}g</span>
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const row = (
+    <CardContent className="flex items-center gap-3 p-3">
+      {view === "comfortable" && thumb("h-16 w-16")}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{title}</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+          {isBudgeted && (
+            <Badge variant="warning" className="px-1.5 py-0 text-[10px]">
+              Budgeted
+            </Badge>
+          )}
+          {badges}
+        </div>
+        {hasNotes && (
+          <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground italic">
+            <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
+            <span className="line-clamp-2">{notes}</span>
+          </p>
+        )}
+      </div>
+      {!isLocked && (
+        <Button
+          variant={isBudgeted ? "outline" : "ghost"}
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+          title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleBudgeted();
+          }}
+        >
+          {isBudgeted ? <Utensils className="h-3.5 w-3.5" /> : <CalendarCheck className="h-3.5 w-3.5" />}
+        </Button>
+      )}
+      <div className="text-right text-xs">
+        <p className="font-medium text-primary">{Math.round(calories)} kcal</p>
+        <p className="text-muted-foreground">{formatNumber(protein)}g prot</p>
+      </div>
+      {!isLocked && <EntryActionsMenu onAddAbove={onAddAbove} onAddBelow={onAddBelow} />}
+      {!isLocked && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          aria-label="Remove entry"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+        </Button>
+      )}
+    </CardContent>
+  );
+
+  return (
+    <Card className={cardClass} onClick={isLocked ? undefined : onEdit} onContextMenu={onContextMenu}>
+      {view === "gallery" &&
+        (imageUrl != null ? (
+          <img src={imageUrl} alt={imageAlt} loading="lazy" className="h-56 w-full object-cover" />
+        ) : (
+          <div className="flex h-24 w-full items-center justify-center bg-secondary text-2xl text-muted-foreground">
+            {placeholder}
+          </div>
+        ))}
+      {row}
+    </Card>
+  );
+}
+
 // DUPLICATED: also defined in AddEntryDialog.tsx
 type InputMode = "grams" | "units";
 
 interface FoodEntryCardProps {
   item: LogEntry;
   food: Food;
+  view: EntryView;
   isLocked: boolean;
   editRequestNonce: number | null;
   onAddAbove: () => void;
@@ -615,7 +792,7 @@ interface FoodEntryCardProps {
   onToggleBudgeted: () => void;
 }
 
-export function FoodEntryCard({ item, food, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
+export function FoodEntryCard({ item, food, view, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: FoodEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [inputMode, setInputMode] = useState<InputMode>("grams");
@@ -870,91 +1047,31 @@ export function FoodEntryCard({ item, food, isLocked, editRequestNonce, onAddAbo
   }
 
   return (
-    <Card
-      className={`transition-colors ${isBudgeted ? "border-amber-500/40 bg-amber-500/5" : ""} ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
-      onClick={isLocked ? undefined : startEditing}
-      onContextMenu={
-        isLocked
-          ? undefined
-          : (e) => {
-              e.preventDefault();
-              onToggleBudgeted();
-            }
-      }
-    >
-      <CardContent className="flex items-center gap-3 p-3">
-        {foodImage}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{food.name}</p>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
-            {isBudgeted && (
-              <Badge variant="warning" className="px-1.5 py-0 text-[10px]">
-                Budgeted
-              </Badge>
-            )}
-          </div>
-          {item.notes != null && item.notes.length > 0 && (
-            <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground italic">
-              <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
-              <span className="line-clamp-2">{item.notes}</span>
-            </p>
-          )}
-        </div>
-        {!isLocked && (
-          <Button
-            variant={isBudgeted ? "outline" : "ghost"}
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
-            title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleBudgeted();
-            }}
-          >
-            {isBudgeted ? (
-              <Utensils className="h-3.5 w-3.5" />
-            ) : (
-              <CalendarCheck className="h-3.5 w-3.5" />
-            )}
-          </Button>
-        )}
-        <div className="text-right text-xs">
-          <p className="font-medium text-primary">
-            {Math.round(entryNutrition.calories)} kcal
-          </p>
-          <p className="text-muted-foreground">
-            {entryNutrition.protein}g prot
-          </p>
-        </div>
-        {!isLocked && (
-          <EntryActionsMenu
-            onAddAbove={onAddAbove}
-            onAddBelow={onAddBelow}
-          />
-        )}
-        {!isLocked && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            aria-label="Remove entry"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+    <EntryCardLayout
+      view={view}
+      isBudgeted={isBudgeted}
+      isLocked={isLocked}
+      onEdit={startEditing}
+      onToggleBudgeted={onToggleBudgeted}
+      onAddAbove={onAddAbove}
+      onAddBelow={onAddBelow}
+      onRemove={onRemove}
+      imageUrl={food.imageUrl}
+      imageAlt={food.name}
+      placeholder="🍽️"
+      title={food.name}
+      subtitle={subtitle}
+      badges={null}
+      notes={item.notes}
+      calories={entryNutrition.calories}
+      protein={entryNutrition.protein}
+    />
   );
 }
 
 interface QuickAddEntryCardProps {
   item: QuickAddEntry;
+  view: EntryView;
   isLocked: boolean;
   editRequestNonce: number | null;
   onAddAbove: () => void;
@@ -964,7 +1081,7 @@ interface QuickAddEntryCardProps {
   onToggleBudgeted: () => void;
 }
 
-export function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
+export function QuickAddEntryCard({ item, view, isLocked, editRequestNonce, onAddAbove, onAddBelow, onRemove, onUpdate, onToggleBudgeted }: QuickAddEntryCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCalories, setEditCalories] = useState("");
@@ -1184,93 +1301,31 @@ export function QuickAddEntryCard({ item, isLocked, editRequestNonce, onAddAbove
   }
 
   return (
-    <Card
-      className={`transition-colors ${isBudgeted ? "border-amber-500/40 bg-amber-500/5" : ""} ${isLocked ? "" : "cursor-pointer hover:bg-accent/50"}`}
-      onClick={isLocked ? undefined : startEditing}
-      onContextMenu={
-        isLocked
-          ? undefined
-          : (e) => {
-              e.preventDefault();
-              onToggleBudgeted();
-            }
+    <EntryCardLayout
+      view={view}
+      isBudgeted={isBudgeted}
+      isLocked={isLocked}
+      onEdit={startEditing}
+      onToggleBudgeted={onToggleBudgeted}
+      onAddAbove={onAddAbove}
+      onAddBelow={onAddBelow}
+      onRemove={onRemove}
+      imageUrl={null}
+      imageAlt={item.name}
+      placeholder="QA"
+      title={item.name}
+      subtitle="Quick add"
+      badges={
+        !hasNutrition(item.nutrition) && (
+          <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+            Not estimated
+          </Badge>
+        )
       }
-    >
-      <CardContent className="flex items-center gap-3 p-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-xs font-medium">
-          QA
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{item.name}</p>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <p className="text-xs text-muted-foreground">Quick add</p>
-            {isBudgeted && (
-              <Badge variant="warning" className="px-1.5 py-0 text-[10px]">
-                Budgeted
-              </Badge>
-            )}
-            {!hasNutrition(item.nutrition) && (
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-                Not estimated
-              </Badge>
-            )}
-          </div>
-          {item.notes != null && item.notes.length > 0 && (
-            <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground italic">
-              <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" />
-              <span className="line-clamp-2">{item.notes}</span>
-            </p>
-          )}
-        </div>
-        {!isLocked && (
-          <Button
-            variant={isBudgeted ? "outline" : "ghost"}
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            aria-label={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
-            title={isBudgeted ? "Mark as consumed" : "Mark as budgeted"}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleBudgeted();
-            }}
-          >
-            {isBudgeted ? (
-              <Utensils className="h-3.5 w-3.5" />
-            ) : (
-              <CalendarCheck className="h-3.5 w-3.5" />
-            )}
-          </Button>
-        )}
-        <div className="text-right text-xs">
-          <p className="font-medium text-primary">
-            {Math.round(item.nutrition.calories)} kcal
-          </p>
-          <p className="text-muted-foreground">
-            {formatNumber(item.nutrition.protein)}g prot
-          </p>
-        </div>
-        {!isLocked && (
-          <EntryActionsMenu
-            onAddAbove={onAddAbove}
-            onAddBelow={onAddBelow}
-          />
-        )}
-        {!isLocked && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            aria-label="Remove entry"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      notes={item.notes}
+      calories={item.nutrition.calories}
+      protein={item.nutrition.protein}
+    />
   );
 }
 interface WeightInputProps {
@@ -1730,6 +1785,7 @@ function EntryShortcutPanel({ selectedCount }: EntryShortcutPanelProps) {
     { keys: "⌘C/⌘V", label: "Copy/Paste" },
     { keys: "⌘D", label: "Duplicate" },
     { keys: "Shift ↑/↓", label: "Extend" },
+    { keys: "V", label: "View" },
     { keys: "?", label: "Shortcuts" },
   ];
 
@@ -1792,6 +1848,11 @@ export function DailyLog({ appData }: DailyLogProps) {
   const [planSearch, setPlanSearch] = useState("");
   const [editModeByDate, setEditModeByDate] = useState<Map<string, boolean>>(new Map());
   const [collapsedSections, setCollapsedSections] = useState<Set<LogEntryId>>(new Set());
+  const [entryView, setEntryViewState] = useState<EntryView>(loadEntryView);
+  const setEntryView = useCallback((view: EntryView) => {
+    setEntryViewState(view);
+    saveEntryView(view);
+  }, []);
   const [entrySelection, setEntrySelection] =
     useState<EntrySelectionState>(emptyEntrySelection);
   const [editEntryRequest, setEditEntryRequest] = useState<{
@@ -2259,6 +2320,10 @@ export function DailyLog({ appData }: DailyLogProps) {
         return;
       } else if (e.key === "t" || e.key === "T") {
         goToToday();
+      } else if (e.key === "v" || e.key === "V") {
+        if (e.repeat) return;
+        e.preventDefault();
+        setEntryView(nextEntryView(entryView));
       } else if (e.code === "KeyS" || e.key === "s" || e.key === "S") {
         if (
           activeProfile == null ||
@@ -2285,6 +2350,8 @@ export function DailyLog({ appData }: DailyLogProps) {
   }, [
     activeProfile,
     addBelowFocusedEntry,
+    entryView,
+    setEntryView,
     addDialogOpen,
     copyMenuOpen,
     copySelectedEntries,
@@ -2666,6 +2733,30 @@ export function DailyLog({ appData }: DailyLogProps) {
               )}
             </Button>
           )}
+          <div
+            className="ml-2 flex rounded-md border"
+            role="group"
+            aria-label="Entry view (V cycles)"
+          >
+            {ENTRY_VIEWS.map((view) => {
+              const Icon = view === "compact" ? Rows3 : view === "comfortable" ? LayoutList : GalleryVerticalEnd;
+              const active = entryView === view;
+              return (
+                <Button
+                  key={view}
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 rounded-none first:rounded-l-md last:rounded-r-md ${active ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+                  aria-label={`${ENTRY_VIEW_LABELS[view]} view`}
+                  aria-pressed={active}
+                  title={`${ENTRY_VIEW_LABELS[view]} view (V cycles)`}
+                  onClick={() => setEntryView(view)}
+                >
+                  <Icon className="h-4 w-4" />
+                </Button>
+              );
+            })}
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <div className="relative" ref={copyMenuRef}>
@@ -2915,6 +3006,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                   >
                     <QuickAddEntryCard
                       item={item}
+                      view={entryView}
                       isLocked={isLocked}
                       editRequestNonce={
                         editEntryRequest?.entryId === item.id
@@ -3028,6 +3120,7 @@ export function DailyLog({ appData }: DailyLogProps) {
                   <FoodEntryCard
                     item={item}
                     food={food}
+                    view={entryView}
                     isLocked={isLocked}
                     editRequestNonce={
                       editEntryRequest?.entryId === item.id
