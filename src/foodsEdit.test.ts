@@ -3,7 +3,17 @@ import assert from "node:assert/strict";
 import { onlyEntryAdded, profilesWithAddedValue } from "./addEntry.js";
 import { dayView } from "./dayView.js";
 import { EstimateError, arrayValues, mapFields, str, type FsDocument, type FsValue } from "./estimateEntry.js";
-import { findFoods, foodEntryValue, foodsWithAddedFood, liveFoods, onlyListGrew, tombstonesWithDeleted } from "./foodsEdit.js";
+import {
+  cleanImageUrl,
+  findFoods,
+  foodEntryValue,
+  foodsWithAddedFood,
+  foodsWithUpdatedFood,
+  liveFoods,
+  onlyListGrew,
+  tombstonesWithDeleted,
+  type NewFood,
+} from "./foodsEdit.js";
 
 const s = (v: string): FsValue => ({ stringValue: v });
 const n = (v: number): FsValue => (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v });
@@ -63,8 +73,8 @@ test("foodsWithAddedFood appends a food shaped like the app's, and only that cha
   const foods = foodsWithAddedFood(before, {
     id: "esp",
     name: " Espinaca congelada ",
-    per100g: { calories: 29, protein: 3.6, saturatedFat: 0.1, fiber: 2.9 },
-    gramsPerUnit: null,
+    imageUrl: null,
+    nutrition: { kind: "per100g", per100g: { calories: 29, protein: 3.6, saturatedFat: 0.1, fiber: 2.9 }, gramsPerUnit: null },
     createdAt: "2026-11-05T03:00:00Z",
   });
   const after = { ...before.fields, foods };
@@ -82,7 +92,13 @@ test("foodsWithAddedFood appends a food shaped like the app's, and only that cha
 
 test("foodsWithAddedFood refuses a name Foods already has", () => {
   const add = (name: string) =>
-    foodsWithAddedFood(doc(), { id: "z", name, per100g: { calories: 1, protein: 0, saturatedFat: 0, fiber: 0 }, gramsPerUnit: null, createdAt: "x" });
+    foodsWithAddedFood(doc(), {
+      id: "z",
+      name,
+      imageUrl: null,
+      nutrition: { kind: "per100g", per100g: { calories: 1, protein: 0, saturatedFat: 0, fiber: 0 }, gramsPerUnit: null },
+      createdAt: "x",
+    });
   assert.throws(() => add("yogurt la serenísima"), EstimateError);
   assert.doesNotThrow(() => add("Arroz viejo")); // that one was deleted
 });
@@ -137,4 +153,92 @@ test("tombstonesWithDeleted renews a restored tombstone and refuses a missing or
   assert.throws(() => tombstonesWithDeleted(before, "Me", "2026-11-04", "nope", "t"), EstimateError);
   const deleted = { ...before, fields: { ...before.fields, deletedDayLogEntries: value } };
   assert.throws(() => tombstonesWithDeleted(deleted, "Me", "2026-11-04", "back", "2026-11-05T04:00:00Z"), EstimateError);
+});
+
+const withFoods = (before: FsDocument, foods: FsValue): FsDocument => ({ ...before, fields: { ...before.fields, foods } });
+const newFood = (id: string, name: string, nutrition: NewFood["nutrition"], imageUrl: string | null = null): NewFood => ({
+  id,
+  name,
+  imageUrl,
+  nutrition,
+  createdAt: "2026-11-05T03:00:00Z",
+});
+
+test("foodsWithAddedFood stores an image and a unit-only food the way the Food form does", () => {
+  const before = doc();
+  const foods = foodsWithAddedFood(
+    before,
+    newFood("whey", "Whey (scoop)", { kind: "perUnit", perUnit: { calories: 120, protein: 24, saturatedFat: 1, fiber: 0 } }, "https://x.test/w.jpg"),
+  );
+  assert.equal(onlyListGrew(before, { ...before.fields, foods }, "foods", foods), null);
+  const whey = liveFoods(withFoods(before, foods)).find((f) => f.id === "whey");
+  assert.equal(whey?.imageUrl, "https://x.test/w.jpg");
+  assert.deepEqual(whey?.nutritionPerUnit, { calories: 120, protein: 24, saturatedFat: 1, fiber: 0 });
+  assert.deepEqual(whey?.nutritionPer100g, { calories: 0, protein: 0, saturatedFat: 0, fiber: 0 });
+  assert.equal(whey?.gramsPerUnit, null);
+});
+
+test("a combo gets its nutrition per 100 g and unit size from its ingredients, and logs like the app's", () => {
+  const before = doc();
+  const foods = foodsWithAddedFood(
+    before,
+    newFood("mix", "Yogur con arroz", { kind: "combo", ingredients: [{ foodId: "yogur", grams: 190 }, { foodId: "arroz", grams: 10 }] }),
+  );
+  const after = withFoods(before, foods);
+  const mix = liveFoods(after).find((f) => f.id === "mix")!;
+  assert.deepEqual(mix.ingredients, [{ foodId: "yogur", grams: 190 }, { foodId: "arroz", grams: 10 }]);
+  assert.equal(mix.gramsPerUnit, 200);
+  // 190 g at 100 kcal/100 g + 10 g at 332 kcal/100 g = 223.2 kcal in 200 g.
+  assert.equal(mix.nutritionPer100g.calories, 111.6);
+  const value = foodEntryValue({ id: "e", food: mix, grams: null, units: 1, notes: null, budgeted: false });
+  const { profiles } = profilesWithAddedValue(after, "Me", "2026-11-04", { id: "e", value }, "dinner");
+  const day = dayView({ ...after, fields: { ...after.fields, profiles } }, "Me", "2026-11-04");
+  assert.equal(day.entries.find((e) => e.id === "e")?.nutrition?.calories, 223.2);
+});
+
+test("a combo refuses unit-only, missing and deleted ingredients, and no ingredients", () => {
+  const add = (ingredients: { foodId: string; grams: number }[]) =>
+    foodsWithAddedFood(doc(), newFood("mix", "Mix", { kind: "combo", ingredients }));
+  assert.throws(() => add([{ foodId: "crea", grams: 5 }]), EstimateError);
+  assert.throws(() => add([{ foodId: "nope", grams: 5 }]), EstimateError);
+  assert.throws(() => add([{ foodId: "viejo", grams: 5 }]), EstimateError);
+  assert.throws(() => add([{ foodId: "arroz", grams: 0 }]), EstimateError);
+  assert.throws(() => add([]), EstimateError);
+});
+
+test("foodsWithUpdatedFood changes only the given fields of one food, in place", () => {
+  const before = doc();
+  const { value, replacedIndex } = foodsWithUpdatedFood(before, "yogur", { imageUrl: "https://x.test/y.png" });
+  assert.equal(replacedIndex, 1);
+  assert.equal(onlyListGrew(before, { ...before.fields, foods: value }, "foods", value, replacedIndex), null);
+  const old = liveFoods(before).find((f) => f.id === "yogur")!;
+  const now = liveFoods(withFoods(before, value)).find((f) => f.id === "yogur")!;
+  assert.deepEqual(now, { ...old, imageUrl: "https://x.test/y.png" });
+  const cleared = foodsWithUpdatedFood(withFoods(before, value), "yogur", { imageUrl: null });
+  assert.equal(liveFoods(withFoods(before, cleared.value)).find((f) => f.id === "yogur")?.imageUrl, null);
+  // Same image again: nothing to change.
+  assert.throws(() => foodsWithUpdatedFood(withFoods(before, value), "yogur", { imageUrl: "https://x.test/y.png" }), EstimateError);
+});
+
+test("foodsWithUpdatedFood refuses a deleted food, a taken name and a combo that would contain itself", () => {
+  const before = doc();
+  assert.throws(() => foodsWithUpdatedFood(before, "viejo", { name: "Nuevo" }), EstimateError);
+  assert.throws(() => foodsWithUpdatedFood(before, "arroz", { name: "yogurt la serenisima" }), EstimateError);
+  assert.doesNotThrow(() => foodsWithUpdatedFood(before, "arroz", { name: "ARROZ LUCCHETTI (pesado crudo) " }));
+  const withMix = withFoods(
+    before,
+    foodsWithAddedFood(before, newFood("mix", "Mix", { kind: "combo", ingredients: [{ foodId: "arroz", grams: 50 }] })),
+  );
+  assert.throws(() => foodsWithUpdatedFood(withMix, "arroz", { nutrition: { kind: "combo", ingredients: [{ foodId: "mix", grams: 10 }] } }), EstimateError);
+  assert.throws(() => foodsWithUpdatedFood(withMix, "mix", { nutrition: { kind: "combo", ingredients: [{ foodId: "mix", grams: 10 }] } }), EstimateError);
+  const regrown = foodsWithUpdatedFood(withMix, "mix", { nutrition: { kind: "combo", ingredients: [{ foodId: "arroz", grams: 100 }] } });
+  assert.equal(liveFoods(withFoods(withMix, regrown.value)).find((f) => f.id === "mix")?.gramsPerUnit, 100);
+});
+
+test("cleanImageUrl takes http(s) URLs, trims them, and turns empty into null", () => {
+  assert.equal(cleanImageUrl("  https://x.test/a.jpg "), "https://x.test/a.jpg");
+  assert.equal(cleanImageUrl(""), null);
+  assert.equal(cleanImageUrl(null), null);
+  assert.throws(() => cleanImageUrl("javascript:alert(1)"), EstimateError);
+  assert.throws(() => cleanImageUrl("not a url"), EstimateError);
 });

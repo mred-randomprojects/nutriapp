@@ -14,6 +14,9 @@ import {
   findFoods,
   foodEntryValue,
   foodsWithAddedFood,
+  foodsWithUpdatedFood,
+  type FoodNutrition,
+  type FoodPatch,
   liveFoods,
   onlyListGrew,
   tombstonesWithDeleted,
@@ -114,17 +117,25 @@ export async function searchFoods(query: string): Promise<Food[]> {
 
 export interface AddFoodInput {
   name: string;
-  per100g: NutritionValues;
-  gramsPerUnit: number | null;
+  imageUrl: string | null;
+  nutrition: FoodNutrition;
 }
 
 /** Adds a food to Foods; the result's entryId is the new food's id. */
 export function addFood(input: AddFoodInput, date: string): Promise<WriteResult> {
   const id = randomUUID();
-  const food = { id, name: input.name, per100g: input.per100g, gramsPerUnit: input.gramsPerUnit, createdAt: new Date().toISOString() };
+  const food = { id, name: input.name, imageUrl: input.imageUrl, nutrition: input.nutrition, createdAt: new Date().toISOString() };
   return writeVerified(id, date, (doc) => {
     const foods = foodsWithAddedFood(doc, food);
     return { field: "foods", value: foods, check: (before, after) => onlyListGrew(before, after, "foods", foods) };
+  });
+}
+
+/** Changes a food in Foods the way the app's edit does; the result's entryId is the food's id. */
+export function updateFood(foodId: string, patch: FoodPatch, date: string): Promise<WriteResult> {
+  return writeVerified(foodId, date, (doc) => {
+    const { value, replacedIndex } = foodsWithUpdatedFood(doc, foodId, patch);
+    return { field: "foods", value, check: (before, after) => onlyListGrew(before, after, "foods", value, replacedIndex) };
   });
 }
 

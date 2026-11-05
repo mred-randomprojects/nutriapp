@@ -1,4 +1,5 @@
-import type { Food, NutritionValues } from "./types.js";
+import type { Food, FoodId, NutritionValues } from "./types.js";
+import { buildResolvedFoodsMap, comboTotalGrams, computeComboNutritionPer100g } from "./nutrition.js";
 import { appDataFromRaw } from "./cloudDoc.js";
 import { fsToJs } from "./dayView.js";
 import { normalize } from "./addEntry.js";
@@ -42,11 +43,21 @@ export function findFoods(doc: FsDocument, query: string): Food[] {
   });
 }
 
+/**
+ * What a food's nutrition is made of, the three kinds the app's Food form
+ * offers: per 100 g (optionally with a unit size), per unit only (its weight
+ * unknown, logged by units), or a combo of other foods by grams.
+ */
+export type FoodNutrition =
+  | { kind: "per100g"; per100g: NutritionValues; gramsPerUnit: number | null }
+  | { kind: "perUnit"; perUnit: NutritionValues }
+  | { kind: "combo"; ingredients: ReadonlyArray<{ foodId: string; grams: number }> };
+
 export interface NewFood {
   id: string;
   name: string;
-  per100g: NutritionValues;
-  gramsPerUnit: number | null;
+  imageUrl: string | null;
+  nutrition: FoodNutrition;
   createdAt: string;
 }
 
@@ -65,21 +76,109 @@ function nutritionValue(n: NutritionValues): FsValue {
   };
 }
 
-/** A plain (not combo, not unit-only) food, shaped as the app stores one. */
-export function foodValue(food: NewFood): FsValue {
-  const name = food.name.trim();
-  if (name.length === 0) throw new EstimateError("The food needs a name.");
-  if (food.gramsPerUnit != null && !(food.gramsPerUnit > 0)) throw new EstimateError("grams_per_unit must be more than 0.");
+/** An image URL as the form takes one: trimmed, http(s) only, null when empty. */
+export function cleanImageUrl(url: string | null): string | null {
+  const trimmed = url?.trim() ?? "";
+  if (trimmed.length === 0) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new EstimateError(`"${trimmed}" is not a URL.`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new EstimateError("image_url must be an http(s) URL.");
+  return trimmed;
+}
+
+/**
+ * Ids of `foodId` and of every combo that contains it, directly or through
+ * another combo: none of them can be an ingredient of `foodId`.
+ */
+function foodsContaining(foods: ReadonlyArray<Food>, foodId: string): Set<string> {
+  const forbidden = new Set([foodId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const f of foods) {
+      if (forbidden.has(f.id) || f.ingredients == null) continue;
+      if (f.ingredients.some((i) => forbidden.has(i.foodId))) {
+        forbidden.add(f.id);
+        changed = true;
+      }
+    }
+  }
+  return forbidden;
+}
+
+/** The nutrition fields of a food, shaped as FoodForm stores each kind. */
+function nutritionFields(doc: FsDocument, foodId: string, nutrition: FoodNutrition): Record<string, FsValue> {
+  const zero = { calories: 0, protein: 0, saturatedFat: 0, fiber: 0 };
+  switch (nutrition.kind) {
+    case "per100g":
+      if (nutrition.gramsPerUnit != null && !(nutrition.gramsPerUnit > 0)) throw new EstimateError("grams_per_unit must be more than 0.");
+      return {
+        nutritionPer100g: nutritionValue(nutrition.per100g),
+        nutritionPerUnit: { nullValue: null },
+        gramsPerUnit: nutrition.gramsPerUnit == null ? { nullValue: null } : numberValue(nutrition.gramsPerUnit),
+        ingredients: { nullValue: null },
+      };
+    case "perUnit":
+      return {
+        nutritionPer100g: nutritionValue(zero),
+        nutritionPerUnit: nutritionValue(nutrition.perUnit),
+        gramsPerUnit: { nullValue: null },
+        ingredients: { nullValue: null },
+      };
+    case "combo": {
+      const { ingredients } = nutrition;
+      if (ingredients.length === 0) throw new EstimateError("A combo needs at least one ingredient.");
+      const foods = liveFoods(doc);
+      const resolved = buildResolvedFoodsMap(foods);
+      const forbidden = foodsContaining(foods, foodId);
+      for (const ing of ingredients) {
+        const f = resolved.get(ing.foodId);
+        if (f == null) throw new EstimateError(`No food with id ${ing.foodId} in Foods.`);
+        if (!(ing.grams > 0)) throw new EstimateError(`${f.name}: grams must be more than 0.`);
+        if (f.nutritionPerUnit != null) throw new EstimateError(`${f.name} is logged by units only, so it can't go in a combo.`);
+        if (forbidden.has(ing.foodId)) throw new EstimateError(`${f.name} contains this food, so it can't be one of its ingredients.`);
+      }
+      const list = ingredients.map((i) => ({ foodId: i.foodId as FoodId, grams: round2(i.grams) }));
+      const total = comboTotalGrams(list);
+      return {
+        nutritionPer100g: nutritionValue(computeComboNutritionPer100g(list, resolved)),
+        nutritionPerUnit: { nullValue: null },
+        gramsPerUnit: total > 0 ? numberValue(round2(total)) : { nullValue: null },
+        ingredients: {
+          arrayValue: {
+            values: list.map((i) => ({ mapValue: { fields: { foodId: { stringValue: i.foodId }, grams: numberValue(i.grams) } } })),
+          },
+        },
+      };
+    }
+  }
+}
+
+function cleanName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) throw new EstimateError("The food needs a name.");
+  return trimmed;
+}
+
+function refuseTakenName(doc: FsDocument, name: string, exceptId: string | null): void {
+  const wanted = normalize(name);
+  const same = liveFoods(doc).find((f) => f.id !== exceptId && normalize(f.name) === wanted);
+  if (same != null) throw new EstimateError(`Foods already has "${same.name}" (id ${same.id}).`);
+}
+
+/** A food shaped as the app stores one. */
+export function foodValue(doc: FsDocument, food: NewFood): FsValue {
   return {
     mapValue: {
       fields: {
         id: { stringValue: food.id },
-        name: { stringValue: name },
-        imageUrl: { nullValue: null },
-        nutritionPer100g: nutritionValue(food.per100g),
-        nutritionPerUnit: { nullValue: null },
-        gramsPerUnit: food.gramsPerUnit == null ? { nullValue: null } : numberValue(food.gramsPerUnit),
-        ingredients: { nullValue: null },
+        name: { stringValue: cleanName(food.name) },
+        imageUrl: food.imageUrl == null ? { nullValue: null } : { stringValue: food.imageUrl },
+        ...nutritionFields(doc, food.id, food.nutrition),
         createdAt: { stringValue: food.createdAt },
       },
     },
@@ -88,13 +187,48 @@ export function foodValue(food: NewFood): FsValue {
 
 /** `foods` with `food` appended. Refuses a name a live food already has. */
 export function foodsWithAddedFood(doc: FsDocument, food: NewFood): FsValue {
-  const value = foodValue(food);
-  const name = normalize(food.name);
-  const same = liveFoods(doc).find((f) => normalize(f.name) === name);
-  if (same != null) throw new EstimateError(`Foods already has "${same.name}" (id ${same.id}): log that one.`);
+  const value = foodValue(doc, food);
+  refuseTakenName(doc, food.name, null);
   const foods = arrayValues(doc.fields.foods) ?? [];
   if (foods.some((f) => str(mapFields(f)?.id) === food.id)) throw new EstimateError(`A food with id ${food.id} exists.`);
   return { arrayValue: { values: [...foods, value] } };
+}
+
+/** What to change in a food: only the fields given change. */
+export interface FoodPatch {
+  name?: string;
+  /** null removes the image. */
+  imageUrl?: string | null;
+  nutrition?: FoodNutrition;
+}
+
+/**
+ * `foods` with the live food `foodId` changed by `patch`, as the Food form's
+ * edit does (it keeps the id and createdAt, so every logged entry follows).
+ * Returns the index replaced, for onlyListGrew.
+ */
+export function foodsWithUpdatedFood(
+  doc: FsDocument,
+  foodId: string,
+  patch: FoodPatch,
+): { value: FsValue; replacedIndex: number } {
+  if (!liveFoods(doc).some((f) => f.id === foodId)) throw new EstimateError(`No food with id ${foodId} in Foods.`);
+  const foods = arrayValues(doc.fields.foods) ?? [];
+  const at = foods.findIndex((f) => str(mapFields(f)?.id) === foodId);
+  if (at < 0) throw new EstimateError(`No food with id ${foodId} in Foods.`);
+  const fields: Record<string, FsValue> = { ...(mapFields(foods[at]) ?? {}) };
+  if (patch.name !== undefined) {
+    const name = cleanName(patch.name);
+    refuseTakenName(doc, name, foodId);
+    fields.name = { stringValue: name };
+  }
+  if (patch.imageUrl !== undefined) {
+    fields.imageUrl = patch.imageUrl == null ? { nullValue: null } : { stringValue: patch.imageUrl };
+  }
+  if (patch.nutrition !== undefined) Object.assign(fields, nutritionFields(doc, foodId, patch.nutrition));
+  const updated: FsValue = { mapValue: { fields } };
+  if (canonical(updated) === canonical(foods[at])) throw new EstimateError("Nothing to change: the food already is like that.");
+  return { value: { arrayValue: { values: foods.map((f, i) => (i === at ? updated : f)) } }, replacedIndex: at };
 }
 
 export interface NewFoodEntry {

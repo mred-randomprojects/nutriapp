@@ -6,7 +6,8 @@
  * entry is the only thing that changed. The app picks the change up the next
  * time its window gets the focus.
  *
- * It also searches Foods, adds a food to it, logs a food by grams or units,
+ * It also searches Foods, adds a food to it (simple, per unit or combo, with
+ * an image) or changes one, logs a food by grams or units,
  * and removes an entry the way the app's delete does (a tombstone).
  *
  * Registered in Claude Code with scripts/mcp.sh (see the README). The
@@ -17,9 +18,10 @@ import { createInterface } from "node:readline";
 import type { NutritionValues } from "../src/types.js";
 import type { DayView } from "../src/dayView.js";
 import { EstimateError } from "../src/estimateEntry.js";
+import { cleanImageUrl, type FoodNutrition, type FoodPatch } from "../src/foodsEdit.js";
 import { PROFILE } from "./firestore.js";
 import type { Food } from "../src/types.js";
-import { addFood, addMeal, estimateEntry, logFood, removeEntry, searchFoods, showDay, type WriteResult } from "./ops.js";
+import { addFood, addMeal, estimateEntry, logFood, removeEntry, searchFoods, showDay, updateFood, type WriteResult } from "./ops.js";
 
 const SUPPORTED_PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
@@ -29,7 +31,9 @@ const INSTRUCTIONS = `Max's food log in NutriApp (profile "${PROFILE}"). When Ma
 - Days have sections (separators such as "Breakfast (07:00)", "LUNCH (12:30)", "Dinner (20:30)"): call nutriapp_show_day first to see them, and pass the one that fits as section.
 - Entries marked planned are the day's plan, not food eaten; new meals Max reports are eaten (planned: false) unless Max is planning ahead.
 - If Max corrects a quick-add, fix it with nutriapp_estimate_entry (replace: true). To redo an entry another way (a quick-add that should have been a food, a wrong food), log the new one and remove the old one with nutriapp_remove_entry; the app can undo a removal.
-- Dates are YYYY-MM-DD in local time; omit date for today (after midnight, a meal Max had last night belongs to yesterday).`;
+- Dates are YYYY-MM-DD in local time; omit date for today (after midnight, a meal Max had last night belongs to yesterday).
+- Foods are added the way Max's Food form adds them: give each new food an image_url (the product's photo for a branded product, a stable photo such as Wikimedia Commons for a generic food) and check that the URL loads. A food with no known weight per unit (a supplement scoop, a restaurant dish) is per: "unit". A mix Max repeats in the same proportions (yogurt with nuts and seeds) is a combo: pass ingredients instead of nutrition, then log the combo by units or grams. nutriapp_update_food changes a food (name, image, nutrition, unit size, ingredients) and every entry logged with it follows.
+- When these tools can't do what Max asks, say so and extend this server (cli/mcp.ts in the nutriapp repo) instead of working around it.`;
 
 const nutritionProps = {
   calories: { type: "number", minimum: 0, description: "kcal of the whole portion" },
@@ -38,6 +42,43 @@ const nutritionProps = {
   fiber: { type: "number", minimum: 0, description: "grams of fiber" },
 };
 const dateProp = { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "YYYY-MM-DD, local time; today when omitted" };
+
+const foodNameProp = {
+  type: "string",
+  minLength: 1,
+  description: "Name in the style of Max's foods, saying how it is weighed when that matters: Espinaca congelada (pesada congelada)",
+};
+const foodShapeProps = {
+  image_url: { type: "string", description: "http(s) URL of a photo of the food, shown in the app's Foods list" },
+  per: {
+    type: "string",
+    enum: ["100g", "unit"],
+    description: '"100g" (default): calories etc. are per 100 g. "unit": they are per unit and the weight is unknown, so it is logged by units only.',
+  },
+  calories: { type: "number", minimum: 0, description: "kcal per 100 g (or per unit)" },
+  protein: { type: "number", minimum: 0, description: "grams of protein per 100 g (or per unit)" },
+  saturated_fat: { type: "number", minimum: 0, description: "grams of saturated fat per 100 g (or per unit)" },
+  fiber: { type: "number", minimum: 0, description: "grams of fiber per 100 g (or per unit)" },
+  grams_per_unit: {
+    type: "number",
+    minimum: 0,
+    description: "For a per-100 g food: weight of one unit, when it comes in units (a yogurt cup, a bar), so it can also be logged by units. 0 removes it.",
+  },
+  ingredients: {
+    type: "array",
+    minItems: 1,
+    description: "Makes it a combo: its nutrition is computed from these foods (not unit-only ones) at these grams, and one unit is the whole mix. Replaces the nutrition fields.",
+    items: {
+      type: "object",
+      properties: {
+        food_id: { type: "string", description: "An ingredient's id, from nutriapp_find_foods" },
+        grams: { type: "number", exclusiveMinimum: 0, description: "Grams of it in one serving of the combo" },
+      },
+      required: ["food_id", "grams"],
+      additionalProperties: false,
+    },
+  },
+};
 
 const TOOLS = [
   {
@@ -98,21 +139,31 @@ const TOOLS = [
   {
     name: "nutriapp_add_food",
     description:
-      "Adds a food to Foods, with its nutrition per 100 g, so it can be logged by grams now and picked in the app later. Refuses a name Foods already has. Returns the new food's id.",
+      "Adds a food to Foods, as the app's Food form does: a simple food with its nutrition per 100 g (or per unit), or a combo of other foods by grams, with an optional image. Refuses a name Foods already has. Returns the new food's id.",
     inputSchema: {
       type: "object",
-      properties: {
-        name: { type: "string", minLength: 1, description: "Name in the style of Max's foods, saying how it is weighed when that matters: Espinaca congelada (pesada congelada)" },
-        calories: { type: "number", minimum: 0, description: "kcal per 100 g" },
-        protein: { type: "number", minimum: 0, description: "grams of protein per 100 g" },
-        saturated_fat: { type: "number", minimum: 0, description: "grams of saturated fat per 100 g" },
-        fiber: { type: "number", minimum: 0, description: "grams of fiber per 100 g" },
-        grams_per_unit: { type: "number", exclusiveMinimum: 0, description: "Weight of one unit, when it comes in units (a yogurt cup, a bar)" },
-      },
-      required: ["name", "calories", "protein", "saturated_fat", "fiber"],
+      properties: { name: foodNameProp, ...foodShapeProps },
+      required: ["name"],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  },
+  {
+    name: "nutriapp_update_food",
+    description:
+      "Changes a food in Foods as the app's edit does: only the fields given change, and every entry logged with it follows. Nutrition values go all four together (per 100 g, or per unit with per: \"unit\"); ingredients replace a combo's mix or turn a food into a combo.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        food_id: { type: "string", description: "The food's id, from nutriapp_find_foods" },
+        name: foodNameProp,
+        ...foodShapeProps,
+        image_url: { type: "string", description: "http(s) URL of a photo of the food; an empty string removes the image" },
+      },
+      required: ["food_id"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   },
   {
     name: "nutriapp_log_food",
@@ -199,6 +250,55 @@ function dateArg(args: Args): string {
   return optString(args, "date") ?? today();
 }
 
+const NUTRITION_KEYS = ["calories", "protein", "saturated_fat", "fiber"];
+
+function ingredientsArg(args: Args): { foodId: string; grams: number }[] | null {
+  const v = args.ingredients;
+  if (v == null) return null;
+  if (!Array.isArray(v)) throw new EstimateError("ingredients must be a list.");
+  return v.map((item: unknown) => {
+    if (!isRecord(item)) throw new EstimateError("Each ingredient needs a food_id and grams.");
+    return { foodId: reqString(item, "food_id"), grams: grams(item, "grams") };
+  });
+}
+
+/**
+ * The nutrition the arguments describe, or null when they don't touch it.
+ * `existing` is the food being updated (null when adding one): with it,
+ * grams_per_unit alone keeps its per-100 g values.
+ */
+function foodNutritionArg(args: Args, existing: Food | null): FoodNutrition | null {
+  const ingredients = ingredientsArg(args);
+  const hasValues = NUTRITION_KEYS.some((k) => args[k] != null);
+  const per = optString(args, "per");
+  if (per != null && per !== "100g" && per !== "unit") throw new EstimateError('per must be "100g" or "unit".');
+  const unitSize = optAmount(args, "grams_per_unit");
+  if (ingredients != null) {
+    if (hasValues || per != null || unitSize != null) {
+      throw new EstimateError("A combo's nutrition and unit size come from its ingredients: pass ingredients alone.");
+    }
+    return { kind: "combo", ingredients };
+  }
+  if (per === "unit") {
+    if (unitSize != null) throw new EstimateError("A per-unit food has no known weight: leave grams_per_unit out.");
+    if (!hasValues) throw new EstimateError("Pass calories, protein, saturated_fat and fiber per unit.");
+    return { kind: "perUnit", perUnit: nutrition(args) };
+  }
+  const gramsPerUnit = unitSize === 0 ? null : unitSize;
+  if (hasValues) {
+    const keep = existing != null && existing.ingredients == null && existing.nutritionPerUnit == null ? existing.gramsPerUnit : null;
+    return { kind: "per100g", per100g: nutrition(args), gramsPerUnit: unitSize == null ? keep : gramsPerUnit };
+  }
+  if (unitSize != null) {
+    if (existing == null || existing.ingredients != null || existing.nutritionPerUnit != null) {
+      throw new EstimateError("grams_per_unit alone only changes a food with nutrition per 100 g.");
+    }
+    return { kind: "per100g", per100g: existing.nutritionPer100g, gramsPerUnit };
+  }
+  if (per != null) throw new EstimateError("Pass calories, protein, saturated_fat and fiber with per.");
+  return null;
+}
+
 const fmt = (v: NutritionValues) => `${v.calories} kcal · P ${v.protein} g · SatF ${v.saturatedFat} g · Fib ${v.fiber} g`;
 
 function renderDay(day: DayView): string {
@@ -232,12 +332,14 @@ function renderFood(food: Food, byId: Map<string, Food>): string {
   if (food.ingredients != null) {
     const parts = food.ingredients.map((i) => `${byId.get(i.foodId)?.name ?? i.foodId} ${i.grams} g`).join(" + ");
     lines.push(`  combo: ${parts}`);
+    lines.push(`  per 100 g: ${fmt(food.nutritionPer100g)}`);
   } else if (food.nutritionPerUnit != null) {
     lines.push(`  per unit (units only): ${fmt(food.nutritionPerUnit)}`);
   } else {
     lines.push(`  per 100 g: ${fmt(food.nutritionPer100g)}`);
   }
   if (food.gramsPerUnit != null) lines.push(`  1 unit = ${food.gramsPerUnit} g`);
+  lines.push(`  image: ${food.imageUrl ?? "none"}`);
   return lines.join("\n");
 }
 
@@ -247,6 +349,13 @@ async function renderFoods(query: string): Promise<string> {
   const byId = new Map(all.map((f) => [f.id as string, f]));
   if (foods.length === 0) return `No food in Foods matches "${query}".`;
   return foods.map((f) => renderFood(f, byId)).join("\n");
+}
+
+async function renderFoodById(foodId: string): Promise<string> {
+  const all = await searchFoods("");
+  const food = all.find((f) => f.id === foodId);
+  if (food == null) return `Food ${foodId} not found after the write.`;
+  return renderFood(food, new Map(all.map((f) => [f.id as string, f])));
 }
 
 function renderWrite(verb: string, result: WriteResult): string {
@@ -283,15 +392,27 @@ async function callTool(name: string, args: Args): Promise<string> {
     case "nutriapp_find_foods":
       return renderFoods(optString(args, "query") ?? "");
     case "nutriapp_add_food": {
+      const foodNutrition = foodNutritionArg(args, null);
+      if (foodNutrition == null) throw new EstimateError("Pass the nutrition (calories, protein, saturated_fat, fiber) or ingredients.");
       const result = await addFood(
-        {
-          name: reqString(args, "name"),
-          per100g: nutrition(args),
-          gramsPerUnit: optAmount(args, "grams_per_unit"),
-        },
+        { name: reqString(args, "name"), imageUrl: cleanImageUrl(optString(args, "image_url")), nutrition: foodNutrition },
         dateArg(args),
       );
-      return `Added to Foods with id ${result.entryId}; verified in the cloud. Log it with nutriapp_log_food.\nBackup of the document before the change: ${result.backup}`;
+      return `Added to Foods with id ${result.entryId}; verified in the cloud. Log it with nutriapp_log_food.\nBackup of the document before the change: ${result.backup}\n\n${await renderFoodById(result.entryId)}`;
+    }
+    case "nutriapp_update_food": {
+      const foodId = reqString(args, "food_id");
+      const existing = (await searchFoods("")).find((f) => f.id === foodId) ?? null;
+      if (existing == null) throw new EstimateError(`No food with id ${foodId} in Foods.`);
+      const patch: FoodPatch = {};
+      const name = optString(args, "name");
+      if (name != null) patch.name = name;
+      const imageUrl = optString(args, "image_url");
+      if (imageUrl != null) patch.imageUrl = cleanImageUrl(imageUrl);
+      const foodNutrition = foodNutritionArg(args, existing);
+      if (foodNutrition != null) patch.nutrition = foodNutrition;
+      const result = await updateFood(foodId, patch, dateArg(args));
+      return `Updated in Foods; verified in the cloud. The app shows it the next time its window gets the focus.\nBackup of the document before the change: ${result.backup}\n\n${await renderFoodById(foodId)}`;
     }
     case "nutriapp_log_food":
       return renderWrite(

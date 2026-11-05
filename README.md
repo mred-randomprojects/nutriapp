@@ -215,8 +215,10 @@ case and accents) or of the day. Without `--write` they are dry runs.
 The same operations are an **MCP server** for Claude Code (`cli/mcp.ts`), so
 Claude can log meals while you talk: `nutriapp_show_day`, `nutriapp_add_meal`
 and `nutriapp_estimate_entry` (quick-adds with Claude's estimate), and, to use
-your own Foods, `nutriapp_find_foods`, `nutriapp_add_food` (a new food, per
-100 g), `nutriapp_log_food` (a food by grams or units) and
+your own Foods, `nutriapp_find_foods`, `nutriapp_add_food` (a new food, as
+the Food form adds one: per 100 g, per unit or a combo, with an image),
+`nutriapp_update_food` (changes a food the way the app's edit does),
+`nutriapp_log_food` (a food by grams or units) and
 `nutriapp_remove_entry` (deletes an entry as the app does, with a tombstone
 the app can undo). Registered once, for every folder:
 
