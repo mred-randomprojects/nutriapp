@@ -213,8 +213,12 @@ logs a new quick-add, at the end of the section whose label matches (ignoring
 case and accents) or of the day. Without `--write` they are dry runs.
 
 The same operations are an **MCP server** for Claude Code (`cli/mcp.ts`), so
-Claude can log meals with its own estimate while you talk: `nutriapp_show_day`,
-`nutriapp_add_meal`, `nutriapp_estimate_entry`. Registered once, for every folder:
+Claude can log meals while you talk: `nutriapp_show_day`, `nutriapp_add_meal`
+and `nutriapp_estimate_entry` (quick-adds with Claude's estimate), and, to use
+your own Foods, `nutriapp_find_foods`, `nutriapp_add_food` (a new food, per
+100 g), `nutriapp_log_food` (a food by grams or units) and
+`nutriapp_remove_entry` (deletes an entry as the app does, with a tombstone
+the app can undo). Registered once, for every folder:
 
 ```bash
 claude mcp add --scope user nutriapp -- ~/Documents/Programming/nutriapp/scripts/mcp.sh
@@ -226,7 +230,8 @@ Every write goes straight to the cloud document (auth: your `gcloud` login),
 saves the whole document to `~/.nutriapp/backups/` first, writes with the
 document's update time as a precondition (if the app saved in between, nothing is
 written and it starts over once from a fresh read), and checks, before sending
-and on what Firestore stored, that the one entry is all that changed. The app
+and on what Firestore stored, that the one entry (or the one new food, or the
+one tombstone) is all that changed. The app
 takes it on its next pull (when its window gets the focus); day logs merge entry
 by entry, so a new entry survives edits another device still has pending.
 Deleting stays in the app. Code: `cli/`, `src/addEntry.ts`, `src/estimateEntry.ts`,

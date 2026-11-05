@@ -48,10 +48,11 @@ export function backupDoc(doc: FsDocument): string {
 }
 
 /**
- * Replaces only the `profiles` field, and only if the document is still the
- * one read (its update time as a precondition). Returns what Firestore stored.
+ * Replaces only the one top-level `field`, and only if the document is still
+ * the one read (its update time as a precondition). Returns what Firestore stored.
  */
-export function writeProfiles(before: FsDocument, profiles: FsValue): Promise<FsDocument> {
-  const query = `updateMask.fieldPaths=profiles&currentDocument.updateTime=${encodeURIComponent(before.updateTime)}`;
-  return call(`${URL_BASE}?${query}`, { method: "PATCH", body: JSON.stringify({ fields: { profiles } }) });
+export function writeField(before: FsDocument, field: string, value: FsValue): Promise<FsDocument> {
+  if (!/^[A-Za-z]+$/.test(field)) throw new Error(`Not a top-level field name: "${field}".`);
+  const query = `updateMask.fieldPaths=${field}&currentDocument.updateTime=${encodeURIComponent(before.updateTime)}`;
+  return call(`${URL_BASE}?${query}`, { method: "PATCH", body: JSON.stringify({ fields: { [field]: value } }) });
 }

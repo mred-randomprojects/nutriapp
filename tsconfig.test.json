@@ -58,6 +58,8 @@
     "src/addEntry.ts",
     "src/addEntry.test.ts",
     "src/dayView.ts",
-    "src/dayView.test.ts"
+    "src/dayView.test.ts",
+    "src/foodsEdit.ts",
+    "src/foodsEdit.test.ts"
   ]
 }

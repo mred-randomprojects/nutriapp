@@ -70,7 +70,7 @@ export function quickAddValue(entry: NewQuickAdd): FsValue {
 }
 
 /** Lowercase, no accents, single spaces: "Almuerzo " matches "ALMUERZO (12:30)". */
-function normalize(s: string): string {
+export function normalize(s: string): string {
   return s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
@@ -118,8 +118,22 @@ export function profilesWithAddedEntry(
   entry: NewQuickAdd,
   section: string | null,
 ): { profiles: FsValue; loc: AddLocation } {
+  return profilesWithAddedValue(doc, profileName, date, { id: entry.id, value: quickAddValue(entry) }, section);
+}
+
+/**
+ * The same for any built entry value (a quick-add, or a food-database entry
+ * from foodsEdit.ts) whose id is `entry.id`.
+ */
+export function profilesWithAddedValue(
+  doc: FsDocument,
+  profileName: string,
+  date: string,
+  entry: { id: string; value: FsValue },
+  section: string | null,
+): { profiles: FsValue; loc: AddLocation } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new EstimateError(`Not a date (YYYY-MM-DD): "${date}".`);
-  const value = quickAddValue(entry);
+  const value = entry.value;
   const profiles = arrayValues(doc.fields.profiles);
   if (profiles == null) throw new EstimateError("The document has no profiles list.");
   const profileIndex = profiles.findIndex((p) => str(mapFields(p)?.name) === profileName);

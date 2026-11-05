@@ -6,6 +6,9 @@
  * entry is the only thing that changed. The app picks the change up the next
  * time its window gets the focus.
  *
+ * It also searches Foods, adds a food to it, logs a food by grams or units,
+ * and removes an entry the way the app's delete does (a tombstone).
+ *
  * Registered in Claude Code with scripts/mcp.sh (see the README). The
  * protocol is small enough to speak by hand: newline-delimited JSON-RPC 2.0
  * on stdin/stdout; stdout carries nothing else, so logs go to stderr.
@@ -15,16 +18,18 @@ import type { NutritionValues } from "../src/types.js";
 import type { DayView } from "../src/dayView.js";
 import { EstimateError } from "../src/estimateEntry.js";
 import { PROFILE } from "./firestore.js";
-import { addMeal, estimateEntry, showDay, type WriteResult } from "./ops.js";
+import type { Food } from "../src/types.js";
+import { addFood, addMeal, estimateEntry, logFood, removeEntry, searchFoods, showDay, type WriteResult } from "./ops.js";
 
 const SUPPORTED_PROTOCOLS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
-const INSTRUCTIONS = `Max's food log in NutriApp (profile "${PROFILE}"). When Max says what was eaten, estimate it and log it with nutriapp_add_meal; don't ask for numbers Max wouldn't know.
-- Estimate per portion as eaten, in kcal and grams (protein, saturated fat, fiber). Put the portion you assumed in the name, as the app's entries do ("Ensalada de arroz y atún (250 g)"), and the breakdown in notes.
+const INSTRUCTIONS = `Max's food log in NutriApp (profile "${PROFILE}"). When Max says what was eaten, log it; don't ask for numbers Max wouldn't know.
+- Prefer Max's own Foods. For each component of a meal, search with nutriapp_find_foods and log the match with nutriapp_log_food, by grams (or units). Mind how a food is weighed: names say "pesado crudo" / "pesado cocido"; pick the one that matches how Max weighed or estimated it.
+- A component Max will eat again that isn't in Foods: add it with nutriapp_add_food (per 100 g, from a reliable source such as USDA or the product's label, cited back to Max), then log it. A one-off dish with no reusable parts: a quick-add with nutriapp_add_meal, the portion in its name ("Ensalada de arroz y atún (250 g)") and the breakdown in notes.
 - Days have sections (separators such as "Breakfast (07:00)", "LUNCH (12:30)", "Dinner (20:30)"): call nutriapp_show_day first to see them, and pass the one that fits as section.
 - Entries marked planned are the day's plan, not food eaten; new meals Max reports are eaten (planned: false) unless Max is planning ahead.
-- If Max corrects an amount, fix that entry with nutriapp_estimate_entry (replace: true) rather than adding a second one. Deleting is done in the app.
-- Dates are YYYY-MM-DD in local time; omit date for today.`;
+- If Max corrects a quick-add, fix it with nutriapp_estimate_entry (replace: true). To redo an entry another way (a quick-add that should have been a food, a wrong food), log the new one and remove the old one with nutriapp_remove_entry; the app can undo a removal.
+- Dates are YYYY-MM-DD in local time; omit date for today (after midnight, a meal Max had last night belongs to yesterday).`;
 
 const nutritionProps = {
   calories: { type: "number", minimum: 0, description: "kcal of the whole portion" },
@@ -78,6 +83,69 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   },
+  {
+    name: "nutriapp_find_foods",
+    description:
+      "Searches Max's Foods (the food database) by name, ignoring case and accents; every word must match. Shows each food's id, nutrition per 100 g, unit size and combo ingredients.",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string", description: 'Words of the name, e.g. "arroz" or "yogur serenisima"; empty lists every food' } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: "nutriapp_add_food",
+    description:
+      "Adds a food to Foods, with its nutrition per 100 g, so it can be logged by grams now and picked in the app later. Refuses a name Foods already has. Returns the new food's id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 1, description: "Name in the style of Max's foods, saying how it is weighed when that matters: Espinaca congelada (pesada congelada)" },
+        calories: { type: "number", minimum: 0, description: "kcal per 100 g" },
+        protein: { type: "number", minimum: 0, description: "grams of protein per 100 g" },
+        saturated_fat: { type: "number", minimum: 0, description: "grams of saturated fat per 100 g" },
+        fiber: { type: "number", minimum: 0, description: "grams of fiber per 100 g" },
+        grams_per_unit: { type: "number", exclusiveMinimum: 0, description: "Weight of one unit, when it comes in units (a yogurt cup, a bar)" },
+      },
+      required: ["name", "calories", "protein", "saturated_fat", "fiber"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  },
+  {
+    name: "nutriapp_log_food",
+    description:
+      "Logs a food from Foods on a day, by grams or by units, at the end of a section or of the day. Returns the new entry's id and the day's updated totals.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: dateProp,
+        food_id: { type: "string", description: "The food's id, from nutriapp_find_foods" },
+        grams: { type: "number", exclusiveMinimum: 0, description: "Grams eaten, weighed the way the food's name says" },
+        units: { type: "number", exclusiveMinimum: 0, description: "Units eaten, for a food with a unit size or a unit-only food (instead of grams)" },
+        notes: { type: "string", description: "Optional note on the entry" },
+        section: { type: "string", description: 'Section label to add it under, matched ignoring case and accents, e.g. "lunch" or "Dinner"' },
+        planned: { type: "boolean", description: "true for a planned (budgeted) item not eaten yet; default false" },
+      },
+      required: ["food_id"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  },
+  {
+    name: "nutriapp_remove_entry",
+    description:
+      "Removes an entry from a day the way the app's delete does (a deletion the app can undo). Use it to replace an entry logged the wrong way, never on Max's own entries without Max asking.",
+    inputSchema: {
+      type: "object",
+      properties: { date: dateProp, entry_id: { type: "string", description: "The entry's id, from nutriapp_show_day" } },
+      required: ["entry_id"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  },
 ];
 
 type Args = Record<string, unknown>;
@@ -112,6 +180,10 @@ function grams(args: Args, key: string): number {
   const v = args[key];
   if (typeof v !== "number" || !Number.isFinite(v) || v < 0) throw new EstimateError(`${key} must be a number ≥ 0.`);
   return v;
+}
+
+function optAmount(args: Args, key: string): number | null {
+  return args[key] == null ? null : grams(args, key);
 }
 
 function nutrition(args: Args): NutritionValues {
@@ -155,6 +227,28 @@ function renderDay(day: DayView): string {
   return lines.join("\n");
 }
 
+function renderFood(food: Food, byId: Map<string, Food>): string {
+  const lines = [`- ${food.name} id=${food.id}`];
+  if (food.ingredients != null) {
+    const parts = food.ingredients.map((i) => `${byId.get(i.foodId)?.name ?? i.foodId} ${i.grams} g`).join(" + ");
+    lines.push(`  combo: ${parts}`);
+  } else if (food.nutritionPerUnit != null) {
+    lines.push(`  per unit (units only): ${fmt(food.nutritionPerUnit)}`);
+  } else {
+    lines.push(`  per 100 g: ${fmt(food.nutritionPer100g)}`);
+  }
+  if (food.gramsPerUnit != null) lines.push(`  1 unit = ${food.gramsPerUnit} g`);
+  return lines.join("\n");
+}
+
+async function renderFoods(query: string): Promise<string> {
+  const foods = await searchFoods(query);
+  const all = query.trim().length === 0 ? foods : await searchFoods("");
+  const byId = new Map(all.map((f) => [f.id as string, f]));
+  if (foods.length === 0) return `No food in Foods matches "${query}".`;
+  return foods.map((f) => renderFood(f, byId)).join("\n");
+}
+
 function renderWrite(verb: string, result: WriteResult): string {
   return `${verb} (entry ${result.entryId}); verified in the cloud. The app shows it the next time its window gets the focus.\nBackup of the document before the change: ${result.backup}\n\n${renderDay(result.day)}`;
 }
@@ -186,6 +280,34 @@ async function callTool(name: string, args: Args): Promise<string> {
           force: bool(args, "replace"),
         }),
       );
+    case "nutriapp_find_foods":
+      return renderFoods(optString(args, "query") ?? "");
+    case "nutriapp_add_food": {
+      const result = await addFood(
+        {
+          name: reqString(args, "name"),
+          per100g: nutrition(args),
+          gramsPerUnit: optAmount(args, "grams_per_unit"),
+        },
+        dateArg(args),
+      );
+      return `Added to Foods with id ${result.entryId}; verified in the cloud. Log it with nutriapp_log_food.\nBackup of the document before the change: ${result.backup}`;
+    }
+    case "nutriapp_log_food":
+      return renderWrite(
+        "Logged",
+        await logFood({
+          date: dateArg(args),
+          foodId: reqString(args, "food_id"),
+          grams: optAmount(args, "grams"),
+          units: optAmount(args, "units"),
+          notes: optString(args, "notes"),
+          section: optString(args, "section"),
+          planned: bool(args, "planned"),
+        }),
+      );
+    case "nutriapp_remove_entry":
+      return renderWrite("Removed", await removeEntry(dateArg(args), reqString(args, "entry_id")));
     default:
       throw new EstimateError(`Unknown tool ${name}.`);
   }
