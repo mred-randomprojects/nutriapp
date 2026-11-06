@@ -14,9 +14,15 @@ import {
   type User,
 } from "firebase/auth";
 import { auth } from "./firebase";
+import { readRememberedUid, rememberUid, uidToShow } from "./rememberedUid";
 
 interface AuthContextValue {
   user: User | null;
+  /**
+   * The account to draw: Auth's user, or while Auth is still checking the
+   * stored session with Google, the account last confirmed on this browser.
+   */
+  uid: string | null;
   loading: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -29,9 +35,11 @@ const googleProvider = new GoogleAuthProvider();
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [remembered] = useState(() => readRememberedUid());
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      rememberUid(firebaseUser?.uid ?? null);
       setUser(firebaseUser);
       setLoading(false);
     });
@@ -47,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, uid: uidToShow(loading, user?.uid ?? null, remembered), loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -55,13 +55,15 @@ export default function App() {
 }
 
 function AuthGate() {
-  const { user, loading } = useAuth();
+  const { uid, loading } = useAuth();
 
   // Above the auth gate: the login page is a form and a button too, and WebKit
   // skips its button in the tab order just the same.
   useKeyboardFocusParity();
 
-  if (loading) {
+  // A returning account is drawn from its local copy at once (see
+  // rememberedUid.ts); the spinner is only for a launch with none remembered.
+  if (uid == null && loading) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -69,14 +71,14 @@ function AuthGate() {
     );
   }
 
-  if (user == null) {
+  if (uid == null) {
     return <LoginPage />;
   }
 
   // Keyed by uid: another account signing in (even straight from one to the
   // other, as a second tab sees it) gets a fresh hook on its own local copy,
   // never the previous account's state.
-  return <AuthenticatedApp key={user.uid} uid={user.uid} />;
+  return <AuthenticatedApp key={uid} uid={uid} />;
 }
 
 function AuthenticatedApp({ uid }: { uid: string }) {

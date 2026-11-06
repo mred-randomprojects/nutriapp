@@ -20,6 +20,8 @@
     "src/components/entryClipboard.test.ts",
     "src/components/metricColor.ts",
     "src/components/metricColor.test.ts",
+    "src/rememberedUid.ts",
+    "src/rememberedUid.test.ts",
     "src/keyboardFocusParity.ts",
     "src/keyboardFocusParity.test.ts",
     "src/searchOptionKeyboard.ts",
