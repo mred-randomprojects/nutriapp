@@ -110,6 +110,7 @@ import {
   setEntryClipboard,
   withoutUnknownFoods,
 } from "./entryClipboard";
+import { budgetBarTone, KCAL_OVER_TOLERANCE, metricNumberTone, type MetricKind, type MetricTone } from "./metricColor";
 
 interface DailyLogProps {
   appData: AppDataHandle;
@@ -456,35 +457,34 @@ function EntryActionsMenu({
   );
 }
 
+const TONE_BG: Record<MetricTone, string> = {
+  good: "bg-emerald-500",
+  warn: "bg-yellow-500",
+  bad: "bg-red-500",
+  neutral: "bg-emerald-500",
+};
+
+const TONE_TEXT: Record<MetricTone, string> = {
+  good: "text-emerald-500",
+  warn: "text-yellow-500",
+  bad: "text-red-500",
+  neutral: "",
+};
+
 interface BudgetBarProps {
   actual: number;
   budget: number;
-  invertColor?: boolean;
-  aboveGoalIsGood?: boolean;
+  kind: MetricKind;
+  overTolerance: number;
 }
 
-function budgetBarColor(actual: number, budget: number, invert: boolean, aboveGoalIsGood: boolean): string {
-  const ratio = actual / budget;
-  if (aboveGoalIsGood) {
-    return ratio >= 1 ? "bg-emerald-500" : "bg-yellow-500";
-  }
-  if (invert) {
-    if (ratio > 1) return "bg-emerald-500";
-    if (ratio >= 0.9) return "bg-yellow-500";
-    return "bg-red-500";
-  }
-  if (ratio > 1) return "bg-red-500";
-  if (ratio >= 0.9) return "bg-yellow-500";
-  return "bg-emerald-500";
-}
-
-function BudgetBar({ actual, budget, invertColor, aboveGoalIsGood }: BudgetBarProps) {
+function BudgetBar({ actual, budget, kind, overTolerance }: BudgetBarProps) {
   if (budget <= 0) return null;
   const pct = Math.min(100, (actual / budget) * 100);
   return (
     <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
       <div
-        className={`h-full rounded-full transition-all duration-300 ${budgetBarColor(actual, budget, invertColor === true, aboveGoalIsGood === true)}`}
+        className={`h-full rounded-full transition-all duration-300 ${TONE_BG[budgetBarTone(actual, budget, kind, overTolerance)]}`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -509,16 +509,13 @@ interface MetricCellProps {
   unit: string;
   label: string;
   highlight?: boolean;
-  invertColor?: boolean;
-  aboveGoalIsGood?: boolean;
+  kind?: MetricKind;
+  /** Fraction over the budget that still reads yellow, not red. */
+  overTolerance?: number;
 }
 
-function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, invertColor, aboveGoalIsGood }: MetricCellProps) {
-  const over = budget != null && budget > 0 && actual > budget;
-  const under = budget != null && budget > 0 && actual < budget;
-  const isRed = aboveGoalIsGood === true ? false : invertColor === true ? under : over;
-  const isYellow = aboveGoalIsGood === true ? under : false;
-  const isGreen = aboveGoalIsGood === true ? over : invertColor === true ? over : false;
+function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, kind = "limit", overTolerance = 0 }: MetricCellProps) {
+  const numberColor = TONE_TEXT[metricNumberTone(actual, budget, kind, overTolerance)];
   const suffix = unit !== "kcal" ? "g" : "";
   const showDailyGoal =
     dailyGoal != null &&
@@ -526,7 +523,7 @@ function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, invertC
     Math.round(dailyGoal) !== Math.round(budget);
   return (
     <div>
-      <p className={`text-lg font-bold ${highlight === true ? "text-primary" : ""} ${isRed ? "text-red-500" : ""} ${isYellow ? "text-yellow-500" : ""} ${isGreen ? "text-emerald-500" : ""}`}>
+      <p className={`text-lg font-bold ${numberColor !== "" ? numberColor : highlight === true ? "text-primary" : ""}`}>
         {Math.round(actual)}{suffix}
       </p>
       {budget != null && budget > 0 && (
@@ -541,7 +538,7 @@ function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, invertC
       )}
       <p className="text-[10px] text-muted-foreground">{label}</p>
       {budget != null && budget > 0 && (
-        <BudgetBar actual={actual} budget={budget} invertColor={invertColor} aboveGoalIsGood={aboveGoalIsGood} />
+        <BudgetBar actual={actual} budget={budget} kind={kind} overTolerance={overTolerance} />
       )}
     </div>
   );
@@ -581,10 +578,10 @@ function DailyTotalsCard({ totals, budgetedTotals, goals, schedule, isSelectedDa
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-4 gap-2 text-center">
-          <MetricCell actual={totals.calories} budget={budgetCalories} dailyGoal={goals?.calories ?? null} unit="kcal" label="kcal" highlight />
-          <MetricCell actual={totals.protein} budget={budgetProtein} dailyGoal={goals?.protein ?? null} unit="g" label="Protein" invertColor />
+          <MetricCell actual={totals.calories} budget={budgetCalories} dailyGoal={goals?.calories ?? null} unit="kcal" label="kcal" highlight overTolerance={KCAL_OVER_TOLERANCE} />
+          <MetricCell actual={totals.protein} budget={budgetProtein} dailyGoal={goals?.protein ?? null} unit="g" label="Protein" kind="minimum" />
           <MetricCell actual={totals.saturatedFat} budget={budgetSatFat} dailyGoal={satFatDailyGrams} unit="g" label="Sat. Fat" />
-          <MetricCell actual={totals.fiber} budget={budgetFiber} dailyGoal={goals?.fiber ?? null} unit="g" label="Fiber" aboveGoalIsGood />
+          <MetricCell actual={totals.fiber} budget={budgetFiber} dailyGoal={goals?.fiber ?? null} unit="g" label="Fiber" kind="target" />
         </div>
         {hasNutrition(budgetedTotals) && (
           <div className="mt-3 space-y-2">

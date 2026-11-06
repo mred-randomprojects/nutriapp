@@ -18,6 +18,8 @@
     "src/components/dailyLogKeyboard.test.ts",
     "src/components/entryClipboard.ts",
     "src/components/entryClipboard.test.ts",
+    "src/components/metricColor.ts",
+    "src/components/metricColor.test.ts",
     "src/keyboardFocusParity.ts",
     "src/keyboardFocusParity.test.ts",
     "src/searchOptionKeyboard.ts",
