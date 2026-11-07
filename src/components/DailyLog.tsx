@@ -110,7 +110,7 @@ import {
   setEntryClipboard,
   withoutUnknownFoods,
 } from "./entryClipboard";
-import { budgetBarTone, KCAL_OVER_TOLERANCE, metricNumberTone, type MetricKind, type MetricTone } from "./metricColor";
+import { KCAL_OVER_TOLERANCE, metricTone, type MetricKind, type MetricTone } from "./metricColor";
 
 interface DailyLogProps {
   appData: AppDataHandle;
@@ -461,30 +461,26 @@ const TONE_BG: Record<MetricTone, string> = {
   good: "bg-emerald-500",
   warn: "bg-yellow-500",
   bad: "bg-red-500",
-  neutral: "bg-emerald-500",
 };
 
 const TONE_TEXT: Record<MetricTone, string> = {
   good: "text-emerald-500",
   warn: "text-yellow-500",
   bad: "text-red-500",
-  neutral: "",
 };
 
 interface BudgetBarProps {
   actual: number;
   budget: number;
-  kind: MetricKind;
-  overTolerance: number;
+  tone: MetricTone;
 }
 
-function BudgetBar({ actual, budget, kind, overTolerance }: BudgetBarProps) {
-  if (budget <= 0) return null;
+function BudgetBar({ actual, budget, tone }: BudgetBarProps) {
   const pct = Math.min(100, (actual / budget) * 100);
   return (
     <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
       <div
-        className={`h-full rounded-full transition-all duration-300 ${TONE_BG[budgetBarTone(actual, budget, kind, overTolerance)]}`}
+        className={`h-full rounded-full transition-all duration-300 ${TONE_BG[tone]}`}
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -508,14 +504,14 @@ interface MetricCellProps {
   dailyGoal: number | null;
   unit: string;
   label: string;
-  highlight?: boolean;
   kind?: MetricKind;
   /** Fraction over the budget that still reads yellow, not red. */
   overTolerance?: number;
 }
 
-function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, kind = "limit", overTolerance = 0 }: MetricCellProps) {
-  const numberColor = TONE_TEXT[metricNumberTone(actual, budget, kind, overTolerance)];
+function MetricCell({ actual, budget, dailyGoal, unit, label, kind = "limit", overTolerance = 0 }: MetricCellProps) {
+  // One tone paints both the number and its bar, so they always agree.
+  const tone = budget != null && budget > 0 ? metricTone(actual, budget, kind, overTolerance) : null;
   const suffix = unit !== "kcal" ? "g" : "";
   const showDailyGoal =
     dailyGoal != null &&
@@ -523,7 +519,7 @@ function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, kind = 
     Math.round(dailyGoal) !== Math.round(budget);
   return (
     <div>
-      <p className={`text-lg font-bold ${numberColor !== "" ? numberColor : highlight === true ? "text-primary" : ""}`}>
+      <p className={`text-lg font-bold ${tone != null ? TONE_TEXT[tone] : ""}`}>
         {Math.round(actual)}{suffix}
       </p>
       {budget != null && budget > 0 && (
@@ -537,8 +533,8 @@ function MetricCell({ actual, budget, dailyGoal, unit, label, highlight, kind = 
         </p>
       )}
       <p className="text-[10px] text-muted-foreground">{label}</p>
-      {budget != null && budget > 0 && (
-        <BudgetBar actual={actual} budget={budget} kind={kind} overTolerance={overTolerance} />
+      {tone != null && budget != null && (
+        <BudgetBar actual={actual} budget={budget} tone={tone} />
       )}
     </div>
   );
@@ -578,7 +574,7 @@ function DailyTotalsCard({ totals, budgetedTotals, goals, schedule, isSelectedDa
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-4 gap-2 text-center">
-          <MetricCell actual={totals.calories} budget={budgetCalories} dailyGoal={goals?.calories ?? null} unit="kcal" label="kcal" highlight overTolerance={KCAL_OVER_TOLERANCE} />
+          <MetricCell actual={totals.calories} budget={budgetCalories} dailyGoal={goals?.calories ?? null} unit="kcal" label="kcal" overTolerance={KCAL_OVER_TOLERANCE} />
           <MetricCell actual={totals.protein} budget={budgetProtein} dailyGoal={goals?.protein ?? null} unit="g" label="Protein" kind="minimum" />
           <MetricCell actual={totals.saturatedFat} budget={budgetSatFat} dailyGoal={satFatDailyGrams} unit="g" label="Sat. Fat" />
           <MetricCell actual={totals.fiber} budget={budgetFiber} dailyGoal={goals?.fiber ?? null} unit="g" label="Fiber" kind="target" />

@@ -1,35 +1,34 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { budgetBarTone, KCAL_OVER_TOLERANCE, metricNumberTone } from "./metricColor.js";
+import { KCAL_OVER_TOLERANCE, metricTone } from "./metricColor.js";
 
 describe("kcal (limit with 20% tolerance)", () => {
-  const tone = (actual: number) => [
-    metricNumberTone(actual, 2500, "limit", KCAL_OVER_TOLERANCE),
-    budgetBarTone(actual, 2500, "limit", KCAL_OVER_TOLERANCE),
-  ];
-  it("is green well under the budget", () => assert.deepEqual(tone(2000), ["neutral", "good"]));
-  it("warns near the budget", () => assert.deepEqual(tone(2400), ["neutral", "warn"]));
+  const tone = (actual: number) => metricTone(actual, 2500, "limit", KCAL_OVER_TOLERANCE);
+  it("is green well under the budget", () => assert.equal(tone(2000), "good"));
+  it("warns near the budget", () => assert.equal(tone(2250), "warn"));
   it("is yellow between 100% and 120%", () => {
-    assert.deepEqual(tone(2558), ["warn", "warn"]);
-    assert.deepEqual(tone(3000), ["warn", "warn"]);
+    assert.equal(tone(2558), "warn");
+    assert.equal(tone(3000), "warn");
   });
-  it("is red past 120%", () => assert.deepEqual(tone(3001), ["bad", "bad"]));
+  it("is red past 120%", () => assert.equal(tone(3001), "bad"));
 });
 
-describe("limit without tolerance (sat fat)", () => {
-  it("is red as soon as it passes the budget", () => {
-    assert.equal(metricNumberTone(29, 28, "limit"), "bad");
-    assert.equal(budgetBarTone(29, 28, "limit"), "bad");
+describe("sat fat (limit without tolerance)", () => {
+  it("is green under 90%", () => assert.equal(metricTone(14, 16, "limit"), "good"));
+  it("is yellow from 90% to the budget", () => assert.equal(metricTone(16, 16, "limit"), "warn"));
+  it("is red as soon as it passes the budget", () => assert.equal(metricTone(29, 28, "limit"), "bad"));
+});
+
+describe("protein (minimum)", () => {
+  it("is red well short of the budget", () => assert.equal(metricTone(80, 102, "minimum"), "bad"));
+  it("is yellow just short of the budget", () => assert.equal(metricTone(95, 102, "minimum"), "warn"));
+  it("is green from the budget up", () => {
+    assert.equal(metricTone(175, 175, "minimum"), "good");
+    assert.equal(metricTone(180, 175, "minimum"), "good");
   });
 });
 
-describe("minimum and target", () => {
-  it("protein short of budget is red, over is green", () => {
-    assert.equal(metricNumberTone(100, 175, "minimum"), "bad");
-    assert.equal(metricNumberTone(176, 175, "minimum"), "good");
-  });
-  it("fiber short of budget is yellow, over is green", () => {
-    assert.equal(metricNumberTone(20, 30, "target"), "warn");
-    assert.equal(budgetBarTone(35, 30, "target"), "good");
-  });
+describe("fiber (target)", () => {
+  it("is yellow short of the budget, never red", () => assert.equal(metricTone(2, 30, "target"), "warn"));
+  it("is green from the budget up", () => assert.equal(metricTone(30, 30, "target"), "good"));
 });
