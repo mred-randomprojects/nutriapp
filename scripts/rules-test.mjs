@@ -32,9 +32,11 @@ const PAYLOAD_OUT = argValue("--payload-out");
 
 const MAX = "maxUid";
 const MARISOL = "marisolUid";
+const LAUTARO = "lautaroUid";
 const EVIL = "evilUid";
 const MAX_EMAIL = "maxiredigonda@gmail.com";
 const MARISOL_EMAIL = "marisolpaez227@gmail.com";
+const LAUTARO_EMAIL = "lautarocesso98@gmail.com";
 const DB = "/databases/(default)/documents";
 
 function token(uid, email, { verified = true, provider = "google.com", omitVerified = false } = {}) {
@@ -48,6 +50,7 @@ function token(uid, email, { verified = true, provider = "google.com", omitVerif
 
 const AS_MAX = token(MAX, MAX_EMAIL);
 const AS_MARISOL = token(MARISOL, MARISOL_EMAIL);
+const AS_LAUTARO = token(LAUTARO, LAUTARO_EMAIL);
 const AS_STRANGER = token(EVIL, "stranger@gmail.com");
 const AS_ANONYMOUS = { uid: "anonUid", token: { firebase: { sign_in_provider: "anonymous" } } };
 
@@ -170,6 +173,9 @@ const CASES = [
   testCase("L10", "Marisol saves her document", ALLOW, { auth: AS_MARISOL, path: appDataPath(MARISOL), method: "update", write: REAL, existing: EMPTY }),
   testCase("L11", "Max saves a production-size document", ALLOW, { auth: AS_MAX, path: appDataPath(MAX), method: "update", write: PRODUCTION_SIZE, existing: PRODUCTION_SIZE }),
   testCase("L12", "Max saves a document that lost most of its tombstones", ALLOW, { auth: AS_MAX, path: appDataPath(MAX), method: "update", write: { ...REAL, deletedDayLogEntries: [] }, existing: PRODUCTION_SIZE }),
+  testCase("L13", "Lautaro reads his document", ALLOW, { auth: AS_LAUTARO, path: appDataPath(LAUTARO), method: "get", existing: EMPTY }),
+  testCase("L14", "Lautaro creates his document", ALLOW, { auth: AS_LAUTARO, path: appDataPath(LAUTARO), method: "create", write: EMPTY }),
+  testCase("L15", "Lautaro saves his document", ALLOW, { auth: AS_LAUTARO, path: appDataPath(LAUTARO), method: "update", write: REAL, existing: EMPTY }),
   // Outsiders and the other allowlisted account.
   testCase("X1", "unauthenticated read of Max's document", DENY, { path: appDataPath(MAX), method: "get", existing: REAL }),
   testCase("X2", "unauthenticated overwrite of Max's document", DENY, { path: appDataPath(MAX), method: "update", write: EMPTY, existing: REAL }),
@@ -180,6 +186,8 @@ const CASES = [
   testCase("X7", "Marisol reads Max's document", DENY, { auth: AS_MARISOL, path: appDataPath(MAX), method: "get", existing: REAL }),
   testCase("X8", "Marisol overwrites Max's document", DENY, { auth: AS_MARISOL, path: appDataPath(MAX), method: "update", write: EMPTY, existing: REAL }),
   testCase("X9", "Marisol deletes Max's document", DENY, { auth: AS_MARISOL, path: appDataPath(MAX), method: "delete", existing: REAL }),
+  testCase("X9b", "Lautaro reads Max's document", DENY, { auth: AS_LAUTARO, path: appDataPath(MAX), method: "get", existing: REAL }),
+  testCase("X9c", "Lautaro overwrites Marisol's document", DENY, { auth: AS_LAUTARO, path: appDataPath(MARISOL), method: "update", write: EMPTY, existing: REAL }),
   testCase("X10", "anonymous session on its own path", DENY, { auth: AS_ANONYMOUS, path: appDataPath("anonUid"), method: "create", write: EMPTY }),
   testCase("X11", "Max's email in a token for another uid, on Max's path", DENY, { auth: token(EVIL, MAX_EMAIL), path: appDataPath(MAX), method: "get", existing: REAL }),
   testCase("X12", "listing another user's data (enumeration)", DENY, { auth: AS_MAX, path: appDataPath(EVIL), method: "list" }),
