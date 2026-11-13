@@ -329,6 +329,32 @@ export function FoodForm({ appData }: FoodFormProps) {
   const isDirty =
     !readonly && !hasSubmitted && !areFoodFormDraftsEqual(currentDraft, baseDraft);
 
+  // A draft left from an earlier visit is restored silently otherwise, and
+  // looks like the saved food (2026-11-13: a stray "Per unit" tap kept coming
+  // back and made a per-100 g food look per unit).
+  const [showRestoredNotice, setShowRestoredNotice] = useState(
+    () =>
+      restoredDraft != null &&
+      existing != null &&
+      !areFoodFormDraftsEqual(restoredDraft, baseDraft),
+  );
+
+  function discardRestoredDraft() {
+    setName(baseDraft.name);
+    setImageUrl(baseDraft.imageUrl);
+    setReferenceType(baseDraft.referenceType);
+    setRefGrams(baseDraft.refGrams);
+    setCalories(baseDraft.calories);
+    setProtein(baseDraft.protein);
+    setSaturatedFat(baseDraft.saturatedFat);
+    setFiber(baseDraft.fiber);
+    setGramsPerUnit(baseDraft.gramsPerUnit);
+    setIsCombo(baseDraft.isCombo);
+    setIngredients(baseDraft.ingredients.map((ing) => ({ ...ing })));
+    clearFoodFormDraft(draftKey);
+    setShowRestoredNotice(false);
+  }
+
   const clearUnsavedChanges = useUnsavedChanges(isDirty, {
     title: "Discard food changes?",
     description:
@@ -548,6 +574,22 @@ export function FoodForm({ appData }: FoodFormProps) {
             (e.target as HTMLImageElement).style.display = "none";
           }}
         />
+      )}
+
+      {showRestoredNotice && isDirty && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-3 py-2 text-sm">
+          <span>
+            Showing unsaved changes from an earlier visit, not the saved food.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={discardRestoredDraft}
+          >
+            Discard
+          </Button>
+        </div>
       )}
 
       <form
